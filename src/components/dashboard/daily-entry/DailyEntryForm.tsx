@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react"; // Added useEffect here
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import type { DailyHotelEntry, TransferInItem, DirectPurchaseItem, CostAdjustmentItem } from "@/types";
@@ -84,7 +84,7 @@ export default function DailyEntryForm({ initialData }: DailyEntryFormProps) {
 
   const selectedDate = form.watch("date");
 
-  React.useEffect(() => {
+  useEffect(() => {
     async function fetchEntryForDate(date: Date | undefined) {
       if (!date) return;
       setIsLoadingEntry(true);
