@@ -134,6 +134,7 @@ export default function OutletListClient() {
           {[...Array(3)].map((_, i) => (
             <div key={i} className="flex items-center p-4 border-b">
               <Skeleton className="h-6 flex-grow bg-muted mr-4" />
+              <Skeleton className="h-6 w-24 bg-muted mr-4" />
               <Skeleton className="h-8 w-8 bg-muted mr-2" />
               <Skeleton className="h-8 w-8 bg-muted" />
             </div>
@@ -163,6 +164,7 @@ export default function OutletListClient() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="font-headline">Outlet Name</TableHead>
+                <TableHead className="font-headline">Outlet ID</TableHead>
                 <TableHead className="font-headline w-[120px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -170,6 +172,7 @@ export default function OutletListClient() {
               {outlets.map((outlet) => (
                 <TableRow key={outlet.id}>
                   <TableCell>{outlet.name}</TableCell>
+                  <TableCell className="font-code">{outlet.id}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(outlet)} className="mr-2 hover:text-primary">
                       <Edit className="h-4 w-4" />
@@ -190,7 +193,7 @@ export default function OutletListClient() {
                           </AlertDialogTitle>
                           <AlertDialogDescription>
                             This action cannot be undone. This will permanently delete the outlet
-                            "{outlet.name}" and all associated data (if any linked in the future).
+                            "{outlet.name}" (ID: {outlet.id}) and all associated data.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
