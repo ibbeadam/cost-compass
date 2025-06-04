@@ -47,20 +47,34 @@ export async function addOutletAction(id: string, name: string): Promise<Outlet>
     if (!newDocSnap.exists()) {
         throw new Error("Failed to create and retrieve outlet after saving.");
     }
-    const savedData = newDocSnap.data();
-    return {
+    const savedData = newDocSnap.data()!; // Assert savedData is not undefined
+    
+    // Convert Timestamps to Dates before returning to client
+    const returnOutlet: Outlet = {
         id: newDocSnap.id,
         name: savedData.name,
-        createdAt: savedData.createdAt as Timestamp, // Firestore returns Timestamp
-        updatedAt: savedData.updatedAt as Timestamp, // Firestore returns Timestamp
-    } as Outlet;
+        createdAt: savedData.createdAt instanceof Timestamp ? savedData.createdAt.toDate() : savedData.createdAt,
+        updatedAt: savedData.updatedAt instanceof Timestamp ? savedData.updatedAt.toDate() : savedData.updatedAt,
+        isActive: savedData.isActive,
+        address: savedData.address,
+        phoneNumber: savedData.phoneNumber,
+        email: savedData.email,
+        type: savedData.type,
+        currency: savedData.currency,
+        timezone: savedData.timezone,
+        defaultBudgetFoodCostPct: savedData.defaultBudgetFoodCostPct,
+        defaultBudgetBeverageCostPct: savedData.defaultBudgetBeverageCostPct,
+        targetOccupancy: savedData.targetOccupancy,
+    };
+    return returnOutlet;
 
-  } catch (error) {
+  } catch (error)
+ {
     console.error("Error adding outlet: ", error);
-    if (error.message.includes("already exists")) {
+    if (error instanceof Error && error.message.includes("already exists")) {
         throw error;
     }
-    throw new Error(`Failed to add outlet: ${(error as Error).message}`);
+    throw new Error(`Failed to add outlet: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -81,7 +95,7 @@ export async function updateOutletAction(id: string, name: string): Promise<void
     revalidatePath("/dashboard");
   } catch (error) {
     console.error("Error updating outlet: ", error);
-    throw new Error(`Failed to update outlet: ${(error as Error).message}`);
+    throw new Error(`Failed to update outlet: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -97,6 +111,6 @@ export async function deleteOutletAction(id: string): Promise<void> {
   } catch (error)
   {
     console.error("Error deleting outlet: ", error);
-    throw new Error(`Failed to delete outlet: ${(error as Error).message}`);
+    throw new Error(`Failed to delete outlet: ${error instanceof Error ? error.message : String(error)}`);
   }
 }

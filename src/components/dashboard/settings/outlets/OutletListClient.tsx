@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, orderBy, onSnapshot, Unsubscribe } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle } from "lucide-react";
+import { collection, getDocs, orderBy, onSnapshot, Unsubscribe, Timestamp } from "firebase/firestore";
+import { PlusCircle, Edit, Trash2, AlertTriangle, Building } from "lucide-react";
 import { db } from "@/lib/firebase";
 import type { Outlet } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -48,11 +48,33 @@ export default function OutletListClient() {
 
   useEffect(() => {
     setIsLoading(true);
-    const outletsCol = collection(db, "outlets");
-    const q = orderBy("name"); // Sort by name, or perhaps a 'createdAt' field if you add one
+    // No need for q = orderBy("name") if sorting client-side after fetch.
+    // onSnapshot will provide the collection.
     
     const unsubscribe = onSnapshot(collection(db, "outlets"), (snapshot) => {
-      const fetchedOutlets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Outlet)).sort((a, b) => a.name.localeCompare(b.name));
+      const fetchedOutlets = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Convert Timestamps to Dates for client-side usage
+        // Ensure all fields from Outlet type are explicitly mapped
+        const outletData: Outlet = {
+          id: doc.id,
+          name: data.name,
+          createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+          updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+          isActive: data.isActive,
+          address: data.address,
+          phoneNumber: data.phoneNumber,
+          email: data.email,
+          type: data.type,
+          currency: data.currency,
+          timezone: data.timezone,
+          defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct,
+          defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct,
+          targetOccupancy: data.targetOccupancy,
+        };
+        return outletData;
+      }).sort((a, b) => a.name.localeCompare(b.name)); // Sort by name client-side
+
       setOutlets(fetchedOutlets);
       setIsLoading(false);
     }, (error) => {
