@@ -30,14 +30,14 @@ const hotelDailyEntryFormSchema = z.object({
     required_error: "A date is required.",
   }),
   // Food related
-  hotelNetFoodSales: z.coerce.number().min(0, "Net food sales cannot be negative.").optional().default(0),
-  budgetHotelFoodCostPct: z.coerce.number().min(0, "Budget food cost % cannot be negative.").max(100, "Budget food cost % cannot exceed 100.").optional().default(0),
+  hotelNetFoodSales: z.coerce.number().min(0.01, "Net food sales must be greater than zero."),
+  budgetHotelFoodCostPct: z.coerce.number().min(0.01, "Budget food cost % must be greater than zero.").max(100, "Budget food cost % cannot exceed 100."),
   entFood: z.coerce.number().optional().default(0),
   ocFood: z.coerce.number().optional().default(0),
   otherFoodCredit: z.coerce.number().optional().default(0),
   // Beverage related
-  hotelNetBeverageSales: z.coerce.number().min(0, "Net beverage sales cannot be negative.").optional().default(0),
-  budgetHotelBeverageCostPct: z.coerce.number().min(0, "Budget beverage cost % cannot be negative.").max(100, "Budget beverage cost % cannot exceed 100.").optional().default(0),
+  hotelNetBeverageSales: z.coerce.number().min(0.01, "Net beverage sales must be greater than zero."),
+  budgetHotelBeverageCostPct: z.coerce.number().min(0.01, "Budget beverage cost % must be greater than zero.").max(100, "Budget beverage cost % cannot exceed 100."),
   entBeverage: z.coerce.number().optional().default(0),
   ocBeverage: z.coerce.number().optional().default(0),
   otherBeverageCredit: z.coerce.number().optional().default(0),
@@ -170,7 +170,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                     className="w-full md:w-1/2"
                     disabled={!!initialData} // Disable date change if editing
                   />
-                  {initialData && <FormMessage className="text-xs">Date cannot be changed for existing entries.</FormMessage>}
+                  {initialData && <FormMessage className="text-xs text-muted-foreground">Date cannot be changed for existing entries.</FormMessage>}
                   {!initialData && <FormMessage />}
                 </FormItem>
               )}
@@ -186,7 +186,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Net Food Sales</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 12000" {...field} />
+                            <Input type="number" placeholder="e.g., 12000" {...field} step="0.01" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -212,7 +212,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Entertainment Food Cost</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 150" {...field} />
+                            <Input type="number" placeholder="e.g., 150" {...field} step="0.01" />
                         </FormControl>
                         <FormDescription className="text-xs">Cost of food for entertainment purposes.</FormDescription>
                         <FormMessage />
@@ -226,7 +226,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Officer's Check / Comp Food Cost</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 80" {...field} />
+                            <Input type="number" placeholder="e.g., 80" {...field} step="0.01" />
                         </FormControl>
                         <FormDescription className="text-xs">Cost of complimentary food (officer's check, etc.).</FormDescription>
                         <FormMessage />
@@ -240,7 +240,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Other Food Credits/Adjustments</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., -25 (for credit)" {...field} />
+                            <Input type="number" placeholder="e.g., -25 (for credit)" {...field} step="0.01" />
                         </FormControl>
                          <FormDescription className="text-xs">Other adjustments impacting food cost (use negative for credits).</FormDescription>
                         <FormMessage />
@@ -258,7 +258,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Net Beverage Sales</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 8000" {...field} />
+                            <Input type="number" placeholder="e.g., 8000" {...field} step="0.01" />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -284,7 +284,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Entertainment Beverage Cost</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 120" {...field} />
+                            <Input type="number" placeholder="e.g., 120" {...field} step="0.01" />
                         </FormControl>
                         <FormDescription className="text-xs">Cost of beverages for entertainment.</FormDescription>
                         <FormMessage />
@@ -298,7 +298,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Officer's Check / Comp Beverage Cost</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., 60" {...field} />
+                            <Input type="number" placeholder="e.g., 60" {...field} step="0.01" />
                         </FormControl>
                         <FormDescription className="text-xs">Cost of complimentary beverages.</FormDescription>
                         <FormMessage />
@@ -312,7 +312,7 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
                         <FormItem>
                         <FormLabel>Other Beverage Credits/Adjustments</FormLabel>
                         <FormControl>
-                            <Input type="number" placeholder="e.g., -15 (for credit)" {...field} />
+                            <Input type="number" placeholder="e.g., -15 (for credit)" {...field} step="0.01" />
                         </FormControl>
                         <FormDescription className="text-xs">Other adjustments impacting beverage cost.</FormDescription>
                         <FormMessage />
@@ -351,3 +351,5 @@ export default function HotelDailyEntryForm({ initialData, onSuccess, onCancel }
     </Form>
   );
 }
+
+    
