@@ -16,29 +16,34 @@ import { CostChartToggle } from "./CostChartToggle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { db } from "@/lib/firebase"; 
+import { db } from "@/lib/firebase";
 import { outlets as mockOutlets, generateDailyCosts, generateTransferItems, generateHistoricalData, getHistoricalPercentagesForOutlet } from "@/lib/mockData";
 import type { DailyCostData, TransferItem, HistoricalDataPoint, CostFluctuationInput, Outlet } from "@/types";
 import { detectCostFluctuation } from '@/ai/flows/cost-fluctuation-detection';
 import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardClient() {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(undefined);
-  
+
   const [dailySummaryData, setDailySummaryData] = useState<DailyCostData[]>([]);
   const [transferItems, setTransferItems] = useState<TransferItem[] | null>(null);
   const [historicalData, setHistoricalData] = useState<HistoricalDataPoint[]>([]);
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRowData, setSelectedRowData] = useState<DailyCostData | null>(null);
-  
+
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   const { toast } = useToast();
+
+  // Set initial date on client-side to avoid hydration mismatch
+  useEffect(() => {
+    setSelectedDate(new Date());
+  }, []);
 
   useEffect(() => {
     const fetchFirestoreOutlets = async () => {
@@ -50,7 +55,7 @@ export default function DashboardClient() {
         const outletsCol = collection(db, 'outlets');
         const outletsSnapshot = await getDocs(outletsCol);
         const fetchedOutlets = outletsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Outlet));
-        
+
         if (fetchedOutlets.length > 0) {
           setAllOutlets(fetchedOutlets);
           if (!selectedOutletId) {
@@ -62,7 +67,7 @@ export default function DashboardClient() {
             description: "Using sample outlet data. Please add outlets to your 'outlets' collection in Firestore.",
             duration: 7000,
           });
-          setAllOutlets(mockOutlets); 
+          setAllOutlets(mockOutlets);
            if (!selectedOutletId && mockOutlets.length > 0) {
             setSelectedOutletId(mockOutlets[0].id);
           }
@@ -75,7 +80,7 @@ export default function DashboardClient() {
           description: `Could not load outlets from database. Using sample data. ${error.message}`,
           duration: 7000,
         });
-        setAllOutlets(mockOutlets); 
+        setAllOutlets(mockOutlets);
         if (!selectedOutletId && mockOutlets.length > 0) {
           setSelectedOutletId(mockOutlets[0].id);
         }
@@ -85,7 +90,7 @@ export default function DashboardClient() {
 
     fetchFirestoreOutlets();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast]); 
+  }, [toast]);
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -96,10 +101,10 @@ export default function DashboardClient() {
         return;
       }
       setIsLoadingData(true);
-      await new Promise(resolve => setTimeout(resolve, 300)); 
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       const summary = allOutlets.map(outlet => generateDailyCosts(selectedDate, outlet));
-      setDailySummaryData(summary); 
+      setDailySummaryData(summary);
 
       const currentSelectedOutletExists = allOutlets.some(o => o.id === selectedOutletId);
       let targetOutletId = selectedOutletId;
@@ -107,10 +112,10 @@ export default function DashboardClient() {
       if (!targetOutletId || !currentSelectedOutletExists) {
         targetOutletId = allOutlets[0]?.id;
         if (targetOutletId && targetOutletId !== selectedOutletId) {
-            setSelectedOutletId(targetOutletId); 
+            setSelectedOutletId(targetOutletId);
         }
       }
-      
+
       if (targetOutletId) {
         const history = generateHistoricalData(targetOutletId, selectedDate, 30);
         setHistoricalData(history);
@@ -130,14 +135,14 @@ export default function DashboardClient() {
       if (isLoadingData || isAiProcessing || dailySummaryData.length === 0 || !selectedDate) {
         return;
       }
-      
+
       const needsProcessing = dailySummaryData.some(item => item.isAnomalous === undefined);
       if (!needsProcessing) {
         return;
       }
 
       setIsAiProcessing(true);
-      const processingDataSnapshot = [...dailySummaryData]; 
+      const processingDataSnapshot = [...dailySummaryData];
       const results = [];
       let anomaliesFoundThisRun = 0;
 
@@ -161,7 +166,7 @@ export default function DashboardClient() {
           historicalFoodCostPercentages: historicalPcts.food,
           historicalBeverageCostPercentages: historicalPcts.beverage,
         };
-        
+
         try {
           const result = await detectCostFluctuation(aiInput);
           const updatedItem = { ...item, isAnomalous: result.isAnomalous, anomalyExplanation: result.explanation };
@@ -186,12 +191,12 @@ export default function DashboardClient() {
             duration: 7000,
           });
         }
-        
+
         if (i < processingDataSnapshot.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 4500)); 
+          await new Promise(resolve => setTimeout(resolve, 4500));
         }
       }
-      
+
       setDailySummaryData(results);
       setIsAiProcessing(false);
 
@@ -219,7 +224,7 @@ export default function DashboardClient() {
         }
       }
     };
-    
+
     runAnomalyDetectionLogic();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoadingData, dailySummaryData, selectedDate, toast, isAiProcessing]);
@@ -243,7 +248,7 @@ export default function DashboardClient() {
     const headers = ["Date", "Outlet", "Food Revenue", "Food Cost", "Food Cost %", "Beverage Revenue", "Beverage Cost", "Beverage Cost %", "Is Anomalous", "Anomaly Explanation"];
     const rows = dailySummaryData.map(item => [
       item.date,
-      `"${item.outletName.replace(/"/g, '""')}"`, 
+      `"${item.outletName.replace(/"/g, '""')}"`,
       item.foodRevenue,
       item.foodCost,
       item.foodCostPct,
@@ -251,7 +256,7 @@ export default function DashboardClient() {
       item.beverageCost,
       item.beverageCostPct,
       item.isAnomalous ? "Yes" : "No",
-      `"${(item.anomalyExplanation || '').replace(/"/g, '""')}"` 
+      `"${(item.anomalyExplanation || '').replace(/"/g, '""')}"`
     ]);
     let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
     const encodedUri = encodeURI(csvContent);
@@ -263,7 +268,7 @@ export default function DashboardClient() {
     document.body.removeChild(link);
     toast({ title: "Export Successful", description: "Data exported as CSV."});
   };
-  
+
   const currentSelectedOutletForChart = useMemo(() => allOutlets.find(o => o.id === selectedOutletId), [selectedOutletId, allOutlets]);
 
 
