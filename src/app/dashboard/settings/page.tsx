@@ -9,7 +9,7 @@ export default function SettingsPage() {
       <p className="text-muted-foreground mb-6">Manage your application settings here.</p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link href="/dashboard/settings/outlets">
-          <Button variant="outline" className="w-full h-24 text-lg justify-start p-6">
+          <Button variant="outline" className="w-full h-24 text-base sm:text-lg justify-start p-6">
             <Building className="mr-4 h-8 w-8" />
             Manage Outlets
           </Button>
@@ -19,3 +19,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

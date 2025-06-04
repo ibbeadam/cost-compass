@@ -16,10 +16,10 @@ export default function Error({
   }, [error]);
 
   return (
-    <div className="flex flex-col flex-grow items-center justify-center text-center">
-      <div className="bg-card p-8 rounded-lg shadow-xl border border-destructive/50 max-w-lg w-full">
-        <AlertTriangle className="h-16 w-16 text-destructive mx-auto mb-6" />
-        <h2 className="text-3xl font-headline font-semibold text-destructive mb-4">
+    <div className="flex flex-col flex-grow items-center justify-center text-center p-4">
+      <div className="bg-card p-6 sm:p-8 rounded-lg shadow-xl border border-destructive/50 max-w-lg w-full">
+        <AlertTriangle className="h-12 w-12 sm:h-16 sm:w-16 text-destructive mx-auto mb-6" />
+        <h2 className="text-2xl sm:text-3xl font-headline font-semibold text-destructive mb-4">
           Oops! Something went wrong.
         </h2>
         <p className="text-muted-foreground mb-6">
@@ -48,3 +48,4 @@ export default function Error({
     </div>
   );
 }
+
