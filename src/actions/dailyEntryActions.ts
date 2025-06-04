@@ -1,7 +1,7 @@
 
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { DailyHotelEntry, CostDetailCategory } from "@/types"; 
@@ -20,7 +20,8 @@ function initializeCostDetailCategory(details?: Partial<CostDetailCategory>): Co
 
 
 export async function saveDailyHotelEntryAction(
-  entryData: Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'calculatedNetFoodCost' | 'calculatedActualFoodCostPct' | 'calculatedFoodCostVariancePct' | 'calculatedNetBeverageCost' | 'calculatedActualBeverageCostPct' | 'calculatedBeverageCostVariancePct'> & { date: Date }
+  // Ensure data passed from form (which uses JS Date) is correctly typed
+  entryData: Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'date' | 'calculatedNetFoodCost' | 'calculatedActualFoodCostPct' | 'calculatedFoodCostVariancePct' | 'calculatedNetBeverageCost' | 'calculatedActualBeverageCostPct' | 'calculatedBeverageCostVariancePct'> & { date: Date } 
 ): Promise<void> {
   const entryId = format(entryData.date, "yyyy-MM-dd");
   
@@ -34,7 +35,7 @@ export async function saveDailyHotelEntryAction(
 
     const dataToSave: Omit<DailyHotelEntry, 'id'> = {
       ...entryData,
-      date: Timestamp.fromDate(entryData.date), // Convert JS Date to Firestore Timestamp
+      date: Timestamp.fromDate(entryData.date), // Convert JS Date to Firestore Timestamp for saving
       foodCostDetails: initializeCostDetailCategory(entryData.foodCostDetails),
       beverageCostDetails: initializeCostDetailCategory(entryData.beverageCostDetails),
       updatedAt: serverTimestamp() as Timestamp,
@@ -57,7 +58,6 @@ export async function saveDailyHotelEntryAction(
     }
 
     revalidatePath("/dashboard/daily-entry");
-    // Consider revalidating other paths that might display this data, e.g., the main dashboard
     revalidatePath("/dashboard"); 
   } catch (error) {
     console.error("Error saving daily hotel entry: ", error);
@@ -75,18 +75,37 @@ export async function getDailyHotelEntryAction(id: string): Promise<DailyHotelEn
 
     if (docSnap.exists()) {
       const data = docSnap.data() as Omit<DailyHotelEntry, 'id'>;
-      // Ensure cost details are fully initialized
+      // Convert Timestamps to JS Dates for client components
       return { 
         id: docSnap.id, 
         ...data,
+        date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date),
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
         foodCostDetails: initializeCostDetailCategory(data.foodCostDetails),
         beverageCostDetails: initializeCostDetailCategory(data.beverageCostDetails),
       } as DailyHotelEntry;
     } else {
-      return null; // No entry found for this ID
+      return null; 
     }
   } catch (error) {
     console.error("Error fetching daily hotel entry: ", error);
     throw new Error(`Failed to fetch daily hotel entry: ${(error as Error).message}`);
   }
 }
+
+export async function deleteDailyHotelEntryAction(id: string): Promise<void> {
+  if (!id) {
+    throw new Error("Entry ID is required for deletion.");
+  }
+  try {
+    const entryDocRef = doc(db, "dailyHotelEntries", id);
+    await deleteDoc(entryDocRef);
+    revalidatePath("/dashboard/daily-entry");
+    revalidatePath("/dashboard");
+  } catch (error) {
+    console.error("Error deleting daily hotel entry: ", error);
+    throw new Error(`Failed to delete daily hotel entry: ${(error as Error).message}`);
+  }
+}
+
