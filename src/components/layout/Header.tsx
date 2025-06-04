@@ -1,5 +1,7 @@
-import { Compass } from 'lucide-react';
+
+import { Compass, Settings } from 'lucide-react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export function Header() {
   return (
@@ -10,10 +12,15 @@ export function Header() {
             <Compass size={28} />
             <h1 className="text-2xl font-headline font-semibold">Cost Compass</h1>
           </Link>
-          {/* Placeholder for future navigation or user actions */}
-          <div>
-            {/* Example: <UserNav /> */}
-          </div>
+          
+          <nav>
+            <Button variant="ghost" asChild>
+              <Link href="/dashboard/settings" className="flex items-center gap-2 text-foreground hover:text-primary">
+                <Settings size={20} />
+                <span className="hidden sm:inline">Settings</span>
+              </Link>
+            </Button>
+          </nav>
         </div>
       </div>
     </header>

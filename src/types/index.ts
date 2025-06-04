@@ -1,6 +1,11 @@
+
+import type { Timestamp } from "firebase/firestore";
+
 export interface Outlet {
   id: string;
   name: string;
+  createdAt?: Timestamp | Date; // For Firestore serverTimestamp, or Date after fetching
+  updatedAt?: Timestamp | Date;
 }
 
 export interface Item {
