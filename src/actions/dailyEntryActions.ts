@@ -20,8 +20,8 @@ function initializeCostDetailCategory(details?: Partial<CostDetailCategory>): Co
 
 
 export async function saveDailyHotelEntryAction(
-  // Ensure data passed from form (which uses JS Date) is correctly typed
-  entryData: Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'date' | 'calculatedNetFoodCost' | 'calculatedActualFoodCostPct' | 'calculatedFoodCostVariancePct' | 'calculatedNetBeverageCost' | 'calculatedActualBeverageCostPct' | 'calculatedBeverageCostVariancePct'> & { date: Date } 
+  // entryData comes from the form (e.g. FoodCostEntryForm), containing relevant fields
+  entryData: Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'calculatedNetFoodCost' | 'calculatedActualFoodCostPct' | 'calculatedFoodCostVariancePct' | 'calculatedNetBeverageCost' | 'calculatedActualBeverageCostPct' | 'calculatedBeverageCostVariancePct'> & { date: Date } 
 ): Promise<void> {
   const entryId = format(entryData.date, "yyyy-MM-dd");
   
@@ -34,12 +34,17 @@ export async function saveDailyHotelEntryAction(
     const existingDocSnap = await getDoc(entryDocRef);
 
     const dataToSave: Omit<DailyHotelEntry, 'id'> = {
-      ...entryData,
+      // Spread all fields from entryData. This will include food fields,
+      // and potentially preserved/defaulted beverage fields if the form logic prepared them.
+      ...entryData, 
       date: Timestamp.fromDate(entryData.date), // Convert JS Date to Firestore Timestamp for saving
+      // Ensure sub-objects are initialized if they are part of entryData and potentially undefined/partial
       foodCostDetails: initializeCostDetailCategory(entryData.foodCostDetails),
-      beverageCostDetails: initializeCostDetailCategory(entryData.beverageCostDetails),
+      beverageCostDetails: initializeCostDetailCategory(entryData.beverageCostDetails), // This is key for new entries from food-only form
       updatedAt: serverTimestamp() as Timestamp,
       // Initialize calculated fields if not present, or carry them over if this was an update
+      // These will be recalculated based on the new data if a calculation step is added later.
+      // For now, they are just preserved or set to 0.
       calculatedNetFoodCost: existingDocSnap.data()?.calculatedNetFoodCost || 0,
       calculatedActualFoodCostPct: existingDocSnap.data()?.calculatedActualFoodCostPct || 0,
       calculatedFoodCostVariancePct: existingDocSnap.data()?.calculatedFoodCostVariancePct || 0,
@@ -49,15 +54,17 @@ export async function saveDailyHotelEntryAction(
     };
 
     if (existingDocSnap.exists()) {
-      // Update existing document
-      await setDoc(entryDocRef, dataToSave, { merge: true });
+      // Update existing document, merging with existing data
+      // setDoc with merge:true might be safer if entryData is truly partial.
+      // However, if entryData is constructed to be the full intended state (as planned), direct setDoc is fine.
+      await setDoc(entryDocRef, dataToSave, { merge: true }); 
     } else {
       // Create new document
       dataToSave.createdAt = serverTimestamp() as Timestamp;
       await setDoc(entryDocRef, dataToSave);
     }
 
-    revalidatePath("/dashboard/daily-entry");
+    revalidatePath("/dashboard/food-cost"); // Updated path
     revalidatePath("/dashboard"); 
   } catch (error) {
     console.error("Error saving daily hotel entry: ", error);
@@ -101,7 +108,7 @@ export async function deleteDailyHotelEntryAction(id: string): Promise<void> {
   try {
     const entryDocRef = doc(db, "dailyHotelEntries", id);
     await deleteDoc(entryDocRef);
-    revalidatePath("/dashboard/daily-entry");
+    revalidatePath("/dashboard/food-cost"); // Updated path
     revalidatePath("/dashboard");
   } catch (error) {
     console.error("Error deleting daily hotel entry: ", error);

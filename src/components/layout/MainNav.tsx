@@ -9,12 +9,13 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, FilePlus2, Settings, FileText, Building } from 'lucide-react';
+import { LayoutDashboard, Settings, FileText, Building, Apple } from 'lucide-react'; // Added Apple
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/daily-entry', label: 'Daily Entry', icon: FilePlus2 },
+  { href: '/dashboard/food-cost', label: 'Food Cost Entries', icon: Apple }, // New Food Cost Entries
+  // { href: '/dashboard/daily-entry', label: 'Daily Entry', icon: FilePlus2 }, // Removed Daily Entry
   { href: '/dashboard/reports', label: 'Reports', icon: FileText },
   { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
   { href: '/dashboard/settings', label: 'General Settings', icon: Settings },
