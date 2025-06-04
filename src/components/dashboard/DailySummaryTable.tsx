@@ -1,3 +1,4 @@
+
 import {
   Table,
   TableBody,
@@ -17,11 +18,11 @@ interface DailySummaryTableProps {
 
 export function DailySummaryTable({ data, onRowClick }: DailySummaryTableProps) {
   if (!data || data.length === 0) {
-    return <p className="text-muted-foreground text-center py-8">No data available for the selected criteria.</p>;
+    return <p className="text-muted-foreground text-center py-8 w-full">No data available for the selected criteria.</p>;
   }
 
   return (
-    <div className="rounded-lg border overflow-hidden shadow-md bg-card">
+    <div className="rounded-lg border overflow-hidden shadow-md bg-card w-full">
       <Table>
         <TableHeader className="bg-muted/50">
           <TableRow>

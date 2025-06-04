@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -52,7 +53,7 @@ export function CostChartToggle({ dailyData, historicalData, selectedOutletName 
   const lineChartData = historicalData;
 
    const NoDataContent = () => (
-     <Card className="shadow-lg bg-card">
+     <Card className="shadow-lg bg-card w-full">
         <CardHeader>
           <CardTitle className="font-headline text-xl flex items-center">
             <AlertCircle className="mr-2 h-5 w-5 text-muted-foreground" />
@@ -75,7 +76,7 @@ export function CostChartToggle({ dailyData, historicalData, selectedOutletName 
 
 
   return (
-    <Card className="shadow-lg bg-card">
+    <Card className="shadow-lg bg-card w-full">
       <CardHeader>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
