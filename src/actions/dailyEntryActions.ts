@@ -18,12 +18,12 @@ function initializeCostDetailCategory(details?: Partial<CostDetailCategory>): Co
   };
 }
 
-
 export async function saveDailyHotelEntryAction(
-  // entryData comes from the form (e.g. FoodCostEntryForm), containing relevant fields
-  entryData: Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'calculatedNetFoodCost' | 'calculatedActualFoodCostPct' | 'calculatedFoodCostVariancePct' | 'calculatedNetBeverageCost' | 'calculatedActualBeverageCostPct' | 'calculatedBeverageCostVariancePct'> & { date: Date } 
+  // updatePayload contains only the fields the specific form wants to change.
+  // 'date' is mandatory to identify/create the document.
+  updatePayload: Partial<Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'date'>> & { date: Date }
 ): Promise<void> {
-  const entryId = format(entryData.date, "yyyy-MM-dd");
+  const entryId = format(updatePayload.date, "yyyy-MM-dd");
   
   if (!entryId) {
     throw new Error("Date is required to create an entry ID.");
@@ -33,38 +33,106 @@ export async function saveDailyHotelEntryAction(
     const entryDocRef = doc(db, "dailyHotelEntries", entryId);
     const existingDocSnap = await getDoc(entryDocRef);
 
-    const dataToSave: Omit<DailyHotelEntry, 'id'> = {
-      // Spread all fields from entryData. This will include food fields,
-      // and potentially preserved/defaulted beverage fields if the form logic prepared them.
-      ...entryData, 
-      date: Timestamp.fromDate(entryData.date), // Convert JS Date to Firestore Timestamp for saving
-      // Ensure sub-objects are initialized if they are part of entryData and potentially undefined/partial
-      foodCostDetails: initializeCostDetailCategory(entryData.foodCostDetails),
-      beverageCostDetails: initializeCostDetailCategory(entryData.beverageCostDetails), // This is key for new entries from food-only form
+    // Base structure for data to be written, always including date and updatedAt
+    let dataForFirestore: Partial<DailyHotelEntry> & { date: Timestamp; updatedAt: Timestamp } = {
+      date: Timestamp.fromDate(updatePayload.date), // Ensure date is always a Timestamp
       updatedAt: serverTimestamp() as Timestamp,
-      // Initialize calculated fields if not present, or carry them over if this was an update
-      // These will be recalculated based on the new data if a calculation step is added later.
-      // For now, they are just preserved or set to 0.
-      calculatedNetFoodCost: existingDocSnap.data()?.calculatedNetFoodCost || 0,
-      calculatedActualFoodCostPct: existingDocSnap.data()?.calculatedActualFoodCostPct || 0,
-      calculatedFoodCostVariancePct: existingDocSnap.data()?.calculatedFoodCostVariancePct || 0,
-      calculatedNetBeverageCost: existingDocSnap.data()?.calculatedNetBeverageCost || 0,
-      calculatedActualBeverageCostPct: existingDocSnap.data()?.calculatedActualBeverageCostPct || 0,
-      calculatedBeverageCostVariancePct: existingDocSnap.data()?.calculatedBeverageCostVariancePct || 0,
     };
 
+    // Merge updatePayload into dataForFirestore, effectively adding/overwriting fields from the form
+    // We delete id, createdAt, updatedAt from updatePayload before spreading to avoid issues if they were passed
+    const { id, createdAt, updatedAt, date, ...restOfPayload } = updatePayload;
+    dataForFirestore = {
+        ...dataForFirestore,
+        ...restOfPayload,
+    };
+
+
+    // Explicitly handle foodCostDetails and beverageCostDetails
+    // If they are part of the submission (e.g. from Food Cost Form), initialize/update them.
+    // If not provided in updatePayload (e.g. from Hotel Daily Entry Form), this logic won't add them to dataForFirestore,
+    // so for an update, merge:true will preserve existing values in Firestore.
+    // For a new document, they will be initialized later.
+    if ('foodCostDetails' in updatePayload && updatePayload.foodCostDetails !== undefined) {
+      dataForFirestore.foodCostDetails = initializeCostDetailCategory(updatePayload.foodCostDetails);
+    }
+    if ('beverageCostDetails' in updatePayload && updatePayload.beverageCostDetails !== undefined) {
+      dataForFirestore.beverageCostDetails = initializeCostDetailCategory(updatePayload.beverageCostDetails);
+    }
+    
+    // Preserve or initialize calculated fields
+    const existingData = existingDocSnap.data();
+    const defaultCalcFields = {
+      calculatedNetFoodCost: 0,
+      calculatedActualFoodCostPct: 0,
+      calculatedFoodCostVariancePct: 0,
+      calculatedNetBeverageCost: 0,
+      calculatedActualBeverageCostPct: 0,
+      calculatedBeverageCostVariancePct: 0,
+    };
+
+    dataForFirestore.calculatedNetFoodCost = updatePayload.calculatedNetFoodCost ?? existingData?.calculatedNetFoodCost ?? defaultCalcFields.calculatedNetFoodCost;
+    dataForFirestore.calculatedActualFoodCostPct = updatePayload.calculatedActualFoodCostPct ?? existingData?.calculatedActualFoodCostPct ?? defaultCalcFields.calculatedActualFoodCostPct;
+    dataForFirestore.calculatedFoodCostVariancePct = updatePayload.calculatedFoodCostVariancePct ?? existingData?.calculatedFoodCostVariancePct ?? defaultCalcFields.calculatedFoodCostVariancePct;
+    dataForFirestore.calculatedNetBeverageCost = updatePayload.calculatedNetBeverageCost ?? existingData?.calculatedNetBeverageCost ?? defaultCalcFields.calculatedNetBeverageCost;
+    dataForFirestore.calculatedActualBeverageCostPct = updatePayload.calculatedActualBeverageCostPct ?? existingData?.calculatedActualBeverageCostPct ?? defaultCalcFields.calculatedActualBeverageCostPct;
+    dataForFirestore.calculatedBeverageCostVariancePct = updatePayload.calculatedBeverageCostVariancePct ?? existingData?.calculatedBeverageCostVariancePct ?? defaultCalcFields.calculatedBeverageCostVariancePct;
+
+
     if (existingDocSnap.exists()) {
-      // Update existing document, merging with existing data
-      // setDoc with merge:true might be safer if entryData is truly partial.
-      // However, if entryData is constructed to be the full intended state (as planned), direct setDoc is fine.
-      await setDoc(entryDocRef, dataToSave, { merge: true }); 
+      // Updating existing document: merge the payload.
+      await setDoc(entryDocRef, dataForFirestore, { merge: true });
     } else {
-      // Create new document
-      dataToSave.createdAt = serverTimestamp() as Timestamp;
-      await setDoc(entryDocRef, dataToSave);
+      // Creating new document: construct the full new document data.
+      const newDocumentData: Omit<DailyHotelEntry, 'id'> = {
+        date: Timestamp.fromDate(updatePayload.date),
+        hotelNetSales: 0, // Default
+        budgetHotelFoodCostPct: 0, // Default
+        budgetHotelBeverageCostPct: 0, // Default
+        foodCostDetails: initializeCostDetailCategory(), // Default
+        beverageCostDetails: initializeCostDetailCategory(), // Default
+        hotelNetFoodSales: 0, // Default
+        entFood: 0, // Default
+        ocFood: 0, // Default
+        otherFoodCredit: 0, // Default
+        hotelNetBeverageSales: 0, // Default
+        entBeverage: 0, // Default
+        ocBeverage: 0, // Default
+        otherBeverageCredit: 0, // Default
+        notes: '', // Default
+        // Calculated fields defaults
+        calculatedNetFoodCost: defaultCalcFields.calculatedNetFoodCost,
+        calculatedActualFoodCostPct: defaultCalcFields.calculatedActualFoodCostPct,
+        calculatedFoodCostVariancePct: defaultCalcFields.calculatedFoodCostVariancePct,
+        calculatedNetBeverageCost: defaultCalcFields.calculatedNetBeverageCost,
+        calculatedActualBeverageCostPct: defaultCalcFields.calculatedActualBeverageCostPct,
+        calculatedBeverageCostVariancePct: defaultCalcFields.calculatedBeverageCostVariancePct,
+        
+        // Spread the actual payload from the form, which might override some defaults
+        ...restOfPayload, 
+
+        // Ensure critical fields are correctly typed and set for new doc
+        updatedAt: serverTimestamp() as Timestamp,
+        createdAt: serverTimestamp() as Timestamp,
+      };
+
+      // If form provided details, use them instead of default initialized ones (already handled by spread if present in restOfPayload)
+       if ('foodCostDetails' in updatePayload && updatePayload.foodCostDetails !== undefined) {
+        newDocumentData.foodCostDetails = initializeCostDetailCategory(updatePayload.foodCostDetails);
+      }
+      if ('beverageCostDetails' in updatePayload && updatePayload.beverageCostDetails !== undefined) {
+        newDocumentData.beverageCostDetails = initializeCostDetailCategory(updatePayload.beverageCostDetails);
+      }
+      // Override defaults with calculated fields if they were somehow in updatePayload
+      newDocumentData.calculatedNetFoodCost = updatePayload.calculatedNetFoodCost ?? newDocumentData.calculatedNetFoodCost;
+      newDocumentData.calculatedActualFoodCostPct = updatePayload.calculatedActualFoodCostPct ?? newDocumentData.calculatedActualFoodCostPct;
+      // ... and so on for other calculated fields in updatePayload
+
+      await setDoc(entryDocRef, newDocumentData);
     }
 
-    revalidatePath("/dashboard/food-cost"); // Updated path
+    revalidatePath("/dashboard/hotel-daily-entry");
+    revalidatePath("/dashboard/food-cost");
     revalidatePath("/dashboard"); 
   } catch (error) {
     console.error("Error saving daily hotel entry: ", error);
@@ -108,11 +176,11 @@ export async function deleteDailyHotelEntryAction(id: string): Promise<void> {
   try {
     const entryDocRef = doc(db, "dailyHotelEntries", id);
     await deleteDoc(entryDocRef);
-    revalidatePath("/dashboard/food-cost"); // Updated path
+    revalidatePath("/dashboard/hotel-daily-entry");
+    revalidatePath("/dashboard/food-cost"); 
     revalidatePath("/dashboard");
   } catch (error) {
     console.error("Error deleting daily hotel entry: ", error);
     throw new Error(`Failed to delete daily hotel entry: ${(error as Error).message}`);
   }
 }
-

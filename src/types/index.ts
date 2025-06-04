@@ -114,12 +114,27 @@ export interface CostDetailCategory {
 export interface DailyHotelEntry {
   id: string; // Document ID, should be YYYY-MM-DD format
   date: Timestamp; // Firestore Timestamp for the specific day
-  hotelNetSales: number; // Total hotel net sales for the day (as per your report: "NET SALES")
-  budgetHotelFoodCostPct: number; // e.g., 30 for 30%
-  budgetHotelBeverageCostPct: number; // e.g., 25 for 25%
+  
+  // Overall hotel figures
+  hotelNetSales?: number; // Total hotel net sales for the day (as per your report: "NET SALES")
+  
+  // Food related summary fields
+  hotelNetFoodSales?: number;
+  budgetHotelFoodCostPct?: number; // e.g., 30 for 30%
+  entFood?: number; // Entertainment Food
+  ocFood?: number; // Officer's Check Food / Other Complimentary Food
+  otherFoodCredit?: number; // Other food related credits/adjustments
 
-  foodCostDetails: CostDetailCategory;
-  beverageCostDetails: CostDetailCategory;
+  // Beverage related summary fields
+  hotelNetBeverageSales?: number;
+  budgetHotelBeverageCostPct?: number; // e.g., 25 for 25%
+  entBeverage?: number; // Entertainment Beverage
+  ocBeverage?: number; // Officer's Check Beverage / Other Complimentary Beverage
+  otherBeverageCredit?: number; // Other beverage related credits/adjustments
+
+  // Detailed cost breakdown (can be managed by more granular modules)
+  foodCostDetails?: CostDetailCategory;
+  beverageCostDetails?: CostDetailCategory;
 
   // Optional fields
   notes?: string; // Any specific notes for this day's entry
