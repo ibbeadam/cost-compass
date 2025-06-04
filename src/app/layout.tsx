@@ -29,7 +29,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground">
         <SidebarProvider>
-          <div className="flex min-h-screen">
+          <div className="flex min-h-screen w-full">
             <AppSidebar />
             <div className="flex flex-1 flex-col"> {/* Removed w-full here */}
               <AppHeader />

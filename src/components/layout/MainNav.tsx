@@ -1,3 +1,4 @@
+
 // src/components/layout/MainNav.tsx
 "use client";
 
@@ -8,14 +9,15 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, FilePlus2, Settings, FileText } from 'lucide-react';
+import { LayoutDashboard, FilePlus2, Settings, FileText, Building } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/daily-entry', label: 'Daily Entry', icon: FilePlus2 },
   { href: '/dashboard/reports', label: 'Reports', icon: FileText },
-  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
+  { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
+  { href: '/dashboard/settings', label: 'General Settings', icon: Settings },
 ];
 
 export function MainNav() {

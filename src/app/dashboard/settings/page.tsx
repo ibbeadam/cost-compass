@@ -1,22 +1,30 @@
 
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Building } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-export default function SettingsPage() {
+export default function GeneralSettingsPage() {
   return (
-    <div>
-      <p className="text-muted-foreground mb-6">Manage your application settings here.</p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Link href="/dashboard/settings/outlets">
-          <Button variant="outline" className="w-full h-24 text-base sm:text-lg justify-start p-6">
-            <Building className="mr-4 h-8 w-8" />
-            Manage Outlets
-          </Button>
-        </Link>
-        {/* Add more settings links here as features are built */}
-      </div>
-    </div>
+    <Card className="shadow-lg bg-card">
+      <CardHeader>
+        <CardTitle className="font-headline text-xl">General Settings</CardTitle>
+        <CardDescription>
+          Manage your general application settings here. More options will be available in future updates.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p className="text-muted-foreground">
+          Currently, general settings are minimal. Specific configurations for features like Outlets are managed in their own sections.
+        </p>
+        {/* Placeholder for future general settings */}
+         <div className="mt-6">
+          <h3 className="text-lg font-medium text-foreground mb-2">Future Settings Placeholder</h3>
+           <ul className="list-disc list-inside text-muted-foreground space-y-1">
+            <li>User Profile Management (if not under a dedicated Profile section)</li>
+            <li>Notification Preferences</li>
+            <li>Theme or Appearance Settings</li>
+            <li>Data Export/Import Options</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
-

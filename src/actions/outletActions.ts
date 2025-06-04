@@ -18,7 +18,7 @@ export async function addOutletAction(name: string): Promise<Outlet> {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    revalidatePath("/dashboard/settings/outlets");
+    revalidatePath("/dashboard/outlets");
     revalidatePath("/dashboard"); // Also revalidate main dashboard as it lists outlets
     
     // Fetch the document to return it with the ID and timestamps
@@ -47,7 +47,7 @@ export async function updateOutletAction(id: string, name: string): Promise<void
       name: name.trim(),
       updatedAt: serverTimestamp(),
     });
-    revalidatePath("/dashboard/settings/outlets");
+    revalidatePath("/dashboard/outlets");
     revalidatePath("/dashboard");
   } catch (error) {
     console.error("Error updating outlet: ", error);
@@ -62,7 +62,7 @@ export async function deleteOutletAction(id: string): Promise<void> {
   try {
     const outletDoc = doc(db, "outlets", id);
     await deleteDoc(outletDoc);
-    revalidatePath("/dashboard/settings/outlets");
+    revalidatePath("/dashboard/outlets");
     revalidatePath("/dashboard");
   } catch (error)
   {
