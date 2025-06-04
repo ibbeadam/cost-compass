@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 "use client";
 
@@ -24,7 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function DashboardClient() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [allOutlets, setAllOutlets] = useState<Outlet[]>([]); // Will be populated from Firestore or fallback
+  const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(undefined);
   
   const [dailySummaryData, setDailySummaryData] = useState<DailyCostData[]>([]);
@@ -35,12 +36,11 @@ export default function DashboardClient() {
   const [selectedRowData, setSelectedRowData] = useState<DailyCostData | null>(null);
   
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
-  const [isLoadingData, setIsLoadingData] = useState(true); // For summary/historical data
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   const { toast } = useToast();
 
-  // Fetch outlets from Firestore on component mount
   useEffect(() => {
     const fetchFirestoreOutlets = async () => {
       setIsFetchingOutlets(true);
@@ -54,7 +54,7 @@ export default function DashboardClient() {
         
         if (fetchedOutlets.length > 0) {
           setAllOutlets(fetchedOutlets);
-          if (!selectedOutletId) { // Auto-select first outlet if none is selected yet
+          if (!selectedOutletId) {
             setSelectedOutletId(fetchedOutlets[0].id);
           }
         } else {
@@ -63,7 +63,7 @@ export default function DashboardClient() {
             description: "Using sample outlet data. Please add outlets to your 'outlets' collection in Firestore.",
             duration: 7000,
           });
-          setAllOutlets(mockOutlets); // Fallback to mockOutlets
+          setAllOutlets(mockOutlets); 
            if (!selectedOutletId && mockOutlets.length > 0) {
             setSelectedOutletId(mockOutlets[0].id);
           }
@@ -76,7 +76,7 @@ export default function DashboardClient() {
           description: `Could not load outlets from database. Using sample data. ${error.message}`,
           duration: 7000,
         });
-        setAllOutlets(mockOutlets); // Fallback to mockOutlets
+        setAllOutlets(mockOutlets); 
         if (!selectedOutletId && mockOutlets.length > 0) {
           setSelectedOutletId(mockOutlets[0].id);
         }
@@ -86,32 +86,29 @@ export default function DashboardClient() {
 
     fetchFirestoreOutlets();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast]); // `db` is stable from firebase.ts, toast is stable.
+  }, [toast]); 
 
-  // Fetch daily summary and historical data
   useEffect(() => {
     const loadDashboardData = async () => {
       if (!selectedDate || isFetchingOutlets || allOutlets.length === 0) {
-        // Wait for date, outlets to be fetched, and ensure outlets are available
         if(!isFetchingOutlets && allOutlets.length === 0){
-            setIsLoadingData(false); // No outlets to process
+            setIsLoadingData(false);
         }
         return;
       }
       setIsLoadingData(true);
-      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 300)); 
 
       const summary = allOutlets.map(outlet => generateDailyCosts(selectedDate, outlet));
-      setDailySummaryData(summary);
+      setDailySummaryData(summary); // This sets raw data, AI effect will pick it up
 
-      // Ensure selectedOutletId is valid for the current allOutlets
       const currentSelectedOutletExists = allOutlets.some(o => o.id === selectedOutletId);
       let targetOutletId = selectedOutletId;
 
       if (!targetOutletId || !currentSelectedOutletExists) {
-        targetOutletId = allOutlets[0]?.id; // Default to first outlet if current selection is invalid or missing
+        targetOutletId = allOutlets[0]?.id;
         if (targetOutletId && targetOutletId !== selectedOutletId) {
-            setSelectedOutletId(targetOutletId); // Update state if changed, will cause re-render and this effect to re-run
+            setSelectedOutletId(targetOutletId); 
         }
       }
       
@@ -132,14 +129,32 @@ export default function DashboardClient() {
   // AI Anomaly Detection Effect
   useEffect(() => {
     const runAnomalyDetectionLogic = async () => {
-      if (isLoadingData || isAiProcessing || dailySummaryData.length === 0 || !selectedDate) return;
+      // Ensure data is loaded, not already processing, and there's data to process
+      if (isLoadingData || isAiProcessing || dailySummaryData.length === 0 || !selectedDate) {
+        return;
+      }
       
-      setIsAiProcessing(true);
-      const updatedSummaryData = [...dailySummaryData];
-      let anomaliesFound = 0;
+      // Check if all items already have AI results to prevent unnecessary runs
+      const needsProcessing = dailySummaryData.some(item => item.isAnomalous === undefined);
+      if (!needsProcessing) {
+        return;
+      }
 
-      await Promise.all(updatedSummaryData.map(async (item, index) => {
-        // Ensure selectedDate is valid before calling getHistoricalPercentagesForOutlet
+      setIsAiProcessing(true);
+      const processingDataSnapshot = [...dailySummaryData]; // Take a snapshot for this run
+      const results = [];
+      let anomaliesFoundThisRun = 0;
+
+      for (let i = 0; i < processingDataSnapshot.length; i++) {
+        const item = processingDataSnapshot[i];
+
+        // Skip if already processed in a previous incomplete run or by other means
+        if (item.isAnomalous !== undefined) {
+          results.push(item);
+          if (item.isAnomalous) anomaliesFoundThisRun++;
+          continue;
+        }
+
         const currentDate = selectedDate ? new Date(selectedDate) : new Date();
         const historicalPcts = getHistoricalPercentagesForOutlet(item.outletId, currentDate, 30);
 
@@ -153,55 +168,67 @@ export default function DashboardClient() {
         };
         
         try {
-          await new Promise(resolve => setTimeout(resolve, 100 * index)); 
           const result = await detectCostFluctuation(aiInput);
-          updatedSummaryData[index] = { ...item, isAnomalous: result.isAnomalous, anomalyExplanation: result.explanation };
+          const updatedItem = { ...item, isAnomalous: result.isAnomalous, anomalyExplanation: result.explanation };
+          results.push(updatedItem);
+
           if (result.isAnomalous) {
-            anomaliesFound++;
+            anomaliesFoundThisRun++;
+            toast({
+              variant: "destructive",
+              title: ( <div className="flex items-center"> <AlertTriangle className="mr-2 h-5 w-5" /> Anomaly Detected! </div> ),
+              description: `${item.outletName}: ${result.explanation}`,
+              duration: 7000,
+            });
           }
         } catch (error) {
           console.error("Error detecting cost fluctuation for", item.outletName, error);
-           updatedSummaryData[index] = { ...item, isAnomalous: false, anomalyExplanation: "AI analysis failed." };
+          results.push({ ...item, isAnomalous: false, anomalyExplanation: "AI analysis failed." });
+          toast({
+            variant: "destructive",
+            title: "AI Analysis Error",
+            description: `Could not analyze ${item.outletName}. ${error.message.includes("429") ? "Rate limit may have been exceeded." : "Please try again later."}`,
+            duration: 7000,
+          });
         }
-      }));
+        
+        // Delay between API calls, but not after the last one
+        if (i < processingDataSnapshot.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 4500)); // 4.5 seconds delay
+        }
+      }
       
-      setDailySummaryData(updatedSummaryData); // This will update the state
+      setDailySummaryData(results);
       setIsAiProcessing(false);
 
-      // Show toasts after AI processing is complete and state is updated
-      // Need to defer this slightly or use a separate effect to ensure toasts reflect the *final* state
-      // For now, this should be mostly fine as setDailySummaryData will trigger a re-render.
-      
-      updatedSummaryData.forEach(item => {
-        if(item.isAnomalous && item.anomalyExplanation) {
+      if (processingDataSnapshot.length > 0 && selectedDate) {
+        const successfullyProcessedCount = results.filter(r => r.anomalyExplanation !== "AI analysis failed.").length;
+        if (successfullyProcessedCount < results.length && successfullyProcessedCount > 0) {
             toast({
-              variant: "destructive",
-              title: (
-                <div className="flex items-center">
-                  <AlertTriangle className="mr-2 h-5 w-5" /> Anomaly Detected!
-                </div>
-              ),
-              description: `${item.outletName}: ${item.anomalyExplanation}`,
-              duration: 7000,
+                title: "AI Analysis Partially Complete",
+                description: `${anomaliesFoundThisRun} anomalies found. Some items could not be analyzed.`,
+                duration: 5000,
+            });
+        } else if (successfullyProcessedCount === 0 && results.length > 0) {
+             toast({
+                variant: "destructive",
+                title: "AI Analysis Failed",
+                description: `Could not analyze cost data for ${format(selectedDate, "PPP")}.`,
+                duration: 5000,
+            });
+        } else if (results.length > 0) {
+            toast({
+                title: "AI Analysis Complete",
+                description: anomaliesFoundThisRun > 0 ? `${anomaliesFoundThisRun} potential cost anomalies identified for ${format(selectedDate, "PPP")}.` : `No significant cost anomalies detected for ${format(selectedDate, "PPP")}.`,
+                duration: 5000,
             });
         }
-      });
-
-      if (dailySummaryData.length > 0 && selectedDate) {
-        toast({
-            title: "AI Analysis Complete",
-            description: anomaliesFound > 0 ? `${anomaliesFound} potential cost anomalies identified for ${format(selectedDate, "PPP")}.` : `No significant cost anomalies detected for ${format(selectedDate, "PPP")}.`,
-            duration: 5000,
-        });
       }
     };
     
-    // Trigger anomaly detection when main data is loaded and not already processing
-    if (!isLoadingData && !isAiProcessing) {
-        runAnomalyDetectionLogic();
-    }
+    runAnomalyDetectionLogic();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoadingData, dailySummaryData, selectedDate, toast]); // Note: isAiProcessing removed from deps to prevent loop on its own change
+  }, [isLoadingData, dailySummaryData, selectedDate, toast, isAiProcessing]); // Added isAiProcessing to deps. The logic inside runAnomalyDetectionLogic now handles re-entry.
 
 
   const handleRowClick = async (rowData: DailyCostData) => {
@@ -337,4 +364,3 @@ export default function DashboardClient() {
     </div>
   );
 }
-
