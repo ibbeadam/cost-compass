@@ -33,7 +33,7 @@ export default function RootLayout({
             <AppSidebar />
             <div className="flex flex-1 flex-col">
               <AppHeader />
-              <main className="flex-grow p-4 sm:p-6 lg:p-8">
+              <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none">
                 {children}
               </main>
               <AppFooter />

@@ -1,3 +1,4 @@
+
 // @ts-nocheck
 "use client";
 
@@ -267,7 +268,7 @@ export default function DashboardClient() {
 
 
   return (
-    <div className="flex flex-col flex-grow">
+    <div className="flex flex-col flex-grow w-full">
       <Card className="mb-6 shadow-lg bg-card">
         <CardContent className="p-4 sm:p-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
