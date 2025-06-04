@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -21,6 +22,13 @@ import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
 const outletFormSchema = z.object({
+  id: z.string().min(1, {
+    message: "Outlet ID cannot be empty.",
+  }).max(50, {
+    message: "Outlet ID must not exceed 50 characters."
+  }).regex(/^[a-zA-Z0-9-_]+$/, {
+    message: "Outlet ID can only contain letters, numbers, hyphens, and underscores (no spaces)."
+  }),
   name: z.string().min(2, {
     message: "Outlet name must be at least 2 characters.",
   }).max(100, {
@@ -42,6 +50,7 @@ export function OutletForm({ outlet, onSuccess, onCancel }: OutletFormProps) {
   const form = useForm<OutletFormValues>({
     resolver: zodResolver(outletFormSchema),
     defaultValues: {
+      id: outlet?.id || "",
       name: outlet?.name || "",
     },
   });
@@ -50,13 +59,15 @@ export function OutletForm({ outlet, onSuccess, onCancel }: OutletFormProps) {
     setIsSubmitting(true);
     try {
       if (outlet) {
+        // Editing existing outlet - ID is not changed, only name
         await updateOutletAction(outlet.id, data.name);
         toast({
           title: "Outlet Updated",
           description: "The outlet has been successfully updated.",
         });
       } else {
-        await addOutletAction(data.name);
+        // Adding new outlet - ID is provided from the form
+        await addOutletAction(data.id, data.name);
         toast({
           title: "Outlet Added",
           description: "The new outlet has been successfully added.",
@@ -78,6 +89,28 @@ export function OutletForm({ outlet, onSuccess, onCancel }: OutletFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <FormField
+          control={form.control}
+          name="id"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Outlet ID</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="e.g., MAIN-KITCHEN-01"
+                  {...field}
+                  readOnly={!!outlet}
+                  className={!!outlet ? "bg-muted/50 cursor-not-allowed focus-visible:ring-0 focus-visible:ring-offset-0" : ""}
+                  aria-disabled={!!outlet}
+                />
+              </FormControl>
+              <FormDescription>
+                Unique identifier (e.g., MAIN-KITCHEN-01). Letters, numbers, hyphens, underscores only (no spaces). Cannot be changed after creation.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={form.control}
           name="name"
