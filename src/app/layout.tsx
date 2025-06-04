@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
@@ -32,7 +33,7 @@ export default function RootLayout({
             <AppSidebar />
             <div className="flex flex-1 flex-col">
               <AppHeader />
-              <main className="flex-grow container mx-auto p-4 sm:p-6 lg:p-8">
+              <main className="flex-grow p-4 sm:p-6 lg:p-8">
                 {children}
               </main>
               <AppFooter />
