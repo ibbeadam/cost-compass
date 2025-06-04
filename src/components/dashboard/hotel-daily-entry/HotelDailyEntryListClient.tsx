@@ -230,6 +230,7 @@ export default function HotelDailyEntryListClient() {
           </DialogHeader>
           <div className="flex-grow overflow-y-auto pr-2 pl-1 py-2">
              <HotelDailyEntryForm
+                key={editingEntry ? editingEntry.id : 'new-entry'}
                 initialData={editingEntry}
                 onSuccess={onFormSuccess}
                 onCancel={onFormCancel}
@@ -240,3 +241,4 @@ export default function HotelDailyEntryListClient() {
     </div>
   );
 }
+
