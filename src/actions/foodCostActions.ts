@@ -22,41 +22,45 @@ interface FoodCostItemInput {
 
 async function updateAssociatedFinancialSummary(entryDate: Date, totalFoodCost: number) {
   const financialSummaryId = formatDateFn(entryDate, "yyyy-MM-dd");
+  console.log(`[updateAssociatedFinancialSummary] Attempting to update summary for ID: ${financialSummaryId}, with totalFoodCost: ${totalFoodCost}`);
+
   try {
     const summary = await getDailyFinancialSummaryAction(financialSummaryId);
 
     if (summary) {
+      console.log(`[updateAssociatedFinancialSummary] Found summary:`, JSON.stringify(summary, null, 2));
       let actual_food_cost_pct: number | null = null;
       let food_variance_pct: number | null = null;
 
       if (summary.food_revenue != null && summary.food_revenue > 0) {
         actual_food_cost_pct = (totalFoodCost / summary.food_revenue) * 100;
       } else if (summary.food_revenue === 0 && totalFoodCost > 0) {
-        actual_food_cost_pct = null; // Or a very high number / specific sentinel if preferred for "infinite" cost %
+        actual_food_cost_pct = null; 
       } else {
-        actual_food_cost_pct = 0; // Both revenue and cost are 0 or revenue is null/undefined
+        actual_food_cost_pct = 0; 
       }
+      console.log(`[updateAssociatedFinancialSummary] Calculated actual_food_cost_pct: ${actual_food_cost_pct}`);
       
 
       if (actual_food_cost_pct !== null && summary.budget_food_cost_pct != null) {
         food_variance_pct = actual_food_cost_pct - summary.budget_food_cost_pct;
       }
+      console.log(`[updateAssociatedFinancialSummary] Calculated food_variance_pct: ${food_variance_pct}`);
 
       const updatePayload: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date } = {
-        date: summary.date instanceof Timestamp ? summary.date.toDate() : new Date(summary.date), // ensure it's a JS Date
+        date: summary.date instanceof Timestamp ? summary.date.toDate() : new Date(summary.date), 
         actual_food_cost: totalFoodCost,
         actual_food_cost_pct: actual_food_cost_pct,
         food_variance_pct: food_variance_pct,
-        // Preserve other fields by not including them, saveDailyFinancialSummaryAction merges
       };
+      console.log(`[updateAssociatedFinancialSummary] Update payload for saveDailyFinancialSummaryAction:`, JSON.stringify(updatePayload, null, 2));
       await saveDailyFinancialSummaryAction(updatePayload);
-      console.log(`Updated financial summary ${financialSummaryId} with food cost data.`);
+      console.log(`[updateAssociatedFinancialSummary] Successfully called saveDailyFinancialSummaryAction for ${financialSummaryId}.`);
     } else {
-      console.log(`No financial summary found for date ${financialSummaryId} to update with food cost data.`);
+      console.log(`[updateAssociatedFinancialSummary] No financial summary found for date ${financialSummaryId} to update with food cost data.`);
     }
   } catch (error) {
-    console.error(`Error updating financial summary ${financialSummaryId} with food cost:`, error);
-    // Decide if this error should propagate or just be logged
+    console.error(`[updateAssociatedFinancialSummary] Error updating financial summary ${financialSummaryId} with food cost:`, error);
   }
 }
 
@@ -72,7 +76,6 @@ export async function saveFoodCostEntryAction(
   }
 
   const totalFoodCost = items.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-  // Ensure date is UTC to match Firestore potentially storing it as such if coming from serverTimestamp or specific client setups
   const entryDateTimestamp = Timestamp.fromDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
 
 
@@ -81,20 +84,17 @@ export async function saveFoodCostEntryAction(
 
     await runTransaction(db, async (transaction) => {
       if (existingEntryId) {
-        // Update existing entry
         const entryRef = doc(db, FOOD_COST_ENTRIES_COLLECTION, existingEntryId);
         transaction.update(entryRef, {
           total_food_cost: totalFoodCost,
           updatedAt: serverTimestamp(),
         });
 
-        // Delete old details for this entry
         const detailsQuery = query(collection(db, FOOD_COST_DETAILS_COLLECTION), where("food_cost_entry_id", "==", existingEntryId));
         const oldDetailsSnapshot = await getDocs(detailsQuery); 
         oldDetailsSnapshot.forEach(detailDoc => transaction.delete(detailDoc.ref));
 
       } else {
-        // Create new entry
         const newEntryRef = doc(collection(db, FOOD_COST_ENTRIES_COLLECTION));
         transaction.set(newEntryRef, {
           date: entryDateTimestamp,
@@ -110,7 +110,6 @@ export async function saveFoodCostEntryAction(
         throw new Error("Failed to obtain foodCostEntryId during transaction.");
       }
 
-      // Add new details
       for (const item of items) {
         const detailRef = doc(collection(db, FOOD_COST_DETAILS_COLLECTION));
         transaction.set(detailRef, {
@@ -128,8 +127,6 @@ export async function saveFoodCostEntryAction(
         throw new Error("Transaction completed but foodCostEntryId is still not set.");
     }
 
-    // After successful transaction, update the associated DailyFinancialSummary
-    // Use the original 'date' (JS Date object) for calculations and fetching summary
     await updateAssociatedFinancialSummary(date, totalFoodCost);
 
 
@@ -181,7 +178,7 @@ export async function getFoodCostEntryWithDetailsAction(
     return {
       id: doc.id,
       ...detailData,
-      categoryName: categoriesMap.get(detailData.category_id) || detailData.category_id, // Add category name
+      categoryName: categoriesMap.get(detailData.category_id) || detailData.category_id, 
       createdAt: detailData.createdAt instanceof Timestamp ? detailData.createdAt.toDate() : new Date(detailData.createdAt as any),
       updatedAt: detailData.updatedAt instanceof Timestamp ? detailData.updatedAt.toDate() : new Date(detailData.updatedAt as any),
     } as FoodCostDetail;
@@ -202,10 +199,9 @@ export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promis
     throw new Error("Food Cost Entry ID is required for deletion.");
   }
   let entryDate: Date | null = null;
-  let totalFoodCostZero = 0; // For resetting associated summary
+  let totalFoodCostZero = 0; 
 
   try {
-    // Get the entry to find its date before deleting
     const entryRef = doc(db, FOOD_COST_ENTRIES_COLLECTION, foodCostEntryId);
     const entrySnap = await getDoc(entryRef);
     if (entrySnap.exists()) {
@@ -224,7 +220,6 @@ export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promis
 
     await batch.commit();
 
-    // After successful deletion, update the associated DailyFinancialSummary with zero/null food costs
     if (entryDate) {
         await updateAssociatedFinancialSummary(entryDate, totalFoodCostZero);
     }
@@ -239,7 +234,6 @@ export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promis
   }
 }
 
-// Helper to get categories of type 'Food' for populating dropdowns
 export async function getFoodCategoriesAction(): Promise<Category[]> {
     try {
         const q = query(collection(db, CATEGORIES_COLLECTION), where("type", "==", "Food"), orderBy("name", "asc"));
@@ -256,7 +250,6 @@ export async function getFoodCategoriesAction(): Promise<Category[]> {
     }
 }
 
-// Helper to get all outlets for populating dropdowns
 export async function getOutletsAction(): Promise<Outlet[]> {
     try {
         if (!db) {
@@ -264,7 +257,6 @@ export async function getOutletsAction(): Promise<Outlet[]> {
             throw new Error("Database connection is not available. Could not load outlets.");
         }
         const outletsCollectionRef = collection(db, "outlets");
-        // Fetch without orderBy to avoid index issues, sort client-side
         const snapshot = await getDocs(outletsCollectionRef);
         
         const outletsData = snapshot.docs.map(docSnap => {
@@ -287,7 +279,6 @@ export async function getOutletsAction(): Promise<Outlet[]> {
             } as Outlet;
         });
 
-        // Sort client-side
         return outletsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     } catch (error: any) {
@@ -314,3 +305,6 @@ export async function getOutletsAction(): Promise<Outlet[]> {
         throw new Error(errorMessage);
     }
 }
+
+
+    
