@@ -9,7 +9,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, Settings, FileText, Building, Apple, FileSpreadsheet } from 'lucide-react'; // Added Apple, FileSpreadsheet
+import { LayoutDashboard, Settings, FileText, Building, Apple, FileSpreadsheet, ListChecks } from 'lucide-react'; // Added Apple, FileSpreadsheet, ListChecks
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -19,11 +19,28 @@ const navItems = [
   // { href: '/dashboard/daily-entry', label: 'Daily Entry', icon: FilePlus2 }, // Removed Daily Entry
   { href: '/dashboard/reports', label: 'Reports', icon: FileText },
   { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
+  { 
+    href: '/dashboard/settings/categories', 
+    label: 'Manage Categories', 
+    icon: ListChecks,
+    parentPath: '/dashboard/settings' // To highlight "General Settings" as parent
+  },
   { href: '/dashboard/settings', label: 'General Settings', icon: Settings },
 ];
 
 export function MainNav() {
   const pathname = usePathname();
+
+  const isActive = (href: string, parentPath?: string) => {
+    if (parentPath && pathname.startsWith(parentPath) && href === pathname) {
+      return true;
+    }
+    if (href === '/dashboard') {
+      return pathname === href;
+    }
+    return pathname.startsWith(href);
+  };
+
 
   return (
     <SidebarMenu>
@@ -32,10 +49,10 @@ export function MainNav() {
           <Link href={item.href} legacyBehavior passHref>
             <SidebarMenuButton
               asChild
-              isActive={pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))}
+              isActive={isActive(item.href, item.parentPath)}
               className={cn(
                 "justify-start",
-                (pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href)))
+                 isActive(item.href, item.parentPath)
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               )}

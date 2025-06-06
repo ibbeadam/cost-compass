@@ -113,7 +113,7 @@ export interface CostDetailCategory {
 
 export interface DailyHotelEntry {
   id: string; // Document ID, should be YYYY-MM-DD format
-  date: Timestamp; // Firestore Timestamp for the specific day
+  date: Timestamp | Date; // Firestore Timestamp for the specific day or JS Date for client
   
   // Overall hotel figures
   hotelNetSales?: number; // Total hotel net sales for the day (as per your report: "NET SALES")
@@ -139,8 +139,8 @@ export interface DailyHotelEntry {
   // Optional fields
   notes?: string; // Any specific notes for this day's entry
   userId?: string; // ID of user who made/last updated the entry
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
 
   // Calculated fields (can be stored after calculation or calculated on read)
   calculatedNetFoodCost?: number;
@@ -149,4 +149,13 @@ export interface DailyHotelEntry {
   calculatedNetBeverageCost?: number;
   calculatedActualBeverageCostPct?: number;
   calculatedBeverageCostVariancePct?: number; // (Actual % - Budget %)
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  type: 'Food' | 'Beverage';
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
 }
