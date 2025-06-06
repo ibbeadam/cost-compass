@@ -1,5 +1,5 @@
 
-import { initializeApp, getApp, getApps } from "firebase/app";
+import { initializeApp, getApp, getApps, FirebaseError } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
@@ -15,12 +15,32 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
 };
 
-// Initialize Firebase
-// const app = initializeApp(firebaseConfig);
-// For Next.js, it's good practice to check if the app is already initialized
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let appInstance;
+let dbInstance;
+let authInstance;
 
-const db = getFirestore(app);
-const auth = getAuth(app);
+try {
+  if (!firebaseConfig.projectId) {
+    throw new Error("Firebase project ID is not configured. Check your .env.local file and NEXT_PUBLIC_FIREBASE_PROJECT_ID.");
+  }
+  appInstance = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+  dbInstance = getFirestore(appInstance);
+  authInstance = getAuth(appInstance);
+} catch (e: any) {
+  console.error("!!!!!!!!!! FIREBASE INITIALIZATION ERROR !!!!!!!!!!");
+  if (e instanceof FirebaseError) {
+    console.error("Firebase Error Code:", e.code);
+    console.error("Firebase Error Message:", e.message);
+  } else if (e instanceof Error) {
+    console.error("Generic Error during Firebase init:", e.message);
+    console.error("Stack:", e.stack);
+  } else {
+    console.error("Unknown error during Firebase init:", e);
+  }
+  // If Firebase fails to initialize, dbInstance and authInstance might be undefined.
+  // Subsequent calls to Firestore will likely fail.
+}
 
-export { app, db, auth };
+export const app = appInstance;
+export const db = dbInstance;
+export const auth = authInstance;

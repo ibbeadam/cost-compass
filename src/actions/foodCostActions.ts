@@ -195,14 +195,18 @@ export async function getFoodCategoriesAction(): Promise<Category[]> {
 // Helper to get all outlets for populating dropdowns
 export async function getOutletsAction(): Promise<Outlet[]> {
     try {
-        // Fetch without Firestore orderBy
-        const snapshot = await getDocs(collection(db, "outlets"));
+        if (!db) {
+            console.error("Firestore 'db' instance is not available in getOutletsAction.");
+            throw new Error("Database connection is not available. Could not load outlets.");
+        }
+        const outletsCollectionRef = collection(db, "outlets");
+        const snapshot = await getDocs(outletsCollectionRef);
         
         const outletsData = snapshot.docs.map(docSnap => {
             const data = docSnap.data();
             return {
                 id: docSnap.id,
-                name: data.name, // Ensure name field exists for sorting
+                name: data.name, 
                 createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
                 updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
                 isActive: data.isActive ?? true, 
@@ -218,16 +222,29 @@ export async function getOutletsAction(): Promise<Outlet[]> {
             } as Outlet;
         });
 
-        // Sort by name in JavaScript
         return outletsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
-    } catch (error) {
-        console.error("Error fetching outlets:", error); // Log the detailed error
-        let errorMessage = "Could not load outlets. Please check server logs for details.";
-        if (error instanceof Error && (error.message.includes("index") || error.message.includes("orderBy"))) {
-            errorMessage += " This might be due to a missing Firestore index for the 'outlets' collection on the 'name' field. Check your Firestore console.";
+    } catch (error: any) {
+        console.error("--------------------------------------------------");
+        console.error("Detailed error in getOutletsAction:", error);
+        if (error.name) console.error("Error Name:", error.name);
+        if (error.code) console.error("Error Code:", error.code);
+        if (error.message) console.error("Error Message:", error.message);
+        if (error.stack) console.error("Error Stack:", error.stack);
+        console.error("--------------------------------------------------");
+
+        let errorMessage = "Could not load outlets.";
+        if (error instanceof Error) {
+          if (error.message.includes("index") || error.message.includes("orderBy") || (error as any).code === 'failed-precondition') {
+              errorMessage += " This might be due to a missing Firestore index. Check your Firestore console for index creation links, or create one manually for the 'outlets' collection. If sorting by 'name', ensure an index on that field exists.";
+          } else if ((error as any).code === 'permission-denied') {
+              errorMessage += " Firestore permission denied. Please check your security rules for the 'outlets' collection.";
+          } else {
+              errorMessage += ` Details: ${error.message}`;
+          }
+        } else {
+            errorMessage += " An unknown error occurred."
         }
         throw new Error(errorMessage);
     }
 }
-
