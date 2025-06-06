@@ -199,28 +199,29 @@ export async function getOutletsAction(): Promise<Outlet[]> {
         const snapshot = await getDocs(q);
         return snapshot.docs.map(docSnap => {
             const data = docSnap.data();
-            // Ensure all fields from Outlet type are explicitly mapped
-            // and timestamps are converted
             return {
                 id: docSnap.id,
                 name: data.name,
                 createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
                 updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-                isActive: data.isActive,
-                address: data.address,
-                phoneNumber: data.phoneNumber,
-                email: data.email,
-                type: data.type,
-                currency: data.currency,
-                timezone: data.timezone,
-                defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct,
-                defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct,
-                targetOccupancy: data.targetOccupancy,
+                isActive: data.isActive ?? true, // Default to true if undefined
+                address: data.address ?? '',
+                phoneNumber: data.phoneNumber ?? '',
+                email: data.email ?? '',
+                type: data.type ?? 'Restaurant', // Default type
+                currency: data.currency ?? 'USD', // Default currency
+                timezone: data.timezone ?? 'UTC', // Default timezone
+                defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct ?? 0,
+                defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct ?? 0,
+                targetOccupancy: data.targetOccupancy ?? 0,
             } as Outlet;
         });
     } catch (error) {
-        console.error("Error fetching outlets:", error);
-        throw new Error("Could not load outlets.");
+        console.error("Error fetching outlets:", error); // Log the detailed error
+        let errorMessage = "Could not load outlets. Please check server logs for details.";
+        if (error instanceof Error && (error.message.includes("index") || error.message.includes("orderBy"))) {
+            errorMessage += " This might be due to a missing Firestore index for the 'outlets' collection on the 'name' field. Check your Firestore console.";
+        }
+        throw new Error(errorMessage);
     }
 }
-
