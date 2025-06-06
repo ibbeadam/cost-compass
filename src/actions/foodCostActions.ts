@@ -1,10 +1,10 @@
 
 "use server";
 
-import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction } from "firebase/firestore";
+import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
-import type { FoodCostEntry, FoodCostDetail, Category } from "@/types";
+import type { FoodCostEntry, FoodCostDetail, Category, Outlet } from "@/types";
 import { format } from "date-fns";
 
 const FOOD_COST_ENTRIES_COLLECTION = "foodCostEntries";
@@ -182,7 +182,9 @@ export async function getFoodCategoriesAction(): Promise<Category[]> {
         const snapshot = await getDocs(q);
         return snapshot.docs.map(docSnap => ({
             id: docSnap.id,
-            ...docSnap.data()
+            ...(docSnap.data() as Omit<Category, 'id' | 'createdAt' | 'updatedAt'>),
+            createdAt: docSnap.data().createdAt instanceof Timestamp ? docSnap.data().createdAt.toDate() : docSnap.data().createdAt,
+            updatedAt: docSnap.data().updatedAt instanceof Timestamp ? docSnap.data().updatedAt.toDate() : docSnap.data().updatedAt,
         } as Category));
     } catch (error) {
         console.error("Error fetching food categories:", error);
@@ -195,15 +197,30 @@ export async function getOutletsAction(): Promise<Outlet[]> {
     try {
         const q = query(collection(db, "outlets"), orderBy("name", "asc"));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(docSnap => ({
-            id: docSnap.id,
-            name: docSnap.data().name,
-            // Map other fields if needed, ensure they conform to Outlet type
-             createdAt: docSnap.data().createdAt instanceof Timestamp ? docSnap.data().createdAt.toDate() : docSnap.data().createdAt,
-             updatedAt: docSnap.data().updatedAt instanceof Timestamp ? docSnap.data().updatedAt.toDate() : docSnap.data().updatedAt,
-        } as Outlet));
+        return snapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            // Ensure all fields from Outlet type are explicitly mapped
+            // and timestamps are converted
+            return {
+                id: docSnap.id,
+                name: data.name,
+                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+                updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
+                isActive: data.isActive,
+                address: data.address,
+                phoneNumber: data.phoneNumber,
+                email: data.email,
+                type: data.type,
+                currency: data.currency,
+                timezone: data.timezone,
+                defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct,
+                defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct,
+                targetOccupancy: data.targetOccupancy,
+            } as Outlet;
+        });
     } catch (error) {
         console.error("Error fetching outlets:", error);
         throw new Error("Could not load outlets.");
     }
 }
+
