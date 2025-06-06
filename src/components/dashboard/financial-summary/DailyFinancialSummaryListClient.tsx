@@ -127,6 +127,14 @@ export default function DailyFinancialSummaryListClient() {
     return ""; // Within acceptable range
   }
 
+  const getActualCostColor = (actualCost: number | null | undefined, budgetCost: number | null | undefined) => {
+    if (actualCost == null || budgetCost == null) return "";
+    if (actualCost > budgetCost) return 'text-destructive'; // Over budget (bad)
+    if (actualCost < budgetCost) return 'text-green-600'; // Under budget (good)
+    return ''; // On budget
+  }
+
+
   if (isLoading) {
     return (
       <div>
@@ -193,11 +201,11 @@ export default function DailyFinancialSummaryListClient() {
                   <TableCell className="text-right font-code">{renderCurrency(summary.food_revenue)}</TableCell>
                   <TableCell className="text-right font-code">{renderPercentage(summary.budget_food_cost_pct)}</TableCell>
                   <TableCell className="text-right font-code">{renderCurrency(summary.actual_food_cost)}</TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))}>
+                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.actual_food_cost_pct,summary.food_variance_pct))}>
                     {renderPercentage(summary.actual_food_cost_pct)}
                   </TableCell>
                   <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))}>
-                    {summary.food_variance_pct != null && summary.food_variance_pct > 0 ? 
+                    {summary.food_variance_pct != null && summary.food_variance_pct > 0 ?
                         <TrendingUp className="inline h-4 w-4 mr-1" /> : 
                         (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? 
                             <TrendingDown className="inline h-4 w-4 mr-1" /> : null)}

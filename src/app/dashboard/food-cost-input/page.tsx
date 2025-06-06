@@ -1,6 +1,6 @@
 
-import FoodCostInputClient from "@/components/dashboard/food-cost-input/FoodCostInputClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import FoodCostEntryListClient from "@/components/dashboard/food-cost-input/FoodCostEntryListClient";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -55,7 +55,7 @@ export default function FoodCostInputPage() {
         </CardHeader>
         <CardContent>
           <Suspense fallback={<FoodCostInputSkeleton />}>
-            <FoodCostInputClient />
+            <FoodCostEntryListClient />
           </Suspense>
         </CardContent>
       </Card>

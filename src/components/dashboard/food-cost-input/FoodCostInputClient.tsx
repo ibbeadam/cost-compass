@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback }
@@ -19,15 +18,22 @@ export default function FoodCostInputClient() {
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(undefined);
   const [foodCategories, setFoodCategories] = useState<Category[]>([]);
-  
+
   const [isLoadingOutlets, setIsLoadingOutlets] = useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingEntry, setIsLoadingEntry] = useState(false);
-  
+
   const [currentEntry, setCurrentEntry] = useState<(FoodCostEntry & { details: FoodCostDetail[] }) | null>(null);
   const [formKey, setFormKey] = useState<string>("initial-key"); // To re-mount form
 
+  const [isClient, setIsClient] = useState(false); // 1. Add isClient state
+
   const { toast } = useToast();
+
+  // 2. Add useEffect to set isClient on mount
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     async function fetchData() {
@@ -52,7 +58,7 @@ export default function FoodCostInputClient() {
       }
     }
     fetchData();
-  }, [toast, selectedOutletId]); // Removed selectedOutletId from dep array as it's set inside, can cause loop if not handled carefully. It was already there, reconsidering this comment. Keeping as is, as original intent.
+  }, [toast, selectedOutletId]);
 
   const fetchEntryData = useCallback(async () => {
     if (!selectedOutletId) {
@@ -72,19 +78,19 @@ export default function FoodCostInputClient() {
     }
 
     // At this point, selectedDate is guaranteed to be a Date object (not undefined).
-    // Now, we check if it's a *valid* Date.
+    // Now, we check if it\'s a *valid* Date.
     if (!isValid(selectedDate)) {
       setCurrentEntry(null);
       // selectedDate is a Date object here, but not valid.
-      // toISOString() would throw for invalid dates. Use a placeholder.
+      // toISOString() would throw for invalid dates. Use a placeholder.\
       setFormKey(`invalid-date-${selectedOutletId}-nodata`);
       return;
     }
 
-    // If we reach here, selectedDate is a valid Date object, and selectedOutletId is truthy.
+    // If we reach here, selectedDate is a valid Date object, and selectedOutletId is truthy.\
     setIsLoadingEntry(true);
     try {
-      // All calls to selectedDate.toISOString() are now safe.
+      // All calls to selectedDate.toISOString() are now safe.\
       const entry = await getFoodCostEntryWithDetailsAction(selectedDate, selectedOutletId);
       setCurrentEntry(entry);
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-${entry?.id || 'new'}`);
@@ -92,7 +98,7 @@ export default function FoodCostInputClient() {
       toast({ variant: "destructive", title: "Error fetching cost entry", description: (error as Error).message });
       setCurrentEntry(null);
       console.log("Error fetching cost entry:", error);
-      // selectedDate is guaranteed to be a valid Date here due to the checks above.
+      // selectedDate is guaranteed to be a valid Date here due to the checks above.\
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-error`);
     } finally {
       setIsLoadingEntry(false);
@@ -106,29 +112,40 @@ export default function FoodCostInputClient() {
 
 
   const handleDateChange = (date: Date | undefined) => {
-    setSelectedDate(date);
+    if (date && isValid(date)) {
+      // Create a new Date object representing the start of the day in UTC
+      const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+      setSelectedDate(utcDate);
+    } else {
+      setSelectedDate(date); // Handle undefined or invalid dates
+    }
   };
 
   const handleOutletChange = (outletId: string) => {
     setSelectedOutletId(outletId);
   };
-  
+
   const onFormSuccess = () => {
     toast({ title: "Food Cost Entry Saved", description: "The entry has been successfully saved." });
     fetchEntryData(); // Refresh data after save
   }
 
-  return (
+  return (  
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
         <div>
           <label htmlFor="date-picker-food-cost" className="block text-sm font-medium text-foreground mb-1">Select Date</label>
-          <DatePicker 
-            date={selectedDate} 
-            setDate={handleDateChange} 
-            className="w-full"
-            id="date-picker-food-cost"
-          />
+          {/* 3. Conditionally render DatePicker */}
+          {isClient ? (
+            <DatePicker
+              date={selectedDate ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()) : undefined}
+              setDate={handleDateChange}
+              className="w-full"
+              id="date-picker-food-cost"
+            />
+          ) : (
+            <Skeleton className="h-10 w-full bg-muted" />
+          )}
         </div>
         <div>
           <label htmlFor="outlet-select-food-cost" className="block text-sm font-medium text-foreground mb-1">Select Outlet</label>
@@ -169,4 +186,3 @@ export default function FoodCostInputClient() {
     </div>
   );
 }
-

@@ -1,7 +1,7 @@
 
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { DailyFinancialSummary } from "@/types"; 
@@ -24,21 +24,45 @@ export async function saveDailyFinancialSummaryAction(
 
     const dataToSave: Partial<DailyFinancialSummary> = {
       ...summaryData, // Spread incoming data
-      date: Timestamp.fromDate(summaryData.date), // Ensure date is always a Timestamp
-      updatedAt: serverTimestamp() as Timestamp,
+      // Ensure date is always a Timestamp, saved as UTC start of day for consistent querying
+      date: Timestamp.fromDate(new Date(Date.UTC(summaryData.date.getFullYear(), summaryData.date.getMonth(), summaryData.date.getDate()))),
+      updatedAt: serverTimestamp() as Timestamp, // Always update updatedAt timestamp
     };
 
-    // Initialize calculated fields to null or 0 if not provided,
-    // these will be updated by other processes or when data is available.
-    dataToSave.actual_food_cost = summaryData.actual_food_cost ?? existingDocSnap.data()?.actual_food_cost ?? null;
-    dataToSave.actual_food_cost_pct = summaryData.actual_food_cost_pct ?? existingDocSnap.data()?.actual_food_cost_pct ?? null;
-    dataToSave.food_variance_pct = summaryData.food_variance_pct ?? existingDocSnap.data()?.food_variance_pct ?? null;
+    // Fetch total_food_cost for the corresponding date from foodCostEntries
+    let totalFoodCost = null;
+    const foodCostCollectionRef = collection(db, "foodCostEntries");
+    const foodCostQuery = query(foodCostCollectionRef, where("date", "==", Timestamp.fromDate(summaryData.date)));
+    const foodCostSnapshot = await getDocs(foodCostQuery);
+
+    if (!foodCostSnapshot.empty) {
+      // Assuming there's only one food cost entry per day
+      const foodCostData = foodCostSnapshot.docs[0].data();
+      totalFoodCost = foodCostData.total_food_cost;
+    }
+
+    let actualFoodCostPct = null;
+    let foodVariancePct = null;
+
+    if (totalFoodCost !== null && summaryData.food_revenue !== undefined && summaryData.food_revenue !== null && summaryData.food_revenue > 0) {
+      actualFoodCostPct = (totalFoodCost / summaryData.food_revenue) * 100;
+
+      if (summaryData.budget_food_cost_pct !== undefined && summaryData.budget_food_cost_pct !== null && summaryData.budget_food_cost_pct > 0) {
+        foodVariancePct = actualFoodCostPct - summaryData.budget_food_cost_pct;
+      }
+    }
+
+    // Use the fetched and calculated values, falling back to incoming data or existing data if not available
+    dataToSave.actual_food_cost = totalFoodCost ?? summaryData.actual_food_cost ?? existingDocSnap.data()?.actual_food_cost ?? null;
+    dataToSave.actual_food_cost_pct = actualFoodCostPct ?? summaryData.actual_food_cost_pct ?? existingDocSnap.data()?.actual_food_cost_pct ?? null;
+    dataToSave.food_variance_pct = foodVariancePct ?? summaryData.food_variance_pct ?? existingDocSnap.data()?.food_variance_pct ?? null;
+
+    // Also handle beverage cost fields if they are part of the summary data or existing data
     dataToSave.actual_beverage_cost = summaryData.actual_beverage_cost ?? existingDocSnap.data()?.actual_beverage_cost ?? null;
     dataToSave.actual_beverage_cost_pct = summaryData.actual_beverage_cost_pct ?? existingDocSnap.data()?.actual_beverage_cost_pct ?? null;
     dataToSave.beverage_variance_pct = summaryData.beverage_variance_pct ?? existingDocSnap.data()?.beverage_variance_pct ?? null;
-
-
-    if (existingDocSnap.exists()) {
+    
+ if (existingDocSnap.exists()) {
       // Update existing document, merge with existing data.
       await setDoc(entryDocRef, dataToSave, { merge: true });
     } else {
