@@ -4,8 +4,10 @@
 import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
-import type { FoodCostEntry, FoodCostDetail, Category, Outlet } from "@/types";
-import { format } from "date-fns";
+import type { FoodCostEntry, FoodCostDetail, Category, Outlet, DailyFinancialSummary } from "@/types";
+import { format as formatDateFn } from "date-fns";
+import { getDailyFinancialSummaryAction, saveDailyFinancialSummaryAction } from "./dailyFinancialSummaryActions";
+
 
 const FOOD_COST_ENTRIES_COLLECTION = "foodCostEntries";
 const FOOD_COST_DETAILS_COLLECTION = "foodCostDetails";
@@ -18,6 +20,47 @@ interface FoodCostItemInput {
   description?: string;
 }
 
+async function updateAssociatedFinancialSummary(entryDate: Date, totalFoodCost: number) {
+  const financialSummaryId = formatDateFn(entryDate, "yyyy-MM-dd");
+  try {
+    const summary = await getDailyFinancialSummaryAction(financialSummaryId);
+
+    if (summary) {
+      let actual_food_cost_pct: number | null = null;
+      let food_variance_pct: number | null = null;
+
+      if (summary.food_revenue != null && summary.food_revenue > 0) {
+        actual_food_cost_pct = (totalFoodCost / summary.food_revenue) * 100;
+      } else if (summary.food_revenue === 0 && totalFoodCost > 0) {
+        actual_food_cost_pct = null; // Or a very high number / specific sentinel if preferred for "infinite" cost %
+      } else {
+        actual_food_cost_pct = 0; // Both revenue and cost are 0 or revenue is null/undefined
+      }
+      
+
+      if (actual_food_cost_pct !== null && summary.budget_food_cost_pct != null) {
+        food_variance_pct = actual_food_cost_pct - summary.budget_food_cost_pct;
+      }
+
+      const updatePayload: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date } = {
+        date: summary.date instanceof Timestamp ? summary.date.toDate() : new Date(summary.date), // ensure it's a JS Date
+        actual_food_cost: totalFoodCost,
+        actual_food_cost_pct: actual_food_cost_pct,
+        food_variance_pct: food_variance_pct,
+        // Preserve other fields by not including them, saveDailyFinancialSummaryAction merges
+      };
+      await saveDailyFinancialSummaryAction(updatePayload);
+      console.log(`Updated financial summary ${financialSummaryId} with food cost data.`);
+    } else {
+      console.log(`No financial summary found for date ${financialSummaryId} to update with food cost data.`);
+    }
+  } catch (error) {
+    console.error(`Error updating financial summary ${financialSummaryId} with food cost:`, error);
+    // Decide if this error should propagate or just be logged
+  }
+}
+
+
 export async function saveFoodCostEntryAction(
   date: Date,
   outletId: string,
@@ -29,7 +72,9 @@ export async function saveFoodCostEntryAction(
   }
 
   const totalFoodCost = items.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-  const entryDate = Timestamp.fromDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
+  // Ensure date is UTC to match Firestore potentially storing it as such if coming from serverTimestamp or specific client setups
+  const entryDateTimestamp = Timestamp.fromDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
+
 
   try {
     let foodCostEntryId = existingEntryId;
@@ -45,14 +90,14 @@ export async function saveFoodCostEntryAction(
 
         // Delete old details for this entry
         const detailsQuery = query(collection(db, FOOD_COST_DETAILS_COLLECTION), where("food_cost_entry_id", "==", existingEntryId));
-        const oldDetailsSnapshot = await getDocs(detailsQuery); // Use getDocs directly in transaction for reads
+        const oldDetailsSnapshot = await getDocs(detailsQuery); 
         oldDetailsSnapshot.forEach(detailDoc => transaction.delete(detailDoc.ref));
 
       } else {
         // Create new entry
         const newEntryRef = doc(collection(db, FOOD_COST_ENTRIES_COLLECTION));
         transaction.set(newEntryRef, {
-          date: entryDate,
+          date: entryDateTimestamp,
           outlet_id: outletId,
           total_food_cost: totalFoodCost,
           createdAt: serverTimestamp(),
@@ -62,7 +107,7 @@ export async function saveFoodCostEntryAction(
       }
 
       if (!foodCostEntryId) {
-        throw new Error("Failed to obtain foodCostEntryId.");
+        throw new Error("Failed to obtain foodCostEntryId during transaction.");
       }
 
       // Add new details
@@ -83,9 +128,13 @@ export async function saveFoodCostEntryAction(
         throw new Error("Transaction completed but foodCostEntryId is still not set.");
     }
 
+    // After successful transaction, update the associated DailyFinancialSummary
+    // Use the original 'date' (JS Date object) for calculations and fetching summary
+    await updateAssociatedFinancialSummary(date, totalFoodCost);
+
 
     revalidatePath("/dashboard/food-cost-input");
-    revalidatePath("/dashboard/financial-summary"); // For potential recalculations
+    revalidatePath("/dashboard/financial-summary"); 
     revalidatePath("/dashboard");
 
     return { foodCostEntryId };
@@ -152,19 +201,34 @@ export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promis
   if (!foodCostEntryId) {
     throw new Error("Food Cost Entry ID is required for deletion.");
   }
-  try {
-    const batch = writeBatch(db);
+  let entryDate: Date | null = null;
+  let totalFoodCostZero = 0; // For resetting associated summary
 
-    // Delete the main entry
+  try {
+    // Get the entry to find its date before deleting
     const entryRef = doc(db, FOOD_COST_ENTRIES_COLLECTION, foodCostEntryId);
+    const entrySnap = await getDoc(entryRef);
+    if (entrySnap.exists()) {
+        const entryData = entrySnap.data();
+        if (entryData && entryData.date instanceof Timestamp) {
+            entryDate = entryData.date.toDate();
+        }
+    }
+
+    const batch = writeBatch(db);
     batch.delete(entryRef);
 
-    // Delete associated details
     const detailsQuery = query(collection(db, FOOD_COST_DETAILS_COLLECTION), where("food_cost_entry_id", "==", foodCostEntryId));
     const detailsSnapshot = await getDocs(detailsQuery);
     detailsSnapshot.forEach(detailDoc => batch.delete(detailDoc.ref));
 
     await batch.commit();
+
+    // After successful deletion, update the associated DailyFinancialSummary with zero/null food costs
+    if (entryDate) {
+        await updateAssociatedFinancialSummary(entryDate, totalFoodCostZero);
+    }
+
 
     revalidatePath("/dashboard/food-cost-input");
     revalidatePath("/dashboard/financial-summary");
@@ -200,6 +264,7 @@ export async function getOutletsAction(): Promise<Outlet[]> {
             throw new Error("Database connection is not available. Could not load outlets.");
         }
         const outletsCollectionRef = collection(db, "outlets");
+        // Fetch without orderBy to avoid index issues, sort client-side
         const snapshot = await getDocs(outletsCollectionRef);
         
         const outletsData = snapshot.docs.map(docSnap => {
@@ -222,6 +287,7 @@ export async function getOutletsAction(): Promise<Outlet[]> {
             } as Outlet;
         });
 
+        // Sort client-side
         return outletsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
 
     } catch (error: any) {

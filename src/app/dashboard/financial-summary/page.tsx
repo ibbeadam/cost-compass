@@ -17,14 +17,18 @@ function ListSkeleton() {
       <div className="rounded-lg border overflow-hidden shadow-md bg-card">
         <Skeleton className="h-12 w-full bg-muted/50" /> {/* Header */}
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="flex items-center p-4 border-b">
-            <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> {/* Date */}
-            <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> {/* Food Revenue */}
-            <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> {/* Budget Food % */}
-            <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> {/* Bev Revenue */}
-            <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> {/* Budget Bev % */}
-            <Skeleton className="h-8 w-8 bg-muted mr-2" /> {/* Edit */}
-            <Skeleton className="h-8 w-8 bg-muted" /> {/* Delete */}
+          <div key={i} className="grid grid-cols-8 items-center p-4 border-b gap-2">
+            <Skeleton className="h-6 bg-muted" /> {/* Date */}
+            <Skeleton className="h-6 bg-muted" /> {/* Food Revenue */}
+            <Skeleton className="h-6 bg-muted" /> {/* Budget Food % */}
+            <Skeleton className="h-6 bg-muted" /> {/* Actual Food Cost */}
+            <Skeleton className="h-6 bg-muted" /> {/* Actual Food % */}
+            <Skeleton className="h-6 bg-muted" /> {/* Food Variance % */}
+            <Skeleton className="h-6 bg-muted" /> {/* Bev Revenue */}
+            <div className="flex justify-end gap-1">
+                <Skeleton className="h-8 w-8 bg-muted" /> {/* Edit */}
+                <Skeleton className="h-8 w-8 bg-muted" /> {/* Delete */}
+            </div>
           </div>
         ))}
       </div>

@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { collection, onSnapshot, orderBy, Timestamp, query as firestoreQuery } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import { format } from "date-fns";
 
 import { db } from "@/lib/firebase";
@@ -39,6 +39,8 @@ import DailyFinancialSummaryForm from "./DailyFinancialSummaryForm";
 import { useToast } from "@/hooks/use-toast";
 import { deleteDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialSummary => {
   return {
@@ -108,6 +110,23 @@ export default function DailyFinancialSummaryListClient() {
   const onFormSuccess = () => setIsFormOpen(false);
   const onFormCancel = () => setIsFormOpen(false);
 
+  const renderPercentage = (value: number | null | undefined) => {
+    if (value == null) return <span className="text-muted-foreground">-</span>;
+    return `${value.toFixed(2)}%`;
+  };
+
+  const renderCurrency = (value: number | null | undefined) => {
+    if (value == null) return <span className="text-muted-foreground">-</span>;
+    return `$${value.toFixed(2)}`;
+  }
+
+  const getVarianceColor = (variance: number | null | undefined) => {
+    if (variance == null) return "";
+    if (variance > 1) return "text-destructive"; // Significantly over budget
+    if (variance < -1) return "text-green-600"; // Significantly under budget (good)
+    return ""; // Within acceptable range
+  }
+
   if (isLoading) {
     return (
       <div>
@@ -117,11 +136,17 @@ export default function DailyFinancialSummaryListClient() {
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Skeleton className="h-12 w-full bg-muted/50" />
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center p-4 border-b">
-              <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> <Skeleton className="h-6 w-1/5 bg-muted mr-2" />
-              <Skeleton className="h-6 w-1/5 bg-muted mr-2" /> <Skeleton className="h-6 w-1/5 bg-muted mr-2" />
-              <Skeleton className="h-6 w-1/5 bg-muted mr-2" />
-              <Skeleton className="h-8 w-8 bg-muted mr-2" /> <Skeleton className="h-8 w-8 bg-muted" />
+            <div key={i} className="grid grid-cols-8 items-center p-4 border-b">
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Date */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Food Revenue */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Budget Food % */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Actual Food Cost */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Actual Food % */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Food Variance % */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Bev Revenue (Placeholder) */}
+              <div className="col-span-1 flex justify-end gap-1">
+                 <Skeleton className="h-8 w-8 bg-muted" /> <Skeleton className="h-8 w-8 bg-muted" />
+              </div>
             </div>
           ))}
         </div>
@@ -151,8 +176,11 @@ export default function DailyFinancialSummaryListClient() {
                 <TableHead className="font-headline">Date</TableHead>
                 <TableHead className="font-headline text-right">Food Revenue</TableHead>
                 <TableHead className="font-headline text-right">Budget Food %</TableHead>
+                <TableHead className="font-headline text-right">Actual Food Cost</TableHead>
+                <TableHead className="font-headline text-right">Actual Food %</TableHead>
+                <TableHead className="font-headline text-right">Food Variance %</TableHead>
                 <TableHead className="font-headline text-right">Bev Revenue</TableHead>
-                <TableHead className="font-headline text-right">Budget Bev %</TableHead>
+                {/* Add Bev calculated columns when ready */}
                 <TableHead className="font-headline w-[120px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -162,10 +190,20 @@ export default function DailyFinancialSummaryListClient() {
                   <TableCell className="font-code">
                     {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}
                   </TableCell>
-                  <TableCell className="text-right font-code">${summary.food_revenue?.toFixed(2) ?? '0.00'}</TableCell>
-                  <TableCell className="text-right font-code">{summary.budget_food_cost_pct?.toFixed(2) ?? '0.00'}%</TableCell>
-                  <TableCell className="text-right font-code">${summary.beverage_revenue?.toFixed(2) ?? '0.00'}</TableCell>
-                  <TableCell className="text-right font-code">{summary.budget_beverage_cost_pct?.toFixed(2) ?? '0.00'}%</TableCell>
+                  <TableCell className="text-right font-code">{renderCurrency(summary.food_revenue)}</TableCell>
+                  <TableCell className="text-right font-code">{renderPercentage(summary.budget_food_cost_pct)}</TableCell>
+                  <TableCell className="text-right font-code">{renderCurrency(summary.actual_food_cost)}</TableCell>
+                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))}>
+                    {renderPercentage(summary.actual_food_cost_pct)}
+                  </TableCell>
+                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))}>
+                    {summary.food_variance_pct != null && summary.food_variance_pct > 0 ? 
+                        <TrendingUp className="inline h-4 w-4 mr-1" /> : 
+                        (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? 
+                            <TrendingDown className="inline h-4 w-4 mr-1" /> : null)}
+                    {renderPercentage(summary.food_variance_pct)}
+                  </TableCell>
+                  <TableCell className="text-right font-code">{renderCurrency(summary.beverage_revenue)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-2 hover:text-primary">
                       <Edit className="h-4 w-4" /><span className="sr-only">Edit</span>
@@ -203,6 +241,7 @@ export default function DailyFinancialSummaryListClient() {
             <DialogTitle className="font-headline text-xl">{editingSummary ? "Edit" : "Add New"} Daily Financial Summary</DialogTitle>
             <DialogDescription>
               {editingSummary ? `Update summary for ${editingSummary.date instanceof Date ? format(editingSummary.date, "PPP") : editingSummary.id}.` : "Enter details for a new daily summary."}
+              {" Calculated fields (actual costs, variances) are updated when Food/Beverage Cost Entries are saved."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-grow overflow-y-auto pr-2 pl-1 py-2">

@@ -1,5 +1,4 @@
 
-
 import type { Timestamp } from "firebase/firestore";
 
 export interface Outlet {
@@ -163,13 +162,13 @@ export interface DailyFinancialSummary {
   other_beverage_adjustment?: number; // Other beverage related adjustments
 
   // Calculated fields (will be populated later or calculated on the fly)
-  actual_food_cost?: number; // To be sourced from FoodCostEntries
-  actual_food_cost_pct?: number;
-  food_variance_pct?: number; // (actual_food_cost_pct - budget_food_cost_pct)
+  actual_food_cost?: number | null; 
+  actual_food_cost_pct?: number | null;
+  food_variance_pct?: number | null; 
   
-  actual_beverage_cost?: number; // To be sourced from BeverageCostEntries
-  actual_beverage_cost_pct?: number;
-  beverage_variance_pct?: number; // (actual_beverage_cost_pct - budget_beverage_cost_pct)
+  actual_beverage_cost?: number | null; 
+  actual_beverage_cost_pct?: number | null;
+  beverage_variance_pct?: number | null; 
   
   notes?: string;
   createdAt?: Timestamp | Date;

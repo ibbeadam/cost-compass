@@ -45,6 +45,7 @@ export default function FoodCostInputClient() {
         setFoodCategories(fetchedCategories);
       } catch (error) {
         toast({ variant: "destructive", title: "Error fetching initial data", description: (error as Error).message });
+        throw error; // Re-throw to allow further error handling if needed
       } finally {
         setIsLoadingOutlets(false);
         setIsLoadingCategories(false);
@@ -90,6 +91,7 @@ export default function FoodCostInputClient() {
     } catch (error) {
       toast({ variant: "destructive", title: "Error fetching cost entry", description: (error as Error).message });
       setCurrentEntry(null);
+      console.log("Error fetching cost entry:", error);
       // selectedDate is guaranteed to be a valid Date here due to the checks above.
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-error`);
     } finally {
