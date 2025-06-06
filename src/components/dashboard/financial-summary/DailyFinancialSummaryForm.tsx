@@ -134,9 +134,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                 <FormField control={form.control} name="ent_food" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Entertainment Food</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="e.g., 150" {...field} step="0.01" />
-                    </FormControl>
+                    <FormControl><Input type="number" placeholder="e.g., 150" {...field} step="0.01" /></FormControl>
                     <FormDescription className="text-xs">Cost of food for entertainment.</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -144,14 +142,19 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                 <FormField control={form.control} name="oc_food" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Officer's Check / Comp Food</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="e.g., 80" {...field} step="0.01" />
-                    </FormControl>
+                    <FormControl><Input type="number" placeholder="e.g., 80" {...field} step="0.01" /></FormControl>
                     <FormDescription className="text-xs">Cost of complimentary food.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={form.control} name="other_food_adjustment" render={({ field }) => (<FormItem><FormLabel>Other Food Adjustments</FormLabel><FormControl><Input type="number" placeholder="e.g., -25 or 50" {...field} step="0.01" /></FormControl><FormDescription className="text-xs">E.g., spoilage, staff meals. Negative for credit.</FormDescription><FormMessage /></FormItem>)} />
+                <FormField control={form.control} name="other_food_adjustment" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Other Food Adjustments</FormLabel>
+                    <FormControl><span><Input type="number" placeholder="e.g., -25 or 50" {...field} step="0.01" /></span></FormControl>
+                    <FormDescription className="text-xs">E.g., spoilage, staff meals. Negative for credit.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
               </div>
 
               <div className="space-y-4 p-4 border rounded-md shadow-sm bg-card">
