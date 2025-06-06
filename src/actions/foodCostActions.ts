@@ -195,27 +195,32 @@ export async function getFoodCategoriesAction(): Promise<Category[]> {
 // Helper to get all outlets for populating dropdowns
 export async function getOutletsAction(): Promise<Outlet[]> {
     try {
-        const q = query(collection(db, "outlets"), orderBy("name", "asc"));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(docSnap => {
+        // Fetch without Firestore orderBy
+        const snapshot = await getDocs(collection(db, "outlets"));
+        
+        const outletsData = snapshot.docs.map(docSnap => {
             const data = docSnap.data();
             return {
                 id: docSnap.id,
-                name: data.name,
+                name: data.name, // Ensure name field exists for sorting
                 createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
                 updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-                isActive: data.isActive ?? true, // Default to true if undefined
+                isActive: data.isActive ?? true, 
                 address: data.address ?? '',
                 phoneNumber: data.phoneNumber ?? '',
                 email: data.email ?? '',
-                type: data.type ?? 'Restaurant', // Default type
-                currency: data.currency ?? 'USD', // Default currency
-                timezone: data.timezone ?? 'UTC', // Default timezone
+                type: data.type ?? 'Restaurant', 
+                currency: data.currency ?? 'USD', 
+                timezone: data.timezone ?? 'UTC', 
                 defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct ?? 0,
                 defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct ?? 0,
                 targetOccupancy: data.targetOccupancy ?? 0,
             } as Outlet;
         });
+
+        // Sort by name in JavaScript
+        return outletsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
     } catch (error) {
         console.error("Error fetching outlets:", error); // Log the detailed error
         let errorMessage = "Could not load outlets. Please check server logs for details.";
@@ -225,3 +230,4 @@ export async function getOutletsAction(): Promise<Outlet[]> {
         throw new Error(errorMessage);
     }
 }
+
