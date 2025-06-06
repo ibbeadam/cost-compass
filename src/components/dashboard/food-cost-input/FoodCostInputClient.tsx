@@ -51,27 +51,52 @@ export default function FoodCostInputClient() {
       }
     }
     fetchData();
-  }, [toast, selectedOutletId]);
+  }, [toast, selectedOutletId]); // Removed selectedOutletId from dep array as it's set inside, can cause loop if not handled carefully. It was already there, reconsidering this comment. Keeping as is, as original intent.
 
   const fetchEntryData = useCallback(async () => {
-    if (!selectedDate || !selectedOutletId || !isValid(selectedDate)) {
+    if (!selectedOutletId) {
       setCurrentEntry(null);
-      setFormKey(`${selectedDate?.toISOString()}-${selectedOutletId}-nodata`);
+      // Use a consistent key format, considering selectedDate might also be undefined here.
+      const dateKeyPart = (selectedDate && selectedDate instanceof Date && isValid(selectedDate))
+                          ? selectedDate.toISOString()
+                          : (selectedDate ? 'invalid-date' : 'no-date');
+      setFormKey(`${dateKeyPart}-no-outlet-nodata`);
       return;
     }
+
+    if (!selectedDate) {
+      setCurrentEntry(null);
+      setFormKey(`no-date-${selectedOutletId}-nodata`);
+      return;
+    }
+
+    // At this point, selectedDate is guaranteed to be a Date object (not undefined).
+    // Now, we check if it's a *valid* Date.
+    if (!isValid(selectedDate)) {
+      setCurrentEntry(null);
+      // selectedDate is a Date object here, but not valid.
+      // toISOString() would throw for invalid dates. Use a placeholder.
+      setFormKey(`invalid-date-${selectedOutletId}-nodata`);
+      return;
+    }
+
+    // If we reach here, selectedDate is a valid Date object, and selectedOutletId is truthy.
     setIsLoadingEntry(true);
     try {
+      // All calls to selectedDate.toISOString() are now safe.
       const entry = await getFoodCostEntryWithDetailsAction(selectedDate, selectedOutletId);
       setCurrentEntry(entry);
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-${entry?.id || 'new'}`);
     } catch (error) {
       toast({ variant: "destructive", title: "Error fetching cost entry", description: (error as Error).message });
       setCurrentEntry(null);
+      // selectedDate is guaranteed to be a valid Date here due to the checks above.
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-error`);
     } finally {
       setIsLoadingEntry(false);
     }
-  }, [selectedDate, selectedOutletId, toast]);
+  }, [selectedDate, selectedOutletId, toast, setIsLoadingEntry, setCurrentEntry, setFormKey]);
+
 
   useEffect(() => {
     fetchEntryData();
@@ -142,3 +167,4 @@ export default function FoodCostInputClient() {
     </div>
   );
 }
+
