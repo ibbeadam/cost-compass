@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { collection, onSnapshot, orderBy, query as firestoreQuery } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import { collection, onSnapshot, orderBy, query as firestoreQuery, Timestamp } from "firebase/firestore";
+import { PlusCircle, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { format, isValid } from "date-fns";
 
 import { db } from "@/lib/firebase";
@@ -20,110 +20,174 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { deleteFoodCostEntryAction } from "@/actions/foodCostActions";
-
-// Import necessary types for FoodCostInputForm props (replace with actual imports)
+import { deleteFoodCostEntryAction, getFoodCostEntryWithDetailsAction, getOutletsAction, getFoodCategoriesAction } from "@/actions/foodCostActions";
 import type { Outlet, Category, FoodCostEntry, FoodCostDetail } from "@/types";
-import { getOutletsAction, getFoodCategoriesAction } from "@/actions/foodCostActions";
 
 export default function FoodCostEntryListClient() {
   const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [isClient, setIsClient] = useState(false); // State to track if component is mounted on client
-  const [foodCostEntries, setFoodCostEntries] = useState<(FoodCostEntry & { details: FoodCostDetail[] })[]>([]);
+  const [isClient, setIsClient] = useState(false);
+
+  const [foodCostEntries, setFoodCostEntries] = useState<FoodCostEntry[]>([]); // List items are FoodCostEntry
   const [outlets, setOutlets] = useState<Outlet[]>([]);
-  const [foodCategories, setFoodCategories] = useState<Category[]>([]); // Added missing state
+  const [foodCategories, setFoodCategories] = useState<Category[]>([]);
+  
   const [isLoadingEntries, setIsLoadingEntries] = useState(true);
   const [isLoadingOutlets, setIsLoadingOutlets] = useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [isLoadingDetailsForEdit, setIsLoadingDetailsForEdit] = useState(false);
+
+  // This state is for the entry being actively edited in the form (includes details)
   const [editingEntry, setEditingEntry] = useState<(FoodCostEntry & { details: FoodCostDetail[] }) | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(undefined);
-  const [error, setError] = useState<Error | null>(null); // State for error boundary
+  
+  // These states are for NEW entries, before an existing one is chosen for edit
+  const [dateForNewEntry, setDateForNewEntry] = useState<Date>(new Date());
+  const [outletIdForNewEntry, setOutletIdForNewEntry] = useState<string | undefined>(undefined);
+
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    setIsClient(true); // Set isClient to true after component mounts on client
+    setIsClient(true);
   }, []);
 
-  // Effect to fetch food cost entries
   useEffect(() => {
+    if (!isClient) return;
     setIsLoadingEntries(true);
     const q = firestoreQuery(collection(db, "foodCostEntries"), orderBy("date", "desc"));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEntries = snapshot.docs.map(doc => {
-        const data = doc.data() as Omit<FoodCostEntry, 'id'> & { details: FoodCostDetail[] };
-        return { id: doc.id, ...data };
+        const data = doc.data();
+        
+        const convertTimestampToDate = (fieldValue: any): Date | undefined => {
+          if (fieldValue instanceof Timestamp) {
+            return fieldValue.toDate();
+          }
+          // Handle cases where fieldValue might be a string or number that needs parsing
+          if (fieldValue && isValid(new Date(fieldValue))) {
+            return new Date(fieldValue);
+          }
+          return undefined;
+        };
+
+        const entryDate = convertTimestampToDate(data.date);
+        if (!entryDate) {
+            console.warn(`Invalid date for foodCostEntry ${doc.id}:`, data.date);
+        }
+
+        return {
+          id: doc.id,
+          date: entryDate || new Date(), // Fallback, ideally log/handle error
+          outlet_id: data.outlet_id,
+          total_food_cost: data.total_food_cost,
+          createdAt: convertTimestampToDate(data.createdAt),
+          updatedAt: convertTimestampToDate(data.updatedAt),
+        } as FoodCostEntry;
       });
-      setFoodCostEntries(fetchedEntries);
+      setFoodCostEntries(fetchedEntries.filter(e => e.date && isValid(e.date)));
       setIsLoadingEntries(false);
       
-    }, (error) => {
-      console.error("Error fetching food cost entries:", error);
+    }, (err) => {
+      console.error("Error fetching food cost entries:", err);
       toast({
         variant: "destructive",
         title: "Error Fetching Entries",
         description: "Could not load food cost entries.",
       });
       setIsLoadingEntries(false);
-      setError(error as Error); // Capture error for boundary
+      setError(err as Error);
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [isClient, toast]);
 
-  // Effect to fetch outlets and food categories
   const fetchOutletsAndCategories = useCallback(async () => {
     try {
       setIsLoadingOutlets(true);
       setIsLoadingCategories(true);
-      const outletsData = await getOutletsAction();
-      const categoriesData = await getFoodCategoriesAction();
+      const [outletsData, categoriesData] = await Promise.all([
+        getOutletsAction(),
+        getFoodCategoriesAction()
+      ]);
       setOutlets(outletsData);
+      if (outletsData.length > 0 && !outletIdForNewEntry) {
+        setOutletIdForNewEntry(outletsData[0].id);
+      }
       setFoodCategories(categoriesData);    
-      setIsLoadingOutlets(false);
-      setIsLoadingCategories(false);
-    } catch (error) {
-      console.error("Error fetching outlets or categories:", error);
+    } catch (err) {
+      console.error("Error fetching outlets or categories:", err);
       toast({
         variant: "destructive",
         title: "Error Loading Form Data",
         description: "Could not load required data for the form.",
       });
-      setError(error as Error); // Capture error for boundary
+      setError(err as Error);
+    } finally {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
-
-    } 
-  }, [toast, setOutlets, setFoodCategories, setIsLoadingOutlets, setIsLoadingCategories, setError]);
+    }
+  }, [toast, outletIdForNewEntry]); // Added outletIdForNewEntry
 
   useEffect(() => {
     if (isClient) {
- fetchOutletsAndCategories();
+      fetchOutletsAndCategories();
     }
-  }, [fetchOutletsAndCategories, isClient]);
+  }, [isClient, fetchOutletsAndCategories]);
 
   const handleAddNew = () => {
-    setEditingEntry(null);
-    setSelectedDate(new Date());
-    setSelectedOutletId(outlets.length > 0 ? outlets[0]?.id : undefined);
-
+    setEditingEntry(null); // Clear any existing edit data
+    setDateForNewEntry(new Date()); // Reset date for new entry
+    if (outlets.length > 0 && !outletIdForNewEntry) { // Set default outlet if not set
+        setOutletIdForNewEntry(outlets[0].id);
+    } else if (outlets.length > 0 && outletIdForNewEntry) {
+        // keep current outletIdForNewEntry if already selected
+    } else {
+        setOutletIdForNewEntry(undefined); // No outlets
+    }
     setIsFormOpen(true);
   };
 
+  const handleEdit = async (listEntry: FoodCostEntry) => {
+    setIsLoadingDetailsForEdit(true);
+    try {
+      // listEntry.date is already a JS Date from the snapshot mapping
+      const fullEntryWithDetails = await getFoodCostEntryWithDetailsAction(listEntry.date, listEntry.outlet_id);
+      if (fullEntryWithDetails) {
+        setEditingEntry(fullEntryWithDetails);
+        setIsFormOpen(true);
+      } else {
+        toast({
+          title: "Entry Not Found",
+          description: "Could not load the details for the selected entry.",
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "Error Loading Details",
+        description: (err as Error).message || "Failed to load entry details for editing.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingDetailsForEdit(false);
+    }
+  };
+  
   const onFormSuccess = () => {
     setIsFormOpen(false);
-    // Potentially refresh list data here later
- };
+    setEditingEntry(null); // Clear editing state
+    // The onSnapshot listener should update the list automatically
+  };
   
   const handleDelete = async (entryId: string) => {
     try {
       await deleteFoodCostEntryAction(entryId);
       toast({ title: "Entry Deleted", description: "The food cost entry has been deleted." });
-    } catch (error) {
-      console.error("Error deleting food cost entry:", error);
+    } catch (err) {
+      console.error("Error deleting food cost entry:", err);
       toast({
         variant: "destructive",
-        title: "Error Deleting Entry", description: (error as Error).message || "Could not delete entry."
+        title: "Error Deleting Entry", description: (err as Error).message || "Could not delete entry."
       });
     }
   };
@@ -131,34 +195,40 @@ export default function FoodCostEntryListClient() {
   if (error) {
     return (
       <div className="text-center py-10 text-destructive-foreground bg-destructive/20 rounded-lg border border-destructive">
+        <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
         <h3 className="mt-2 text-lg font-semibold">Error</h3>
-        <p className="mt-1 text-sm text-destructive-foreground">An error occurred loading food cost entries: {error.message}</p>
+        <p className="mt-1 text-sm text-destructive-foreground">An error occurred: {error.message}</p>
       </div>
     );
   }
 
   if (!isClient) {
-    return null; // Render nothing on the server until hydration
+    return null; 
   }
+
+  const isLoading = isLoadingEntries || isLoadingOutlets || isLoadingCategories || isLoadingDetailsForEdit;
 
   return (
     <>
-
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold font-headline">Food Cost Entries</h2>
-        <Button onClick={handleAddNew}>
+        <Button onClick={handleAddNew} disabled={isLoadingOutlets || isLoadingCategories}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
         </Button>
       </div>
 
-      {(isLoadingEntries || isLoadingOutlets || isLoadingCategories) ? (
+      {isLoading ? (
         <div className="rounded-lg border overflow-hidden shadow-md bg-card p-4">
           <Skeleton className="h-8 w-3/4 mb-4 bg-muted/50" />
-          {[...Array(5)].map((_, i) => (
+          {[...Array(3)].map((_, i) => (
             <div key={i} className="flex justify-between items-center p-4 border-b">
               <Skeleton className="h-6 w-1/4 bg-muted" />
+              <Skeleton className="h-6 w-1/4 bg-muted" />
               <Skeleton className="h-6 w-1/6 bg-muted" />
-              <Skeleton className="h-8 w-16 bg-muted" />
+              <div className="flex gap-2">
+                <Skeleton className="h-8 w-8 bg-muted" />
+                <Skeleton className="h-8 w-8 bg-muted" />
+              </div>
             </div>
           ))}
         </div>
@@ -179,50 +249,61 @@ export default function FoodCostEntryListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {foodCostEntries && foodCostEntries.length > 0 ? (
-                foodCostEntries.map((entry) => (
+              {foodCostEntries.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell>{format(new Date(entry.date as any), "PPP")}</TableCell>
-                    <TableCell>{outlets.find(o => o.id === entry.outlet_id)?.name || 'Unknown Outlet'}</TableCell>
-                    <TableCell className="text-right">${(entry.total_food_cost || 0).toFixed(2)}</TableCell>
+                    <TableCell>{entry.date ? format(entry.date, "PPP") : "Invalid Date"}</TableCell>
+                    <TableCell>{outlets.find(o => o.id === entry.outlet_id)?.name || entry.outlet_id || 'Unknown Outlet'}</TableCell>
+                    <TableCell className="text-right font-code">${(entry.total_food_cost || 0).toFixed(2)}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditingEntry(entry); setIsFormOpen(true); }} className="mr-2"><Edit className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(entry)} className="mr-2 hover:text-primary">
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit Entry</span>
+                      </Button>
                        <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon"><Trash2 className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="hover:text-destructive">
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete Entry</span>
+                          </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
-                          <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center"><AlertTriangle className="h-5 w-5 text-destructive mr-2" />Are you sure?</AlertDialogTitle>
+                            <AlertDialogDescription>This action cannot be undone. This will permanently delete the food cost entry for {entry.date ? format(entry.date, "PPP") : "this date"} at {outlets.find(o => o.id === entry.outlet_id)?.name || 'this outlet'}.</AlertDialogDescription>
+                          </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(entry.id)}>Delete</AlertDialogAction>
+                            <AlertDialogAction onClick={() => handleDelete(entry.id)} className="bg-destructive hover:bg-destructive/80 text-destructive-foreground">Delete</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
                     </TableCell>
                   </TableRow>
-                ))
-              ) : (
-                 <TableRow><TableCell colSpan={4} className="text-center">No entries found.</TableCell></TableRow>
-              )}
+                ))}
             </TableBody>
           </Table>
         </div>
       )}
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col">
+      <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingEntry(null); }}>
+        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card">
           <DialogHeader>
-            <DialogTitle>{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
+            <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
-              {editingEntry ? `Update details for outlet: ${outlets.find(o => o.id === editingEntry.outlet_id)?.name || 'Unknown'} on ${format(new Date(editingEntry.date as any), "PPP")}` : "Enter the details for a new food cost entry."}
+              {editingEntry 
+                ? `Update details for outlet: ${outlets.find(o => o.id === editingEntry.outlet_id)?.name || 'Unknown'} on ${editingEntry.date ? format(editingEntry.date instanceof Timestamp ? editingEntry.date.toDate() : new Date(editingEntry.date), "PPP") : "selected date"}` 
+                : "Enter the details for a new food cost entry."}
             </DialogDescription>
           </DialogHeader>
-          {/* Render FoodCostInputForm only on client after hydration */}
-          {isClient && (
+          {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry ? (
+            <div className="flex justify-center items-center h-64">
+              <Skeleton className="w-1/2 h-10 bg-muted" />
+            </div>
+          ) : (
             <FoodCostInputForm
-                selectedDate={editingEntry ? new Date(editingEntry.date as any) : selectedDate || new Date()} 
-                selectedOutletId={editingEntry?.outlet_id || selectedOutletId || (outlets.length > 0 ? outlets[0].id : "")} 
+                // For editing, use date/outlet from editingEntry. For new, use component state.
+                selectedDate={editingEntry ? (editingEntry.date instanceof Timestamp ? editingEntry.date.toDate() : new Date(editingEntry.date)) : dateForNewEntry}
+                selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
                 foodCategories={foodCategories}
                 existingEntry={editingEntry} 
                 onSuccess={onFormSuccess}
@@ -230,7 +311,6 @@ export default function FoodCostEntryListClient() {
           )}
         </DialogContent>
       </Dialog>
-
     </>
  );
 }
