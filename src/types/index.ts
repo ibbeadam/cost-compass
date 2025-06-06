@@ -4,15 +4,15 @@ import type { Timestamp } from "firebase/firestore";
 export interface Outlet {
   id: string;
   name: string;
-  createdAt?: Timestamp | Date; // For Firestore serverTimestamp, or Date after fetching
+  createdAt?: Timestamp | Date; 
   updatedAt?: Timestamp | Date;
   isActive?: boolean;
   address?: string | { street?: string; city?: string; state?: string; zipCode?: string; country?: string };
   phoneNumber?: string;
   email?: string;
-  type?: string; // e.g., "Restaurant", "Cafe", "Main Kitchen"
-  currency?: string; // e.g., "USD"
-  timezone?: string; // e.g., "America/New_York"
+  type?: string; 
+  currency?: string; 
+  timezone?: string; 
   defaultBudgetFoodCostPct?: number;
   defaultBudgetBeverageCostPct?: number;
   targetOccupancy?: number;
@@ -26,8 +26,6 @@ export interface Item {
   cost_per_unit: number;
 }
 
-// This TransferItem type might be used for the drill-down,
-// but distinct from TransferInItem for daily hotel entries.
 export interface TransferItem {
   id: string;
   itemId: string;
@@ -38,10 +36,9 @@ export interface TransferItem {
   totalCost: number;
 }
 
-// The old DailyCostData, may be deprecated or repurposed later.
 export interface DailyCostData {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string; 
   outletId: string;
   outletName: string;
   foodRevenue: number;
@@ -55,12 +52,11 @@ export interface DailyCostData {
 }
 
 export interface HistoricalDataPoint {
-  date: string; // YYYY-MM-DD
+  date: string; 
   foodCostPct: number;
   beverageCostPct: number;
 }
 
-// For the AI flow input
 export interface CostFluctuationInput {
   outlet: string;
   date: string;
@@ -70,37 +66,35 @@ export interface CostFluctuationInput {
   historicalBeverageCostPercentages: number[];
 }
 
-// For the AI flow output
 export interface CostFluctuationOutput {
   isAnomalous: boolean;
   explanation: string;
 }
 
-// New Types for Hotel-Wide Daily Financial Entries
-
+// CostDetailCategory for the existing comprehensive DailyHotelEntry
 export interface TransferInItem {
-  id: string; // Unique ID for this line item (e.g., generated client-side or Firestore auto-ID)
-  toOutletId: string; // Refers to Outlet.id
-  toOutletName: string; // Denormalized for easier display
-  description: string; // e.g., "TRANSFER IN - MAIN KITCHEN FROM STORE & COMM KIT"
+  id: string; 
+  toOutletId: string; 
+  toOutletName: string; 
+  description: string; 
   amount: number;
-  category: 'Food' | 'Beverage'; // To distinguish if it's a food or beverage cost
+  category: 'Food' | 'Beverage'; 
 }
 
 export interface DirectPurchaseItem {
-  id: string; // Unique ID
-  purchaseCategory: string; // e.g., "Dairy", "Dry Goods", "Frozenfood", "Meat", "Fruits & Veg"
-  description?: string; // Optional more specific description
+  id: string; 
+  purchaseCategory: string; 
+  description?: string; 
   amount: number;
-  costCategory: 'Food' | 'Beverage'; // To assign this purchase to food or beverage cost
+  costCategory: 'Food' | 'Beverage'; 
 }
 
 export interface CostAdjustmentItem {
-  id:string; // Unique ID
-  description: string; // e.g., "BUTCHERY FREEZER VARIENCE", "Food Transfer to Canteen", "F&B Allowance"
-  amount: number; // Can be positive (cost) or negative (credit/reduction)
-  type: 'OtherCost' | 'TransferOut' | 'CreditAdjustment'; // To categorize the adjustment
-  costCategory: 'Food' | 'Beverage'; // To assign this adjustment to food or beverage cost
+  id:string; 
+  description: string; 
+  amount: number; 
+  type: 'OtherCost' | 'TransferOut' | 'CreditAdjustment'; 
+  costCategory: 'Food' | 'Beverage'; 
 }
 
 export interface CostDetailCategory {
@@ -111,44 +105,33 @@ export interface CostDetailCategory {
   creditAdjustments: CostAdjustmentItem[];
 }
 
+// Existing comprehensive DailyHotelEntry type (may be refactored/deprecated later)
 export interface DailyHotelEntry {
-  id: string; // Document ID, should be YYYY-MM-DD format
-  date: Timestamp | Date; // Firestore Timestamp for the specific day or JS Date for client
-  
-  // Overall hotel figures
-  hotelNetSales?: number; // Total hotel net sales for the day (as per your report: "NET SALES")
-  
-  // Food related summary fields
+  id: string; 
+  date: Timestamp | Date; 
+  hotelNetSales?: number; 
   hotelNetFoodSales?: number;
-  budgetHotelFoodCostPct?: number; // e.g., 30 for 30%
-  entFood?: number; // Entertainment Food
-  ocFood?: number; // Officer's Check Food / Other Complimentary Food
-  otherFoodCredit?: number; // Other food related credits/adjustments
-
-  // Beverage related summary fields
+  budgetHotelFoodCostPct?: number; 
+  entFood?: number; 
+  ocFood?: number; 
+  otherFoodCredit?: number; 
   hotelNetBeverageSales?: number;
-  budgetHotelBeverageCostPct?: number; // e.g., 25 for 25%
-  entBeverage?: number; // Entertainment Beverage
-  ocBeverage?: number; // Officer's Check Beverage / Other Complimentary Beverage
-  otherBeverageCredit?: number; // Other beverage related credits/adjustments
-
-  // Detailed cost breakdown (can be managed by more granular modules)
+  budgetHotelBeverageCostPct?: number; 
+  entBeverage?: number; 
+  ocBeverage?: number; 
+  otherBeverageCredit?: number; 
   foodCostDetails?: CostDetailCategory;
   beverageCostDetails?: CostDetailCategory;
-
-  // Optional fields
-  notes?: string; // Any specific notes for this day's entry
-  userId?: string; // ID of user who made/last updated the entry
+  notes?: string; 
+  userId?: string; 
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
-
-  // Calculated fields (can be stored after calculation or calculated on read)
   calculatedNetFoodCost?: number;
   calculatedActualFoodCostPct?: number;
-  calculatedFoodCostVariancePct?: number; // (Actual % - Budget %)
+  calculatedFoodCostVariancePct?: number; 
   calculatedNetBeverageCost?: number;
   calculatedActualBeverageCostPct?: number;
-  calculatedBeverageCostVariancePct?: number; // (Actual % - Budget %)
+  calculatedBeverageCostVariancePct?: number; 
 }
 
 export interface Category {
@@ -156,6 +139,76 @@ export interface Category {
   name: string;
   description?: string;
   type: 'Food' | 'Beverage';
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+// --- NEW TYPES BASED ON USER'S DETAILED SPECIFICATION ---
+
+export interface DailyFinancialSummary {
+  id: string; // Document ID, format YYYY-MM-DD
+  date: Timestamp | Date; // Firestore Timestamp or JS Date
+  
+  food_revenue?: number;
+  budget_food_cost_pct?: number; // e.g., 30 for 30%
+  ent_food?: number; // Entertainment Food cost
+  oc_food?: number; // Officer's Check Food / Complimentary Food cost
+  other_food_adjustment?: number; // Other food related adjustments (e.g., spoilage, staff meals if treated as cost)
+
+  beverage_revenue?: number;
+  budget_beverage_cost_pct?: number; // e.g., 25 for 25%
+  ent_beverage?: number; // Entertainment Beverage cost
+  oc_beverage?: number; // Officer's Check Beverage / Complimentary Beverage cost
+  other_beverage_adjustment?: number; // Other beverage related adjustments
+
+  // Calculated fields (will be populated later or calculated on the fly)
+  actual_food_cost?: number; // To be sourced from FoodCostEntries
+  actual_food_cost_pct?: number;
+  food_variance_pct?: number; // (actual_food_cost_pct - budget_food_cost_pct)
+  
+  actual_beverage_cost?: number; // To be sourced from BeverageCostEntries
+  actual_beverage_cost_pct?: number;
+  beverage_variance_pct?: number; // (actual_beverage_cost_pct - budget_beverage_cost_pct)
+  
+  notes?: string;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+export interface FoodCostEntry {
+  id?: string; // Firestore auto-ID
+  date: Timestamp | Date;
+  outlet_id: string; // FK to Outlets collection
+  total_food_cost: number;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+export interface FoodCostDetail {
+  id?: string; // Firestore auto-ID
+  food_cost_entry_id: string; // FK to FoodCostEntries collection (document ID)
+  category_id: string; // FK to Categories collection
+  cost: number; 
+  description?: string; // Optional: e.g. "Purchase from Sysco" or "Meat - Beef Tenderloin"
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+export interface BeverageCostEntry {
+  id?: string; // Firestore auto-ID
+  date: Timestamp | Date;
+  outlet_id: string; // FK to Outlets collection
+  total_beverage_cost: number;
+  createdAt?: Timestamp | Date;
+  updatedAt?: Timestamp | Date;
+}
+
+export interface BeverageCostDetail {
+  id?: string; // Firestore auto-ID
+  beverage_cost_entry_id: string; // FK to BeverageCostEntries collection (document ID)
+  category_id: string; // FK to Categories collection
+  cost: number;
+  description?: string;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }

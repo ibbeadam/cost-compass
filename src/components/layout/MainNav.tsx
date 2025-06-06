@@ -9,13 +9,14 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, Settings, FileText, Building, Apple, FileSpreadsheet, ListChecks } from 'lucide-react'; // Added Apple, FileSpreadsheet, ListChecks
+import { LayoutDashboard, Settings, FileText, Building, Apple, FileSpreadsheet, ListChecks, DollarSign } from 'lucide-react'; // Added DollarSign
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/hotel-daily-entry', label: 'Hotel Daily Entries', icon: FileSpreadsheet },
-  { href: '/dashboard/food-cost', label: 'Food Cost Entries', icon: Apple }, 
+  { href: '/dashboard/financial-summary', label: 'Daily Financial Summary', icon: DollarSign },
+  { href: '/dashboard/hotel-daily-entry', label: 'Hotel Daily Entries (Legacy)', icon: FileSpreadsheet },
+  { href: '/dashboard/food-cost', label: 'Food Cost Entries (Legacy)', icon: Apple }, 
   // { href: '/dashboard/daily-entry', label: 'Daily Entry', icon: FilePlus2 }, // Removed Daily Entry
   { href: '/dashboard/reports', label: 'Reports', icon: FileText },
   { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
@@ -23,7 +24,7 @@ const navItems = [
     href: '/dashboard/settings/categories', 
     label: 'Manage Categories', 
     icon: ListChecks,
-    parentPath: '/dashboard/settings' // To highlight "General Settings" as parent
+    parentPath: '/dashboard/settings' 
   },
   { href: '/dashboard/settings', label: 'General Settings', icon: Settings },
 ];
@@ -37,6 +38,10 @@ export function MainNav() {
     }
     if (href === '/dashboard') {
       return pathname === href;
+    }
+    // For parent paths, ensure it's not also matching a more specific child path unless it's the exact href
+    if (parentPath && pathname.startsWith(parentPath) && href !==pathname && navItems.some(i => i.parentPath === href && pathname.startsWith(i.href))) {
+        return false;
     }
     return pathname.startsWith(href);
   };
