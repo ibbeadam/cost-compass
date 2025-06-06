@@ -150,7 +150,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                 <FormField control={form.control} name="other_food_adjustment" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Other Food Adjustments</FormLabel>
-                    <FormControl><span><Input type="number" placeholder="e.g., -25 or 50" {...field} step="0.01" /></span></FormControl>
+                    <FormControl><Input type="number" placeholder="e.g., -25 or 50" {...field} step="0.01" /></FormControl>
                     <FormDescription className="text-xs">E.g., spoilage, staff meals. Negative for credit.</FormDescription>
                     <FormMessage />
                   </FormItem>
