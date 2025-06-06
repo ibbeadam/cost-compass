@@ -28,7 +28,7 @@ export default function FoodCostEntryListClient() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
-  const [foodCostEntries, setFoodCostEntries] = useState<FoodCostEntry[]>([]); // List items are FoodCostEntry
+  const [foodCostEntries, setFoodCostEntries] = useState<FoodCostEntry[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [foodCategories, setFoodCategories] = useState<Category[]>([]);
   
@@ -37,10 +37,8 @@ export default function FoodCostEntryListClient() {
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingDetailsForEdit, setIsLoadingDetailsForEdit] = useState(false);
 
-  // This state is for the entry being actively edited in the form (includes details)
   const [editingEntry, setEditingEntry] = useState<(FoodCostEntry & { details: FoodCostDetail[] }) | null>(null);
   
-  // These states are for NEW entries, before an existing one is chosen for edit
   const [dateForNewEntry, setDateForNewEntry] = useState<Date>(new Date());
   const [outletIdForNewEntry, setOutletIdForNewEntry] = useState<string | undefined>(undefined);
 
@@ -59,32 +57,31 @@ export default function FoodCostEntryListClient() {
       const fetchedEntries = snapshot.docs.map(doc => {
         const data = doc.data();
         
-        const convertTimestampToDate = (fieldValue: any): Date | undefined => {
+        const convertToDate = (fieldValue: any): Date | undefined => {
+          if (!fieldValue) return undefined;
           if (fieldValue instanceof Timestamp) {
             return fieldValue.toDate();
           }
-          // Handle cases where fieldValue might be a string or number that needs parsing
-          if (fieldValue && isValid(new Date(fieldValue))) {
-            return new Date(fieldValue);
-          }
-          return undefined;
+          // Attempt to parse if it's a string or number
+          const d = new Date(fieldValue);
+          return isValid(d) ? d : undefined;
         };
 
-        const entryDate = convertTimestampToDate(data.date);
+        const entryDate = convertToDate(data.date);
         if (!entryDate) {
-            console.warn(`Invalid date for foodCostEntry ${doc.id}:`, data.date);
+            console.warn(`Invalid or missing date for foodCostEntry ${doc.id}:`, data.date);
         }
 
         return {
           id: doc.id,
-          date: entryDate || new Date(), // Fallback, ideally log/handle error
+          date: entryDate || new Date(0), // Fallback to epoch if date is invalid to avoid crashes, will be shown as invalid
           outlet_id: data.outlet_id,
           total_food_cost: data.total_food_cost,
-          createdAt: convertTimestampToDate(data.createdAt),
-          updatedAt: convertTimestampToDate(data.updatedAt),
+          createdAt: convertToDate(data.createdAt),
+          updatedAt: convertToDate(data.updatedAt),
         } as FoodCostEntry;
       });
-      setFoodCostEntries(fetchedEntries.filter(e => e.date && isValid(e.date)));
+      setFoodCostEntries(fetchedEntries);
       setIsLoadingEntries(false);
       
     }, (err) => {
@@ -119,14 +116,14 @@ export default function FoodCostEntryListClient() {
       toast({
         variant: "destructive",
         title: "Error Loading Form Data",
-        description: "Could not load required data for the form.",
+        description: (err as Error).message || "Could not load required data for the form.",
       });
       setError(err as Error);
     } finally {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, outletIdForNewEntry]); // Added outletIdForNewEntry
+  }, [toast, outletIdForNewEntry, setOutlets, setFoodCategories, setIsLoadingOutlets, setIsLoadingCategories, setError]);
 
   useEffect(() => {
     if (isClient) {
@@ -135,9 +132,9 @@ export default function FoodCostEntryListClient() {
   }, [isClient, fetchOutletsAndCategories]);
 
   const handleAddNew = () => {
-    setEditingEntry(null); // Clear any existing edit data
-    setDateForNewEntry(new Date()); // Reset date for new entry
-    if (outlets.length > 0 && !outletIdForNewEntry) { // Set default outlet if not set
+    setEditingEntry(null); 
+    setDateForNewEntry(new Date()); 
+    if (outlets.length > 0 && !outletIdForNewEntry) { 
         setOutletIdForNewEntry(outlets[0].id);
     } else if (outlets.length > 0 && outletIdForNewEntry) {
         // keep current outletIdForNewEntry if already selected
@@ -148,9 +145,16 @@ export default function FoodCostEntryListClient() {
   };
 
   const handleEdit = async (listEntry: FoodCostEntry) => {
+    if (!(listEntry.date instanceof Date) || !isValid(listEntry.date)) {
+        toast({
+            title: "Invalid Date",
+            description: "Cannot edit entry with an invalid date.",
+            variant: "destructive",
+        });
+        return;
+    }
     setIsLoadingDetailsForEdit(true);
     try {
-      // listEntry.date is already a JS Date from the snapshot mapping
       const fullEntryWithDetails = await getFoodCostEntryWithDetailsAction(listEntry.date, listEntry.outlet_id);
       if (fullEntryWithDetails) {
         setEditingEntry(fullEntryWithDetails);
@@ -175,8 +179,7 @@ export default function FoodCostEntryListClient() {
   
   const onFormSuccess = () => {
     setIsFormOpen(false);
-    setEditingEntry(null); // Clear editing state
-    // The onSnapshot listener should update the list automatically
+    setEditingEntry(null); 
   };
   
   const handleDelete = async (entryId: string) => {
@@ -251,7 +254,7 @@ export default function FoodCostEntryListClient() {
             <TableBody>
               {foodCostEntries.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell>{entry.date ? format(entry.date, "PPP") : "Invalid Date"}</TableCell>
+                    <TableCell>{entry.date && isValid(entry.date) ? format(entry.date, "PPP") : "Invalid Date"}</TableCell>
                     <TableCell>{outlets.find(o => o.id === entry.outlet_id)?.name || entry.outlet_id || 'Unknown Outlet'}</TableCell>
                     <TableCell className="text-right font-code">${(entry.total_food_cost || 0).toFixed(2)}</TableCell>
                     <TableCell className="text-right">
@@ -269,7 +272,7 @@ export default function FoodCostEntryListClient() {
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle className="flex items-center"><AlertTriangle className="h-5 w-5 text-destructive mr-2" />Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>This action cannot be undone. This will permanently delete the food cost entry for {entry.date ? format(entry.date, "PPP") : "this date"} at {outlets.find(o => o.id === entry.outlet_id)?.name || 'this outlet'}.</AlertDialogDescription>
+                            <AlertDialogDescription>This action cannot be undone. This will permanently delete the food cost entry for {entry.date && isValid(entry.date) ? format(entry.date, "PPP") : "this date"} at {outlets.find(o => o.id === entry.outlet_id)?.name || 'this outlet'}.</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -291,7 +294,7 @@ export default function FoodCostEntryListClient() {
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
               {editingEntry 
-                ? `Update details for outlet: ${outlets.find(o => o.id === editingEntry.outlet_id)?.name || 'Unknown'} on ${editingEntry.date ? format(editingEntry.date instanceof Timestamp ? editingEntry.date.toDate() : new Date(editingEntry.date), "PPP") : "selected date"}` 
+                ? `Update details for outlet: ${outlets.find(o => o.id === editingEntry.outlet_id)?.name || 'Unknown'} on ${editingEntry.date && isValid(editingEntry.date) ? format(editingEntry.date, "PPP") : "selected date"}` 
                 : "Enter the details for a new food cost entry."}
             </DialogDescription>
           </DialogHeader>
@@ -302,7 +305,7 @@ export default function FoodCostEntryListClient() {
           ) : (
             <FoodCostInputForm
                 // For editing, use date/outlet from editingEntry. For new, use component state.
-                selectedDate={editingEntry ? (editingEntry.date instanceof Timestamp ? editingEntry.date.toDate() : new Date(editingEntry.date)) : dateForNewEntry}
+                selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
                 selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
                 foodCategories={foodCategories}
                 existingEntry={editingEntry} 
@@ -314,3 +317,4 @@ export default function FoodCostEntryListClient() {
     </>
  );
 }
+
