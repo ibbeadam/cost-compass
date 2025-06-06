@@ -131,7 +131,17 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                 <h3 className="text-lg font-medium border-b pb-2 text-primary">Food Section</h3>
                 <FormField control={form.control} name="food_revenue" render={({ field }) => (<FormItem><FormLabel>Food Revenue*</FormLabel><FormControl><Input type="number" placeholder="e.g., 12000" {...field} step="0.01" /></FormControl><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="budget_food_cost_pct" render={({ field }) => (<FormItem><FormLabel>Budget Food Cost %*</FormLabel><FormControl><Input type="number" step="0.01" placeholder="e.g., 30.5" {...field} /></FormControl><FormMessage /></FormItem>)} />
-                <FormField control={form.control} name="ent_food" render={({ field }) => (<FormItem><FormLabel>Entertainment Food</FormLabel><FormControl><Input type="number" placeholder="e.g., 150" {...field} step="0.01" /></FormControl><FormDescription className="text-xs">Cost of food for entertainment.</FormDescription><FormMessage /></FormItem>)} />
+                {/* DIAGNOSTIC CHANGE for ent_food field */}
+                <FormField control={form.control} name="ent_food" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Entertainment Food</FormLabel>
+                    <FormControl>
+                      <div {...field}>Temporary Div for ent_food</div>
+                    </FormControl>
+                    <FormDescription className="text-xs">Cost of food for entertainment.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )} />
                 <FormField control={form.control} name="oc_food" render={({ field }) => (<FormItem><FormLabel>Officer's Check / Comp Food</FormLabel><FormControl><Input type="number" placeholder="e.g., 80" {...field} step="0.01" /></FormControl><FormDescription className="text-xs">Cost of complimentary food.</FormDescription><FormMessage /></FormItem>)} />
                 <FormField control={form.control} name="other_food_adjustment" render={({ field }) => (<FormItem><FormLabel>Other Food Adjustments</FormLabel><FormControl><Input type="number" placeholder="e.g., -25 or 50" {...field} step="0.01" /></FormControl><FormDescription className="text-xs">E.g., spoilage, staff meals. Negative for credit.</FormDescription><FormMessage /></FormItem>)} />
               </div>
