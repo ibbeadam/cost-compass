@@ -1,4 +1,5 @@
 
+
 import type { Timestamp } from "firebase/firestore";
 
 export interface Outlet {
@@ -176,18 +177,19 @@ export interface DailyFinancialSummary {
 }
 
 export interface FoodCostEntry {
-  id?: string; // Firestore auto-ID
+  id: string; // Firestore auto-ID
   date: Timestamp | Date;
-  outlet_id: string; // FK to Outlets collection
+  outlet_id: string; 
   total_food_cost: number;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
 
 export interface FoodCostDetail {
-  id?: string; // Firestore auto-ID
+  id: string; // Firestore auto-ID
   food_cost_entry_id: string; // FK to FoodCostEntries collection (document ID)
-  category_id: string; // FK to Categories collection
+  category_id: string; 
+  categoryName?: string; // Denormalized for display convenience
   cost: number; 
   description?: string; // Optional: e.g. "Purchase from Sysco" or "Meat - Beef Tenderloin"
   createdAt?: Timestamp | Date;
@@ -195,18 +197,19 @@ export interface FoodCostDetail {
 }
 
 export interface BeverageCostEntry {
-  id?: string; // Firestore auto-ID
+  id: string; // Firestore auto-ID
   date: Timestamp | Date;
-  outlet_id: string; // FK to Outlets collection
+  outlet_id: string; 
   total_beverage_cost: number;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
 
 export interface BeverageCostDetail {
-  id?: string; // Firestore auto-ID
+  id: string; // Firestore auto-ID
   beverage_cost_entry_id: string; // FK to BeverageCostEntries collection (document ID)
-  category_id: string; // FK to Categories collection
+  category_id: string; 
+  categoryName?: string; // Denormalized for display convenience
   cost: number;
   description?: string;
   createdAt?: Timestamp | Date;
