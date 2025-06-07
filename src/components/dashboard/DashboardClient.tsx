@@ -184,10 +184,18 @@ export default function DashboardClient() {
         } catch (error) {
           console.error("Error detecting cost fluctuation for", item.outletName, error);
           results.push({ ...item, isAnomalous: false, anomalyExplanation: "AI analysis failed." });
+          
+          let specificErrorMessage = "Please try again later.";
+          if (error.message.includes("429")) {
+            specificErrorMessage = "Rate limit may have been exceeded. Please try again later.";
+          } else if (error.message.includes("503") || error.message.toLowerCase().includes("service unavailable")) {
+            specificErrorMessage = "The AI model is temporarily overloaded. Please try again in a few moments.";
+          }
+
           toast({
             variant: "destructive",
             title: "AI Analysis Error",
-            description: `Could not analyze ${item.outletName}. ${error.message.includes("429") ? "Rate limit may have been exceeded." : "Please try again later."}`,
+            description: `Could not analyze ${item.outletName}. ${specificErrorMessage}`,
             duration: 7000,
           });
         }
