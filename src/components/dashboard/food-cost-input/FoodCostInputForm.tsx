@@ -102,8 +102,8 @@ export default function FoodCostInputForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 flex flex-col h-full overflow-hidden">
-        <ScrollArea className="flex-grow pr-3 space-y-4"> {/* Add space-y-4 for spacing inside scroll area */}
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full space-y-4">
+        <ScrollArea className="flex-grow pr-3">
           <div className="space-y-4">
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-3 p-4 border rounded-md shadow-sm bg-card/80 relative">
@@ -127,7 +127,7 @@ export default function FoodCostInputForm({
                           ))}
                         </SelectContent>
                       </Select>
-                      <ShadcnFormMessage /> {/* Use renamed component */}
+                      <ShadcnFormMessage />
                     </FormItem>
                   )}
                 />
@@ -140,7 +140,7 @@ export default function FoodCostInputForm({
                       <FormControl>
                         <Input type="number" step="0.01" placeholder="0.00" {...formField} />
                       </FormControl>
-                      <ShadcnFormMessage /> {/* Use renamed component */}
+                      <ShadcnFormMessage />
                     </FormItem>
                   )}
                 />
@@ -153,7 +153,7 @@ export default function FoodCostInputForm({
                       <FormControl>
                         <Input placeholder="e.g., Supplier name, item details" {...formField} />
                       </FormControl>
-                      <ShadcnFormMessage /> {/* Use renamed component */}
+                      <ShadcnFormMessage />
                     </FormItem>
                   )}
                 />
@@ -172,8 +172,11 @@ export default function FoodCostInputForm({
               </div>
             ))}
           </div>
-          {/* Move Add Item button and Total Cost inside ScrollArea */}
-          <div className="flex items-center justify-between mt-4 pt-4 border-t flex-shrink-0"> {/* flex-shrink-0 prevents shrinking */}
+        </ScrollArea>
+        
+        {/* Controls outside the item list scroll area */}
+        <div className="pt-4 border-t mt-auto flex-shrink-0"> 
+          <div className="flex items-center justify-between mb-4">
               <Button
                 type="button"
                 variant="outline"
@@ -187,14 +190,14 @@ export default function FoodCostInputForm({
                 Total Food Cost: ${totalCost.toFixed(2)}
               </div>
           </div>
-          {/* Move Save Entry button inside ScrollArea */}
-          <div className="flex justify-end gap-2 mt-4 flex-shrink-0"> {/* Use mt-4 for spacing from Total Cost/Add Item, flex-shrink-0 prevents shrinking */}
+          <div className="flex justify-end gap-2">
             <Button type="submit" disabled={isSubmitting || !form.formState.isValid || fields.length === 0} className="min-w-[120px]">
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (existingEntry ? "Update Entry" : "Save Entry")}
             </Button>
           </div>
-        </ScrollArea>
+        </div>
       </form>
     </Form>
   );
 }
+
