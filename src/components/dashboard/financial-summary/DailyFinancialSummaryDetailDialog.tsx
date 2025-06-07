@@ -71,9 +71,8 @@ export default function DailyFinancialSummaryDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-grow">
+        <ScrollArea className="flex-grow min-h-0"> 
           <div className="space-y-6 p-4 md:p-6">
-            {/* Summary Section */}
             <section className="p-4 border rounded-lg shadow-sm bg-background">
               <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2">Overall Summary</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
@@ -104,7 +103,6 @@ export default function DailyFinancialSummaryDetailDialog({
                   <Separator className="my-3" />
                   <DetailItem label="Total Beverage Revenue" value={summary.beverage_revenue} isCurrency icon={DollarSign} />
                   <DetailItem label="Budget Beverage Cost %" value={summary.budget_beverage_cost_pct} isPercentage icon={Percent}/>
-                  {/* Placeholder for actual beverage costs - add when implemented */}
                   <DetailItem label="Actual Beverage Cost" value={summary.actual_beverage_cost} isCurrency className="text-muted-foreground"/>
                   <DetailItem label="Actual Beverage Cost %" value={summary.actual_beverage_cost_pct} isPercentage className="text-muted-foreground"/>
                 </div>
@@ -118,7 +116,6 @@ export default function DailyFinancialSummaryDetailDialog({
               )}
             </section>
 
-            {/* Detailed Food Cost Entries Section */}
             <section className="p-4 border rounded-lg shadow-sm bg-background">
               <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2">Detailed Food Cost Entries</h3>
               {isLoadingDetails ? (
@@ -179,4 +176,3 @@ export default function DailyFinancialSummaryDetailDialog({
     </Dialog>
   );
 }
-    
