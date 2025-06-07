@@ -11,7 +11,7 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
+  FormMessage as ShadcnFormMessage, // Renamed to avoid conflict
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -102,8 +102,8 @@ export default function FoodCostInputForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <ScrollArea className="max-h-[450px] pr-3">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 flex flex-col h-full overflow-hidden">
+        <ScrollArea className="flex-grow pr-3 space-y-4"> {/* Add space-y-4 for spacing inside scroll area */}
           <div className="space-y-4">
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-3 p-4 border rounded-md shadow-sm bg-card/80 relative">
@@ -127,7 +127,7 @@ export default function FoodCostInputForm({
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
+                      <ShadcnFormMessage /> {/* Use renamed component */}
                     </FormItem>
                   )}
                 />
@@ -140,7 +140,7 @@ export default function FoodCostInputForm({
                       <FormControl>
                         <Input type="number" step="0.01" placeholder="0.00" {...formField} />
                       </FormControl>
-                      <FormMessage />
+                      <ShadcnFormMessage /> {/* Use renamed component */}
                     </FormItem>
                   )}
                 />
@@ -153,7 +153,7 @@ export default function FoodCostInputForm({
                       <FormControl>
                         <Input placeholder="e.g., Supplier name, item details" {...formField} />
                       </FormControl>
-                      <FormMessage />
+                      <ShadcnFormMessage /> {/* Use renamed component */}
                     </FormItem>
                   )}
                 />
@@ -172,27 +172,28 @@ export default function FoodCostInputForm({
               </div>
             ))}
           </div>
-        </ScrollArea>
-        <div className="flex items-center justify-between mt-4 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => append({ categoryId: "", cost: 0, description: "" })}
-              disabled={isSubmitting}
-              className="text-sm"
-            >
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Item
+          {/* Move Add Item button and Total Cost inside ScrollArea */}
+          <div className="flex items-center justify-between mt-4 pt-4 border-t flex-shrink-0"> {/* flex-shrink-0 prevents shrinking */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => append({ categoryId: "", cost: 0, description: "" })}
+                disabled={isSubmitting}
+                className="text-sm"
+              >
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Item
+              </Button>
+              <div className="text-lg font-semibold">
+                Total Food Cost: ${totalCost.toFixed(2)}
+              </div>
+          </div>
+          {/* Move Save Entry button inside ScrollArea */}
+          <div className="flex justify-end gap-2 mt-4 flex-shrink-0"> {/* Use mt-4 for spacing from Total Cost/Add Item, flex-shrink-0 prevents shrinking */}
+            <Button type="submit" disabled={isSubmitting || !form.formState.isValid || fields.length === 0} className="min-w-[120px]">
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (existingEntry ? "Update Entry" : "Save Entry")}
             </Button>
-            <div className="text-lg font-semibold">
-              Total Food Cost: ${totalCost.toFixed(2)}
-            </div>
-        </div>
-        
-        <div className="flex justify-end gap-2 pt-4 border-t">
-          <Button type="submit" disabled={isSubmitting || !form.formState.isValid || fields.length === 0} className="min-w-[120px]">
-            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (existingEntry ? "Update Entry" : "Save Entry")}
-          </Button>
-        </div>
+          </div>
+        </ScrollArea>
       </form>
     </Form>
   );

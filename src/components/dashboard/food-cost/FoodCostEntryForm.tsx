@@ -146,7 +146,7 @@ export default function FoodCostEntryForm({ initialData, onSuccess, onCancel }: 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 h-full flex flex-col">
-        <ScrollArea className="flex-grow pr-3">
+        <ScrollArea className="flex-grow pr-4">
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField

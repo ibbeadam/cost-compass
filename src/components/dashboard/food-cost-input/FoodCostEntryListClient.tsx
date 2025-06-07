@@ -339,18 +339,6 @@ export default function FoodCostEntryListClient() {
                   id="new-entry-date"
                   className="w-full"
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {
-                    const testDate = new Date(dateForNewEntry.getFullYear(), dateForNewEntry.getMonth(), dateForNewEntry.getDate() + 1);
-                    console.log("[FoodCostEntryListClient] Test button clicked, attempting to set date to:", testDate);
-                    setDateForNewEntry(testDate);
-                  }}
-                >
-                  Increment Date (Test)
-                </Button>
               </div>
               <div>
                 <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
