@@ -102,8 +102,8 @@ export default function FoodCostInputForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full space-y-4">
-        <ScrollArea className="flex-grow pr-3">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-col bg-card">
+        <ScrollArea className="flex-grow pr-3 mb-4">
           <div className="space-y-4">
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-3 p-4 border rounded-md shadow-sm bg-card/80 relative">
@@ -173,9 +173,7 @@ export default function FoodCostInputForm({
             ))}
           </div>
         </ScrollArea>
-        
-        {/* Controls outside the item list scroll area */}
-        <div className="pt-4 border-t mt-auto flex-shrink-0"> 
+        <div className="pt-4 border-t flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
               <Button
                 type="button"

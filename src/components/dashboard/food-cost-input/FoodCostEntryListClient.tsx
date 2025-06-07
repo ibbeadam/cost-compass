@@ -319,8 +319,8 @@ export default function FoodCostEntryListClient() {
       )}
 
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingEntry(null); }}>
-        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card overflow-hidden">
+ <DialogHeader className="flex-shrink-0 p-6 pb-4">
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
               {editingEntry 
@@ -329,7 +329,7 @@ export default function FoodCostEntryListClient() {
             </DialogDescription>
           </DialogHeader>
           
-          {!editingEntry && isClient && (
+ {!editingEntry && isClient && (outlets.length > 0 || isLoadingOutlets) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border-b">
               <div>
                 <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
@@ -365,7 +365,7 @@ export default function FoodCostEntryListClient() {
             </div>
           )}
 
-          {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry && (!outletIdForNewEntry || !dateForNewEntry) ? (
+ {isClient && (isLoadingOutlets || isLoadingCategories) ? (
              <div className="flex justify-center items-center h-40">
               <p className="text-muted-foreground">
                 {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet."}

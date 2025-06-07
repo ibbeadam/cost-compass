@@ -147,7 +147,7 @@ export default function FoodCostEntryForm({ initialData, onSuccess, onCancel }: 
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 h-full flex flex-col">
         <ScrollArea className="flex-grow pr-4">
-          <div className="space-y-6">
+          <div className="space-y-6 pb-4"> {/* Added padding bottom to ensure content doesn't touch the bottom */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
@@ -206,7 +206,7 @@ export default function FoodCostEntryForm({ initialData, onSuccess, onCancel }: 
 
           </div>
         </ScrollArea>
-        <div className="flex justify-end gap-2 pt-4 border-t mt-auto">
+        <div className="flex justify-end gap-2 pt-4 border-t"> {/* Removed mt-auto to keep buttons anchored to the bottom */}
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>

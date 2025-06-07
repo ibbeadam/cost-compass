@@ -31,9 +31,6 @@ const navItems = [
       // Add other specific settings pages here if needed
     ]
   },
-  // Legacy Links - can be removed once data migration/feature parity is complete
-  { href: '/dashboard/hotel-daily-entry', label: 'Daily Hotel Figures (Old)', icon: FileSpreadsheet, isLegacy: true },
-  { href: '/dashboard/food-cost', label: 'Daily Food Figures (Old)', icon: Apple, isLegacy: true },
 ];
 
 export function MainNav() {
