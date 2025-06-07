@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { collection, onSnapshot, orderBy, query as firestoreQuery, Timestamp } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle } from "lucide-react";
-import { format, isValid } from "date-fns";
+import { format, isValid, addDays } from "date-fns"; // Added addDays for testing
 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -53,9 +53,11 @@ export default function FoodCostEntryListClient() {
 
   useEffect(() => {
     if (isClient) {
-      console.log("[FoodCostEntryListClient] dateForNewEntry state changed to:", dateForNewEntry);
+      // This log helps verify state changes for dateForNewEntry
+      console.log("[FoodCostEntryListClient] dateForNewEntry changed to:", dateForNewEntry);
     }
   }, [dateForNewEntry, isClient]);
+
 
   useEffect(() => {
     if (!isClient) return;
@@ -309,7 +311,10 @@ export default function FoodCostEntryListClient() {
       )}
 
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingEntry(null); }}>
-        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card">
+        <DialogContent 
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card"
+        >
           <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
@@ -326,7 +331,7 @@ export default function FoodCostEntryListClient() {
                   <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
                   <DatePicker 
                     date={dateForNewEntry} 
-                    setDate={setDateForNewEntry} // Pass state setter directly
+                    setDate={setDateForNewEntry}
                     id="new-entry-date"
                     className="w-full"
                   />
@@ -384,3 +389,4 @@ export default function FoodCostEntryListClient() {
     </>
  );
 }
+
