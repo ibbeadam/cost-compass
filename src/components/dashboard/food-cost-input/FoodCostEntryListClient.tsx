@@ -1,10 +1,9 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { collection, onSnapshot, orderBy, query as firestoreQuery, Timestamp } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle } from "lucide-react";
-import { format, isValid } from "date-fns";
+import { format, isValid, addDays } from "date-fns"; // Added addDays
 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -216,14 +215,22 @@ export default function FoodCostEntryListClient() {
   };
 
   const handleDateSelectForNewEntry = (newDate: Date | undefined) => {
-    console.log("[FoodCostEntryListClient] DatePicker onSelect (new entry) triggered with:", newDate);
+    console.log("[FoodCostEntryListClient] DatePicker (new entry) - onSelect called with:", newDate);
     if (newDate && isValid(newDate)) {
-      console.log("[FoodCostEntryListClient] Setting dateForNewEntry to:", newDate);
+      console.log("[FoodCostEntryListClient] DatePicker (new entry) - Setting dateForNewEntry to:", newDate);
       setDateForNewEntry(newDate);
     } else {
-      console.warn("[FoodCostEntryListClient] Invalid or undefined date received from DatePicker:", newDate);
+      console.warn("[FoodCostEntryListClient] DatePicker (new entry) - Received invalid or undefined date:", newDate);
     }
   };
+
+  // Test function, remove after debugging
+  const testSetDate = () => {
+    const newTestDate = addDays(dateForNewEntry, 1);
+    console.log("[FoodCostEntryListClient] Test button clicked, attempting to set date to:", newTestDate);
+    setDateForNewEntry(newTestDate);
+  };
+
 
   if (error) {
     return (
@@ -319,8 +326,8 @@ export default function FoodCostEntryListClient() {
       )}
 
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingEntry(null); }}>
-        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card overflow-hidden">
- <DialogHeader className="flex-shrink-0 p-6 pb-4">
+        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card"> {/* Removed overflow-hidden */}
+          <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
               {editingEntry 
@@ -329,62 +336,67 @@ export default function FoodCostEntryListClient() {
             </DialogDescription>
           </DialogHeader>
           
- {!editingEntry && isClient && (outlets.length > 0 || isLoadingOutlets) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border-b">
-              <div>
-                <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
-                <DatePicker 
-                  date={dateForNewEntry} 
-                  setDate={handleDateSelectForNewEntry}
-                  id="new-entry-date"
-                  className="w-full"
-                />
+          <div className="flex-grow min-h-0 overflow-y-auto"> {/* Content wrapper for scrolling */}
+            {!editingEntry && isClient && (outlets.length > 0 || isLoadingOutlets) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
+                <div>
+                  <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
+                  <DatePicker 
+                    date={dateForNewEntry} 
+                    setDate={handleDateSelectForNewEntry}
+                    id="new-entry-date"
+                    className="w-full"
+                  />
+                  {/* <Button onClick={testSetDate} variant="outline" size="sm" className="mt-2">Increment Date (Test)</Button> */}
+                </div>
+                <div>
+                  <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
+                  {isLoadingOutlets ? (
+                    <Skeleton className="h-10 w-full bg-muted" />
+                  ) : (
+                    <Select 
+                      value={outletIdForNewEntry} 
+                      onValueChange={(id) => setOutletIdForNewEntry(id)}
+                    >
+                      <SelectTrigger id="new-entry-outlet" className="w-full">
+                        <SelectValue placeholder="Select an outlet" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {outlets.map((outlet) => (
+                          <SelectItem key={outlet.id} value={outlet.id}>
+                            {outlet.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
-              <div>
-                <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
-                {isLoadingOutlets ? (
-                  <Skeleton className="h-10 w-full bg-muted" />
-                ) : (
-                  <Select 
-                    value={outletIdForNewEntry} 
-                    onValueChange={(id) => setOutletIdForNewEntry(id)}
-                  >
-                    <SelectTrigger id="new-entry-outlet" className="w-full">
-                      <SelectValue placeholder="Select an outlet" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {outlets.map((outlet) => (
-                        <SelectItem key={outlet.id} value={outlet.id}>
-                          {outlet.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
-          )}
+            )}
 
- {isClient && (isLoadingOutlets || isLoadingCategories) ? (
-             <div className="flex justify-center items-center h-40">
-              <p className="text-muted-foreground">
-                {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet."}
-              </p>
+            <div className="p-6"> {/* Padding for the form itself */}
+              {isClient && (isLoadingOutlets || isLoadingCategories) ? (
+                <div className="flex justify-center items-center h-40">
+                  <p className="text-muted-foreground">
+                    {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet."}
+                  </p>
+                </div>
+              ) : (
+                <FoodCostInputForm
+                    key={
+                        editingEntry
+                        ? `${editingEntry.id}-${editingEntry.date instanceof Date && isValid(editingEntry.date) ? editingEntry.date.toISOString() : 'invalid-edit-date'}`
+                        : `new-${dateForNewEntry instanceof Date && isValid(dateForNewEntry) ? dateForNewEntry.toISOString() : 'invalid-new-date'}-${outletIdForNewEntry || 'no-outlet'}`
+                    }
+                    selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
+                    selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
+                    foodCategories={foodCategories}
+                    existingEntry={editingEntry} 
+                    onSuccess={onFormSuccess}
+                  />
+              )}
             </div>
-          ) : (
-            <FoodCostInputForm
-                 key={
-                    editingEntry
-                      ? `${editingEntry.id}-${editingEntry.date instanceof Date && isValid(editingEntry.date) ? editingEntry.date.toISOString() : 'invalid-edit-date'}`
-                      : `new-${dateForNewEntry instanceof Date && isValid(dateForNewEntry) ? dateForNewEntry.toISOString() : 'invalid-new-date'}-${outletIdForNewEntry || 'no-outlet'}`
-                  }
-                selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
-                selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
-                foodCategories={foodCategories}
-                existingEntry={editingEntry} 
-                onSuccess={onFormSuccess}
-              />
-          )}
+          </div>
         </DialogContent>
       </Dialog>
     </>

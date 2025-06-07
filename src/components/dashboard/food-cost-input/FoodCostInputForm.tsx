@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,7 +19,7 @@ import { useState, useEffect } from "react";
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import type { Category, FoodCostEntry, FoodCostDetail } from "@/types";
 import { saveFoodCostEntryAction } from "@/actions/foodCostActions";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// ScrollArea import is removed
 
 const foodCostItemSchema = z.object({
   id: z.string().optional(), // For existing details
@@ -102,9 +101,9 @@ export default function FoodCostInputForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl flex flex-col bg-card">
-        <ScrollArea className="flex-grow pr-3 mb-4">
-          <div className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
+        <div className="flex-grow min-h-0 overflow-y-auto pr-3">
+          <div className="space-y-4 pb-4"> {/* Added pb-4 for padding at the end of scroll */}
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-3 p-4 border rounded-md shadow-sm bg-card/80 relative">
                 <FormField
@@ -172,7 +171,7 @@ export default function FoodCostInputForm({
               </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
         <div className="pt-4 border-t flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
               <Button
