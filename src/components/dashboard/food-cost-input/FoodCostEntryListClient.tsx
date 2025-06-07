@@ -51,6 +51,13 @@ export default function FoodCostEntryListClient() {
     setIsClient(true);
   }, []);
 
+  // useEffect to log dateForNewEntry changes
+  useEffect(() => {
+    if (isClient) {
+      console.log("[FoodCostEntryListClient] dateForNewEntry changed to:", dateForNewEntry);
+    }
+  }, [dateForNewEntry, isClient]);
+
   useEffect(() => {
     if (!isClient) return;
     setIsLoadingEntries(true);
@@ -61,6 +68,7 @@ export default function FoodCostEntryListClient() {
         const data = doc.data();
         
         const convertToDate = (fieldValue: any): Date => {
+          if (!fieldValue) return new Date(0); // Handle null or undefined
           if (fieldValue instanceof Timestamp) {
             return fieldValue.toDate();
           }
@@ -68,23 +76,20 @@ export default function FoodCostEntryListClient() {
             const d = new Date(fieldValue);
             if (isValid(d)) return d;
           }
-          // If data.date is an object like { _seconds: ..., _nanoseconds: ... }
-          if (typeof fieldValue === 'object' && fieldValue !== null && '_seconds' in fieldValue && '_nanoseconds' in fieldValue) {
+          if (typeof fieldValue === 'object' && '_seconds' in fieldValue && '_nanoseconds' in fieldValue) {
             try {
                 const ts = new Timestamp(fieldValue._seconds, fieldValue._nanoseconds);
                 return ts.toDate();
-            } catch (e) {
-                // Fallback if Timestamp construction fails
-            }
+            } catch (e) { /* ignore */ }
           }
-          return new Date(0); // Fallback for invalid or missing dates
+          return new Date(0); // Fallback for invalid or unhandled types
         };
 
         const entryDate = convertToDate(data.date);
 
         return {
           id: doc.id,
-          date: entryDate,
+          date: entryDate, // Should be a JS Date object
           outlet_id: data.outlet_id,
           total_food_cost: data.total_food_cost,
           createdAt: convertToDate(data.createdAt),
@@ -133,7 +138,7 @@ export default function FoodCostEntryListClient() {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, outletIdForNewEntry]); // Removed setOutlets, setFoodCategories, etc. as they are stable
+  }, [toast, outletIdForNewEntry]); 
 
   useEffect(() => {
     if (isClient) {
@@ -264,7 +269,7 @@ export default function FoodCostEntryListClient() {
             <TableBody>
               {foodCostEntries.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell>{entry.date && isValid(entry.date) ? format(entry.date, "PPP") : "Invalid Date"}</TableCell>
+                    <TableCell>{isValid(entry.date) ? format(entry.date, "PPP") : "Invalid Date"}</TableCell>
                     <TableCell>{outlets.find(o => o.id === entry.outlet_id)?.name || entry.outlet_id || 'Unknown Outlet'}</TableCell>
                     <TableCell className="text-right font-code">${(entry.total_food_cost || 0).toFixed(2)}</TableCell>
                     <TableCell className="text-right">
@@ -282,7 +287,7 @@ export default function FoodCostEntryListClient() {
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle className="flex items-center"><AlertTriangle className="h-5 w-5 text-destructive mr-2" />Are you sure?</AlertDialogTitle>
-                            <AlertDialogDescription>This action cannot be undone. This will permanently delete the food cost entry for {entry.date && isValid(entry.date) ? format(entry.date, "PPP") : "this date"} at {outlets.find(o => o.id === entry.outlet_id)?.name || 'this outlet'}.</AlertDialogDescription>
+                            <AlertDialogDescription>This action cannot be undone. This will permanently delete the food cost entry for {isValid(entry.date) ? format(entry.date, "PPP") : "this date"} at {outlets.find(o => o.id === entry.outlet_id)?.name || 'this outlet'}.</AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -315,10 +320,22 @@ export default function FoodCostEntryListClient() {
                 <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
                 <DatePicker 
                   date={dateForNewEntry} 
-                  setDate={(d) => d && setDateForNewEntry(d)} 
+                  setDate={setDateForNewEntry} // Directly pass the state setter
                   id="new-entry-date"
                   className="w-full"
                 />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    const testDate = new Date(dateForNewEntry.getFullYear(), dateForNewEntry.getMonth(), dateForNewEntry.getDate() + 1);
+                    console.log("[FoodCostEntryListClient] Test button clicked, attempting to set date to:", testDate);
+                    setDateForNewEntry(testDate);
+                  }}
+                >
+                  Increment Date (Test)
+                </Button>
               </div>
               <div>
                 <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
@@ -353,6 +370,7 @@ export default function FoodCostEntryListClient() {
             </div>
           ) : (
             <FoodCostInputForm
+                key={editingEntry ? `${editingEntry.id}-${editingEntry.date?.toISOString()}` : `new-${dateForNewEntry?.toISOString()}-${outletIdForNewEntry}`}
                 selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
                 selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
                 foodCategories={foodCategories}
