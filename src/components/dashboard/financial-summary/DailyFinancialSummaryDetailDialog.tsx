@@ -10,7 +10,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// ScrollArea import is no longer needed
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { DailyFinancialSummary, FoodCostEntry, FoodCostDetail } from "@/types";
 import { format } from "date-fns";
@@ -71,7 +71,8 @@ export default function DailyFinancialSummaryDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-grow min-h-0"> 
+        {/* Replaced ScrollArea with a div that handles flex growth and native scrolling */}
+        <div className="flex-grow min-h-0 overflow-y-auto"> 
           <div className="space-y-6 p-4 md:p-6">
             <section className="p-4 border rounded-lg shadow-sm bg-background">
               <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2">Overall Summary</h3>
@@ -167,7 +168,7 @@ export default function DailyFinancialSummaryDetailDialog({
               )}
             </section>
           </div>
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="pt-4 border-t flex-shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
