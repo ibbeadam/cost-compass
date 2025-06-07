@@ -40,7 +40,7 @@ import DailyFinancialSummaryDetailDialog from "./DailyFinancialSummaryDetailDial
 import { useToast } from "@/hooks/use-toast";
 import { deleteDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
 import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions";
-import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActions"; // New import
+import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -165,19 +165,40 @@ export default function DailyFinancialSummaryListClient() {
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
-          <Skeleton className="h-12 w-full bg-muted/50" />
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="grid grid-cols-10 items-center p-4 border-b gap-2">
-              <Skeleton className="h-6 bg-muted col-span-1" /> <Skeleton className="h-6 bg-muted col-span-1" /> 
-              <Skeleton className="h-6 bg-muted col-span-1" /> <Skeleton className="h-6 bg-muted col-span-1" />
-              <Skeleton className="h-6 bg-muted col-span-1" /> <Skeleton className="h-6 bg-muted col-span-1" />
-              <Skeleton className="h-6 bg-muted col-span-1" /> <Skeleton className="h-6 bg-muted col-span-1" />
-              <Skeleton className="h-6 bg-muted col-span-1" />
-              <div className="col-span-1 flex justify-end gap-1">
-                 <Skeleton className="h-8 w-8 bg-muted" /> <Skeleton className="h-8 w-8 bg-muted" /> <Skeleton className="h-8 w-8 bg-muted" />
-              </div>
-            </div>
-          ))}
+          <div className="relative w-full overflow-auto">
+            <table className="w-full caption-bottom text-sm">
+              <thead className="[&_tr]:border-b">
+                <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                  {[...Array(11)].map((_, i) => (
+                    <th key={i} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                      <Skeleton className="h-6 w-full bg-muted/50" />
+                    </th>
+                  ))}
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[150px]">
+                    <Skeleton className="h-6 w-full bg-muted/50" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...Array(3)].map((_, i) => (
+                  <tr key={i} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                    {[...Array(11)].map((_, j) => (
+                      <td key={j} className="p-4 align-middle">
+                        <Skeleton className="h-6 w-full bg-muted" />
+                      </td>
+                    ))}
+                    <td className="p-4 align-middle">
+                      <div className="flex justify-end gap-1">
+                        <Skeleton className="h-8 w-8 bg-muted" />
+                        <Skeleton className="h-8 w-8 bg-muted" />
+                        <Skeleton className="h-8 w-8 bg-muted" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -200,15 +221,17 @@ export default function DailyFinancialSummaryListClient() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="font-headline">Date</TableHead>
-                <TableHead className="font-headline text-right">Food Rev.</TableHead>
-                <TableHead className="font-headline text-right">Bud. Food %</TableHead>
-                <TableHead className="font-headline text-right">Act. Food Cost</TableHead>
-                <TableHead className="font-headline text-right">Act. Food %</TableHead>
-                <TableHead className="font-headline text-right">Food Var. %</TableHead>
-                <TableHead className="font-headline text-right">Bev Rev.</TableHead>
-                <TableHead className="font-headline text-right">Bud. Bev %</TableHead>
-                <TableHead className="font-headline text-right">Act. Bev %</TableHead>
+                <TableHead className="font-headline min-w-[150px]">Date</TableHead>
+                <TableHead className="font-headline text-right min-w-[120px]">Food Rev.</TableHead>
+                <TableHead className="font-headline text-right min-w-[120px]">Bud. Food %</TableHead>
+                <TableHead className="font-headline text-right min-w-[130px]">Act. Food Cost</TableHead>
+                <TableHead className="font-headline text-right min-w-[120px]">Act. Food %</TableHead>
+                <TableHead className="font-headline text-right min-w-[130px]">Food Var. %</TableHead>
+                <TableHead className="font-headline text-right min-w-[120px]">Bev Rev.</TableHead>
+                <TableHead className="font-headline text-right min-w-[120px]">Bud. Bev %</TableHead>
+                <TableHead className="font-headline text-right min-w-[130px]">Act. Bev Cost</TableHead>
+                <TableHead className="font-headline text-right min-w-[120px]">Act. Bev %</TableHead>
+                <TableHead className="font-headline text-right min-w-[130px]">Bev Var. %</TableHead>
                 <TableHead className="font-headline w-[150px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -226,7 +249,12 @@ export default function DailyFinancialSummaryListClient() {
                   </TableCell>
                   <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.beverage_revenue)}</TableCell>
                   <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderPercentage(summary.budget_beverage_cost_pct)}</TableCell>
+                  <TableCell className="text-right font-code font-semibold" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.actual_beverage_cost)}</TableCell>
                   <TableCell className={cn("text-right font-code font-semibold", getActualCostColor(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))} onClick={() => handleViewDetails(summary)}> {renderPercentage(summary.actual_beverage_cost_pct)} </TableCell>
+                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.beverage_variance_pct))} onClick={() => handleViewDetails(summary)}>
+                    {summary.beverage_variance_pct != null && summary.beverage_variance_pct !== 0 ? (summary.beverage_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
+                    {renderPercentage(summary.beverage_variance_pct)}
+                  </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleViewDetails(summary)} className="mr-1 hover:text-blue-500"> <Eye className="h-4 w-4" /><span className="sr-only">View Details</span> </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary"> <Edit className="h-4 w-4" /><span className="sr-only">Edit</span> </Button>
@@ -285,3 +313,4 @@ export default function DailyFinancialSummaryListClient() {
     </div>
   );
 }
+
