@@ -12,15 +12,15 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, Settings, FileText, Building, Apple, FileSpreadsheet, ListChecks, DollarSign, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Settings, FileText, Building, ListChecks, DollarSign, ClipboardList, GlassWater } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/financial-summary', label: 'Daily Financial Summary', icon: DollarSign },
   { href: '/dashboard/food-cost-input', label: 'Food Cost Input', icon: ClipboardList },
-  // { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater }, // Placeholder for next module
-  { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true }, // Assuming reports not yet built
+  { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater },
+  { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true }, 
   { 
     href: '/dashboard/settings', 
     label: 'General Settings', 
@@ -28,7 +28,6 @@ const navItems = [
     subItems: [
       { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building, parentPath: '/dashboard/settings' },
       { href: '/dashboard/settings/categories', label: 'Manage Categories', icon: ListChecks, parentPath: '/dashboard/settings'},
-      // Add other specific settings pages here if needed
     ]
   },
 ];
@@ -38,8 +37,7 @@ export function MainNav() {
 
   const isActive = (href: string, parentPath?: string) => {
     if (pathname === href) return true;
-    if (parentPath && pathname.startsWith(parentPath)) return true; // Simpler parent check for grouped items
-    // For top-level items, ensure it's an exact match or a prefix if it's not the dashboard
+    if (parentPath && pathname.startsWith(parentPath)) return true; 
     if (!parentPath && href !== '/dashboard' && pathname.startsWith(href)) return true;
     return false;
   };
@@ -58,7 +56,7 @@ export function MainNav() {
                 isActive(item.href, item.parentPath)
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                item.isLegacy && "opacity-70 hover:opacity-90"
+                item.disabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-sidebar-foreground"
               )}
               tooltip={{children: item.label, side: "right", className: "bg-card text-card-foreground border-border"}}
             >

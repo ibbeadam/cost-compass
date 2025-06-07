@@ -190,7 +190,7 @@ export interface FoodCostDetail {
   category_id: string; 
   categoryName?: string; // Denormalized for display convenience
   cost: number; 
-  description?: string; // Optional: e.g. "Purchase from Sysco" or "Meat - Beef Tenderloin"
+  description?: string; // Optional: e.g., "Purchase from Sysco" or "Meat - Beef Tenderloin"
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
@@ -214,3 +214,4 @@ export interface BeverageCostDetail {
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
+
