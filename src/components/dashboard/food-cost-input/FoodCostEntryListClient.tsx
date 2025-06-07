@@ -22,6 +22,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { deleteFoodCostEntryAction, getFoodCostEntryWithDetailsAction, getOutletsAction, getFoodCategoriesAction } from "@/actions/foodCostActions";
 import type { Outlet, Category, FoodCostEntry, FoodCostDetail } from "@/types";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 export default function FoodCostEntryListClient() {
   const { toast } = useToast();
@@ -57,24 +60,31 @@ export default function FoodCostEntryListClient() {
       const fetchedEntries = snapshot.docs.map(doc => {
         const data = doc.data();
         
-        const convertToDate = (fieldValue: any): Date | undefined => {
-          if (!fieldValue) return undefined;
+        const convertToDate = (fieldValue: any): Date => {
           if (fieldValue instanceof Timestamp) {
             return fieldValue.toDate();
           }
-          // Attempt to parse if it's a string or number
-          const d = new Date(fieldValue);
-          return isValid(d) ? d : undefined;
+          if (typeof fieldValue === 'string' || typeof fieldValue === 'number') {
+            const d = new Date(fieldValue);
+            if (isValid(d)) return d;
+          }
+          // If data.date is an object like { _seconds: ..., _nanoseconds: ... }
+          if (typeof fieldValue === 'object' && fieldValue !== null && '_seconds' in fieldValue && '_nanoseconds' in fieldValue) {
+            try {
+                const ts = new Timestamp(fieldValue._seconds, fieldValue._nanoseconds);
+                return ts.toDate();
+            } catch (e) {
+                // Fallback if Timestamp construction fails
+            }
+          }
+          return new Date(0); // Fallback for invalid or missing dates
         };
 
         const entryDate = convertToDate(data.date);
-        if (!entryDate) {
-            console.warn(`Invalid or missing date for foodCostEntry ${doc.id}:`, data.date);
-        }
 
         return {
           id: doc.id,
-          date: entryDate || new Date(0), // Fallback to epoch if date is invalid to avoid crashes, will be shown as invalid
+          date: entryDate,
           outlet_id: data.outlet_id,
           total_food_cost: data.total_food_cost,
           createdAt: convertToDate(data.createdAt),
@@ -123,7 +133,7 @@ export default function FoodCostEntryListClient() {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, outletIdForNewEntry, setOutlets, setFoodCategories, setIsLoadingOutlets, setIsLoadingCategories, setError]);
+  }, [toast, outletIdForNewEntry]); // Removed setOutlets, setFoodCategories, etc. as they are stable
 
   useEffect(() => {
     if (isClient) {
@@ -148,7 +158,7 @@ export default function FoodCostEntryListClient() {
     if (!(listEntry.date instanceof Date) || !isValid(listEntry.date)) {
         toast({
             title: "Invalid Date",
-            description: "Cannot edit entry with an invalid date.",
+            description: "Cannot edit entry with an invalid date. Please check the entry data.",
             variant: "destructive",
         });
         return;
@@ -162,7 +172,7 @@ export default function FoodCostEntryListClient() {
       } else {
         toast({
           title: "Entry Not Found",
-          description: "Could not load the details for the selected entry.",
+          description: "Could not load the details for the selected entry. It might have been deleted.",
           variant: "destructive",
         });
       }
@@ -298,13 +308,51 @@ export default function FoodCostEntryListClient() {
                 : "Enter the details for a new food cost entry."}
             </DialogDescription>
           </DialogHeader>
-          {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry ? (
-            <div className="flex justify-center items-center h-64">
-              <Skeleton className="w-1/2 h-10 bg-muted" />
+          
+          {!editingEntry && isClient && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border-b">
+              <div>
+                <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
+                <DatePicker 
+                  date={dateForNewEntry} 
+                  setDate={(d) => d && setDateForNewEntry(d)} 
+                  id="new-entry-date"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
+                {isLoadingOutlets ? (
+                  <Skeleton className="h-10 w-full bg-muted" />
+                ) : (
+                  <Select 
+                    value={outletIdForNewEntry} 
+                    onValueChange={(id) => setOutletIdForNewEntry(id)}
+                  >
+                    <SelectTrigger id="new-entry-outlet" className="w-full">
+                      <SelectValue placeholder="Select an outlet" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {outlets.map((outlet) => (
+                        <SelectItem key={outlet.id} value={outlet.id}>
+                          {outlet.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
+          )}
+
+          {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry && (!outletIdForNewEntry || !dateForNewEntry) ? (
+             <div className="flex justify-center items-center h-40">
+              <p className="text-muted-foreground">
+                {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet."}
+              </p>
             </div>
           ) : (
             <FoodCostInputForm
-                // For editing, use date/outlet from editingEntry. For new, use component state.
                 selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
                 selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
                 foodCategories={foodCategories}
