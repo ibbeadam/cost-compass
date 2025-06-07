@@ -5,78 +5,38 @@ import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, w
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { FoodCostEntry, FoodCostDetail, Category, Outlet, DailyFinancialSummary } from "@/types";
-import { format as formatDateFn } from "date-fns";
-import { getDailyFinancialSummaryAction, saveDailyFinancialSummaryAction } from "./dailyFinancialSummaryActions";
+import { format as formatDateFn, isValid } from "date-fns";
+// Import the recalculate function from dailyFinancialSummaryActions
+import { recalculateAndSaveFinancialSummary } from "./dailyFinancialSummaryActions";
 
 
 const FOOD_COST_ENTRIES_COLLECTION = "foodCostEntries";
 const FOOD_COST_DETAILS_COLLECTION = "foodCostDetails";
-const CATEGORIES_COLLECTION = "categories"; // To fetch category names
+const CATEGORIES_COLLECTION = "categories"; 
 
 interface FoodCostItemInput {
-  id?: string; // For existing items being updated
+  id?: string; 
   categoryId: string;
   cost: number;
   description?: string;
 }
 
-async function updateAssociatedFinancialSummary(entryDate: Date, totalFoodCost: number) {
-  const financialSummaryId = formatDateFn(entryDate, "yyyy-MM-dd");
-  console.log(`[updateAssociatedFinancialSummary] Attempting to update summary for ID: ${financialSummaryId}, with totalFoodCost: ${totalFoodCost}`);
-
-  try {
-    const summary = await getDailyFinancialSummaryAction(financialSummaryId);
-
-    if (summary) {
-      console.log(`[updateAssociatedFinancialSummary] Found summary:`, JSON.stringify(summary, null, 2));
-      let actual_food_cost_pct: number | null = null;
-      let food_variance_pct: number | null = null;
-
-      if (summary.food_revenue != null && summary.food_revenue > 0) {
-        actual_food_cost_pct = (totalFoodCost / summary.food_revenue) * 100;
-      } else if (summary.food_revenue === 0 && totalFoodCost > 0) {
-        actual_food_cost_pct = null; 
-      } else {
-        actual_food_cost_pct = 0; 
-      }
-      console.log(`[updateAssociatedFinancialSummary] Calculated actual_food_cost_pct: ${actual_food_cost_pct}`);
-      
-
-      if (actual_food_cost_pct !== null && summary.budget_food_cost_pct != null) {
-        food_variance_pct = actual_food_cost_pct - summary.budget_food_cost_pct;
-      }
-      console.log(`[updateAssociatedFinancialSummary] Calculated food_variance_pct: ${food_variance_pct}`);
-
-      const updatePayload: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date } = {
-        date: summary.date instanceof Timestamp ? summary.date.toDate() : new Date(summary.date), 
-        actual_food_cost: totalFoodCost,
-        actual_food_cost_pct: actual_food_cost_pct,
-        food_variance_pct: food_variance_pct,
-      };
-      console.log(`[updateAssociatedFinancialSummary] Update payload for saveDailyFinancialSummaryAction:`, JSON.stringify(updatePayload, null, 2));
-      await saveDailyFinancialSummaryAction(updatePayload);
-      console.log(`[updateAssociatedFinancialSummary] Successfully called saveDailyFinancialSummaryAction for ${financialSummaryId}.`);
-    } else {
-      console.log(`[updateAssociatedFinancialSummary] No financial summary found for date ${financialSummaryId} to update with food cost data.`);
-    }
-  } catch (error) {
-    console.error(`[updateAssociatedFinancialSummary] Error updating financial summary ${financialSummaryId} with food cost:`, error);
-  }
-}
-
-
 export async function saveFoodCostEntryAction(
   date: Date,
   outletId: string,
   items: FoodCostItemInput[],
-  existingEntryId?: string | null // Pass this if updating an existing entry
+  existingEntryId?: string | null 
 ): Promise<{ foodCostEntryId: string }> {
   if (!date || !outletId || items.length === 0) {
     throw new Error("Date, Outlet ID, and at least one item are required.");
   }
+  if (!isValid(date)) {
+      throw new Error("Invalid date provided for food cost entry.");
+  }
 
   const totalFoodCost = items.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-  const entryDateTimestamp = Timestamp.fromDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
+  const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const entryDateTimestamp = Timestamp.fromDate(normalizedDate);
 
 
   try {
@@ -87,6 +47,8 @@ export async function saveFoodCostEntryAction(
         const entryRef = doc(db, FOOD_COST_ENTRIES_COLLECTION, existingEntryId);
         transaction.update(entryRef, {
           total_food_cost: totalFoodCost,
+          outlet_id: outletId, // Ensure outlet_id is also updatable if changed for an existing date/entry ID
+          date: entryDateTimestamp, // Ensure date is also updatable
           updatedAt: serverTimestamp(),
         });
 
@@ -127,7 +89,8 @@ export async function saveFoodCostEntryAction(
         throw new Error("Transaction completed but foodCostEntryId is still not set.");
     }
 
-    await updateAssociatedFinancialSummary(date, totalFoodCost);
+    // After food cost entry is saved, trigger recalculation of the associated DailyFinancialSummary
+    await recalculateAndSaveFinancialSummary(normalizedDate);
 
 
     revalidatePath("/dashboard/food-cost-input");
@@ -147,14 +110,13 @@ export async function getFoodCostEntryWithDetailsAction(
   date: Date,
   outletId: string
 ): Promise<(FoodCostEntry & { details: FoodCostDetail[] }) | null> {
-  const entryDateStart = Timestamp.fromDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())));
-  const entryDateEnd = Timestamp.fromDate(new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate() + 1)));
+  const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const entryDateTimestamp = Timestamp.fromDate(normalizedDate);
 
   const q = query(
     collection(db, FOOD_COST_ENTRIES_COLLECTION),
     where("outlet_id", "==", outletId),
-    where("date", ">=", entryDateStart),
-    where("date", "<", entryDateEnd)
+    where("date", "==", entryDateTimestamp) // Query for exact match on normalized date
   );
 
   const snapshot = await getDocs(q);
@@ -162,7 +124,7 @@ export async function getFoodCostEntryWithDetailsAction(
     return null;
   }
 
-  const entryDoc = snapshot.docs[0];
+  const entryDoc = snapshot.docs[0]; // Assuming only one entry per outlet per day
   const entryData = entryDoc.data() as Omit<FoodCostEntry, "id">;
   const foodCostEntryId = entryDoc.id;
 
@@ -199,7 +161,6 @@ export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promis
     throw new Error("Food Cost Entry ID is required for deletion.");
   }
   let entryDate: Date | null = null;
-  let totalFoodCostZero = 0; 
 
   try {
     const entryRef = doc(db, FOOD_COST_ENTRIES_COLLECTION, foodCostEntryId);
@@ -221,9 +182,10 @@ export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promis
     await batch.commit();
 
     if (entryDate) {
-        await updateAssociatedFinancialSummary(entryDate, totalFoodCostZero);
+        // After food cost entry is deleted, trigger recalculation of the associated DailyFinancialSummary
+        // This will effectively use a grossFoodCost that is lower (or zero if it was the only entry).
+        await recalculateAndSaveFinancialSummary(entryDate);
     }
-
 
     revalidatePath("/dashboard/food-cost-input");
     revalidatePath("/dashboard/financial-summary");
@@ -257,7 +219,8 @@ export async function getOutletsAction(): Promise<Outlet[]> {
             throw new Error("Database connection is not available. Could not load outlets.");
         }
         const outletsCollectionRef = collection(db, "outlets");
-        const snapshot = await getDocs(outletsCollectionRef);
+        const q = query(outletsCollectionRef, orderBy("name", "asc"));
+        const snapshot = await getDocs(q);
         
         const outletsData = snapshot.docs.map(docSnap => {
             const data = docSnap.data();
@@ -278,33 +241,82 @@ export async function getOutletsAction(): Promise<Outlet[]> {
                 targetOccupancy: data.targetOccupancy ?? 0,
             } as Outlet;
         });
-
-        return outletsData.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-
+        return outletsData;
     } catch (error: any) {
-        console.error("--------------------------------------------------");
         console.error("Detailed error in getOutletsAction:", error);
-        if (error.name) console.error("Error Name:", error.name);
-        if (error.code) console.error("Error Code:", error.code);
-        if (error.message) console.error("Error Message:", error.message);
-        if (error.stack) console.error("Error Stack:", error.stack);
-        console.error("--------------------------------------------------");
-
-        let errorMessage = "Could not load outlets.";
-        if (error instanceof Error) {
-          if (error.message.includes("index") || error.message.includes("orderBy") || (error as any).code === 'failed-precondition') {
-              errorMessage += " This might be due to a missing Firestore index. Check your Firestore console for index creation links, or create one manually for the 'outlets' collection. If sorting by 'name', ensure an index on that field exists.";
-          } else if ((error as any).code === 'permission-denied') {
-              errorMessage += " Firestore permission denied. Please check your security rules for the 'outlets' collection.";
-          } else {
-              errorMessage += ` Details: ${error.message}`;
-          }
-        } else {
-            errorMessage += " An unknown error occurred."
-        }
-        throw new Error(errorMessage);
+        throw new Error(`Could not load outlets. Details: ${error.message}`);
     }
 }
 
+// New action to get all food cost entries and their details for a specific date
+export async function getFoodCostEntriesForDateAction(
+  targetDate: Date
+): Promise<(FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[]> {
+  if (!isValid(targetDate)) {
+    throw new Error("Invalid date provided.");
+  }
+  const normalizedDate = new Date(Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()));
+  const dateTimestampForQuery = Timestamp.fromDate(normalizedDate);
+
+  const entriesWithDetails: (FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[] = [];
+
+  try {
+    // Fetch all outlets to map outlet_id to name
+    const outlets = await getOutletsAction();
+    const outletMap = new Map(outlets.map(o => [o.id, o.name]));
+
+    // Fetch all food cost entries for the given date
+    const entriesQuery = query(
+      collection(db, FOOD_COST_ENTRIES_COLLECTION),
+      where("date", "==", dateTimestampForQuery)
+    );
+    const entriesSnapshot = await getDocs(entriesQuery);
+
+    if (entriesSnapshot.empty) {
+      return [];
+    }
+
+    // Fetch all categories once for mapping category_id to name
+    const categories = await getFoodCategoriesAction();
+    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+
+    for (const entryDoc of entriesSnapshot.docs) {
+      const entryData = entryDoc.data() as Omit<FoodCostEntry, "id">;
+      const foodCostEntryId = entryDoc.id;
+
+      // Fetch details for this specific entry
+      const detailsQuery = query(
+        collection(db, FOOD_COST_DETAILS_COLLECTION),
+        where("food_cost_entry_id", "==", foodCostEntryId)
+      );
+      const detailsSnapshot = await getDocs(detailsQuery);
+      const details: FoodCostDetail[] = detailsSnapshot.docs.map(doc => {
+        const detailData = doc.data() as Omit<FoodCostDetail, "id" | "categoryName">;
+        return {
+          id: doc.id,
+          ...detailData,
+          categoryName: categoryMap.get(detailData.category_id) || detailData.category_id,
+          createdAt: detailData.createdAt instanceof Timestamp ? detailData.createdAt.toDate() : new Date(detailData.createdAt as any),
+          updatedAt: detailData.updatedAt instanceof Timestamp ? detailData.updatedAt.toDate() : new Date(detailData.updatedAt as any),
+        } as FoodCostDetail;
+      });
+
+      entriesWithDetails.push({
+        id: foodCostEntryId,
+        ...entryData,
+        date: entryData.date instanceof Timestamp ? entryData.date.toDate() : new Date(entryData.date as any),
+        createdAt: entryData.createdAt instanceof Timestamp ? entryData.createdAt.toDate() : new Date(entryData.createdAt as any),
+        updatedAt: entryData.updatedAt instanceof Timestamp ? entryData.updatedAt.toDate() : new Date(entryData.updatedAt as any),
+        outletName: outletMap.get(entryData.outlet_id) || entryData.outlet_id,
+        details,
+      });
+    }
+    return entriesWithDetails;
+  } catch (error) {
+    console.error("Error fetching food cost entries for date:", error);
+    throw new Error(`Failed to fetch food cost entries and details: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+    
 
     

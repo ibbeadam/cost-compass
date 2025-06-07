@@ -4,15 +4,90 @@
 import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
-import type { DailyFinancialSummary } from "@/types"; 
+import type { DailyFinancialSummary, FoodCostEntry } from "@/types"; 
 import { format } from "date-fns";
 
 const collectionName = "dailyFinancialSummaries";
 
+// Internal function to recalculate and update financial summary with actual costs
+export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promise<void> {
+  // Normalize inputDate to UTC start of day for consistent ID generation and querying
+  const normalizedDate = new Date(Date.UTC(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate()));
+  const summaryId = format(normalizedDate, "yyyy-MM-dd");
+  const dateTimestampForQuery = Timestamp.fromDate(normalizedDate);
+
+  console.log(`[recalculateAndSaveFS] Recalculating for summary ID: ${summaryId} using timestamp: ${dateTimestampForQuery.toDate().toISOString()}`);
+
+  const summaryDocRef = doc(db, collectionName, summaryId);
+  const summarySnap = await getDoc(summaryDocRef);
+
+  if (!summarySnap.exists()) {
+    console.log(`[recalculateAndSaveFS] No DailyFinancialSummary found for ${summaryId}. Skipping recalculation.`);
+    return;
+  }
+
+  const summaryData = summarySnap.data() as DailyFinancialSummary;
+
+  // 1. Fetch ALL FoodCostEntries for the date
+  const foodCostEntriesQuery = query(
+    collection(db, "foodCostEntries"),
+    where("date", "==", dateTimestampForQuery)
+  );
+  const foodCostEntriesSnap = await getDocs(foodCostEntriesQuery);
+  let grossFoodCost = 0;
+  foodCostEntriesSnap.forEach(doc => {
+    const entry = doc.data() as FoodCostEntry;
+    grossFoodCost += entry.total_food_cost || 0;
+  });
+  console.log(`[recalculateAndSaveFS] Gross Food Cost for ${summaryId} from ${foodCostEntriesSnap.size} entries: ${grossFoodCost}`);
+
+  // 2. Perform calculations using data from DailyFinancialSummary
+  const entFood = summaryData.ent_food || 0;
+  const ocFood = summaryData.oc_food || 0;
+  // other_food_adjustment: positive value is an *additional cost*, negative value is a *credit reducing cost*.
+  // So, we add it directly. If it's a credit (-25), cost + (-25) = cost - 25. If it's an extra cost (+10), cost + 10.
+  const otherFoodAdjustment = summaryData.other_food_adjustment || 0; 
+
+  // Actual food cost = Gross purchases (from FoodCostEntries) - Entertainment Credits - Officer's Check Credits + Other Adjustments
+  const actual_food_cost = grossFoodCost - entFood - ocFood + otherFoodAdjustment;
+  console.log(`[recalculateAndSaveFS] Calculated Actual Food Cost: ${actual_food_cost} (Gross: ${grossFoodCost}, Ent: ${entFood}, OC: ${ocFood}, Adjust: ${otherFoodAdjustment})`);
+
+  let actual_food_cost_pct: number | null = null;
+  if (summaryData.food_revenue != null && summaryData.food_revenue > 0) {
+    actual_food_cost_pct = (actual_food_cost / summaryData.food_revenue) * 100;
+  } else if (summaryData.food_revenue === 0 && actual_food_cost > 0) {
+    actual_food_cost_pct = null; 
+  } else {
+    actual_food_cost_pct = 0; 
+  }
+  console.log(`[recalculateAndSaveFS] Calculated Actual Food Cost %: ${actual_food_cost_pct} (Food Revenue: ${summaryData.food_revenue})`);
+
+  let food_variance_pct: number | null = null;
+  if (actual_food_cost_pct !== null && summaryData.budget_food_cost_pct != null) {
+    food_variance_pct = actual_food_cost_pct - summaryData.budget_food_cost_pct;
+  }
+  console.log(`[recalculateAndSaveFS] Calculated Food Variance %: ${food_variance_pct} (Budget Food Cost %: ${summaryData.budget_food_cost_pct})`);
+
+  const updatePayload: Partial<DailyFinancialSummary> = {
+    actual_food_cost,
+    actual_food_cost_pct,
+    food_variance_pct,
+    updatedAt: serverTimestamp() as Timestamp,
+  };
+
+  await setDoc(summaryDocRef, updatePayload, { merge: true });
+  console.log(`[recalculateAndSaveFS] DailyFinancialSummary ${summaryId} updated with calculated costs.`);
+  revalidatePath("/dashboard/financial-summary");
+  revalidatePath("/dashboard");
+}
+
+
 export async function saveDailyFinancialSummaryAction(
   summaryData: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date }
 ): Promise<void> {
-  const entryId = format(summaryData.date, "yyyy-MM-dd");
+  // Normalize date to UTC start of day for ID and Firestore Timestamp
+  const normalizedDate = new Date(Date.UTC(summaryData.date.getFullYear(), summaryData.date.getMonth(), summaryData.date.getDate()));
+  const entryId = format(normalizedDate, "yyyy-MM-dd");
   
   if (!entryId) {
     throw new Error("Date is required to create or update an entry ID.");
@@ -22,74 +97,38 @@ export async function saveDailyFinancialSummaryAction(
     const entryDocRef = doc(db, collectionName, entryId);
     const existingDocSnap = await getDoc(entryDocRef);
 
-    const dataToSave: Partial<DailyFinancialSummary> = {
-      ...summaryData, // Spread incoming data
-      // Ensure date is always a Timestamp, saved as UTC start of day for consistent querying
-      date: Timestamp.fromDate(new Date(Date.UTC(summaryData.date.getFullYear(), summaryData.date.getMonth(), summaryData.date.getDate()))),
-      updatedAt: serverTimestamp() as Timestamp, // Always update updatedAt timestamp
+    const dataToSave: Partial<DailyFinancialSummary> & { date: Timestamp; updatedAt: Timestamp; createdAt?: Timestamp } = {
+      ...summaryData, 
+      date: Timestamp.fromDate(normalizedDate),
+      updatedAt: serverTimestamp() as Timestamp,
     };
 
-    // Fetch total_food_cost for the corresponding date from foodCostEntries
-    let totalFoodCost = null;
-    const foodCostCollectionRef = collection(db, "foodCostEntries");
-    const foodCostQuery = query(foodCostCollectionRef, where("date", "==", Timestamp.fromDate(summaryData.date)));
-    const foodCostSnapshot = await getDocs(foodCostQuery);
-
-    if (!foodCostSnapshot.empty) {
-      // Assuming there's only one food cost entry per day
-      const foodCostData = foodCostSnapshot.docs[0].data();
-      totalFoodCost = foodCostData.total_food_cost;
-    }
-
-    let actualFoodCostPct = null;
-    let foodVariancePct = null;
-
-    if (totalFoodCost !== null && summaryData.food_revenue !== undefined && summaryData.food_revenue !== null && summaryData.food_revenue > 0) {
-      actualFoodCostPct = (totalFoodCost / summaryData.food_revenue) * 100;
-
-      if (summaryData.budget_food_cost_pct !== undefined && summaryData.budget_food_cost_pct !== null && summaryData.budget_food_cost_pct > 0) {
-        foodVariancePct = actualFoodCostPct - summaryData.budget_food_cost_pct;
-      }
-    }
-
-    // Use the fetched and calculated values, falling back to incoming data or existing data if not available
-    dataToSave.actual_food_cost = totalFoodCost ?? summaryData.actual_food_cost ?? existingDocSnap.data()?.actual_food_cost ?? null;
-    dataToSave.actual_food_cost_pct = actualFoodCostPct ?? summaryData.actual_food_cost_pct ?? existingDocSnap.data()?.actual_food_cost_pct ?? null;
-    dataToSave.food_variance_pct = foodVariancePct ?? summaryData.food_variance_pct ?? existingDocSnap.data()?.food_variance_pct ?? null;
-
-    // Also handle beverage cost fields if they are part of the summary data or existing data
-    dataToSave.actual_beverage_cost = summaryData.actual_beverage_cost ?? existingDocSnap.data()?.actual_beverage_cost ?? null;
-    dataToSave.actual_beverage_cost_pct = summaryData.actual_beverage_cost_pct ?? existingDocSnap.data()?.actual_beverage_cost_pct ?? null;
-    dataToSave.beverage_variance_pct = summaryData.beverage_variance_pct ?? existingDocSnap.data()?.beverage_variance_pct ?? null;
+    // Remove fields that should not be directly saved from form or are calculated later
+    delete (dataToSave as any).actual_food_cost;
+    delete (dataToSave as any).actual_food_cost_pct;
+    delete (dataToSave as any).food_variance_pct;
+    delete (dataToSave as any).actual_beverage_cost;
+    delete (dataToSave as any).actual_beverage_cost_pct;
+    delete (dataToSave as any).beverage_variance_pct;
     
- if (existingDocSnap.exists()) {
-      // Update existing document, merge with existing data.
+    if (existingDocSnap.exists()) {
       await setDoc(entryDocRef, dataToSave, { merge: true });
+      console.log(`[saveDFSAction] Updated summary for ${entryId} with form data.`);
     } else {
-      // Create new document.
       dataToSave.createdAt = serverTimestamp() as Timestamp;
-      // Ensure all potentially undefined fields from spec have defaults if not in summaryData
       const defaults: Partial<DailyFinancialSummary> = {
-        food_revenue: 0,
-        budget_food_cost_pct: 0,
-        ent_food: 0,
-        oc_food: 0,
-        other_food_adjustment: 0,
-        beverage_revenue: 0,
-        budget_beverage_cost_pct: 0,
-        ent_beverage: 0,
-        oc_beverage: 0,
-        other_beverage_adjustment: 0,
+        food_revenue: 0, budget_food_cost_pct: 0, ent_food: 0, oc_food: 0, other_food_adjustment: 0,
+        beverage_revenue: 0, budget_beverage_cost_pct: 0, ent_beverage: 0, oc_beverage: 0, other_beverage_adjustment: 0,
         notes: '',
-        actual_food_cost: null,
-        actual_food_cost_pct: null,
-        food_variance_pct: null,
-        actual_beverage_cost: null,
-        actual_beverage_cost_pct: null,
-        beverage_variance_pct: null,
+        actual_food_cost: null, actual_food_cost_pct: null, food_variance_pct: null,
+        actual_beverage_cost: null, actual_beverage_cost_pct: null, beverage_variance_pct: null,
       };
       await setDoc(entryDocRef, { ...defaults, ...dataToSave });
+      console.log(`[saveDFSAction] Created new summary for ${entryId} with form data.`);
     }
+
+    // After saving form data, trigger recalculation based on all food cost entries for this date
+    await recalculateAndSaveFinancialSummary(normalizedDate);
 
     revalidatePath("/dashboard/financial-summary");
     revalidatePath("/dashboard"); 
@@ -132,6 +171,9 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
   try {
     const entryDocRef = doc(db, collectionName, id);
     await deleteDoc(entryDocRef);
+    // Note: If a summary is deleted, related FoodCostEntries are NOT deleted,
+    // but they won't have a summary to link to for calculations.
+    // Consider if deleting a summary should also clear out its calculated values (though it's being deleted anyway).
     revalidatePath("/dashboard/financial-summary");
     revalidatePath("/dashboard");
   } catch (error) {
@@ -139,3 +181,5 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
     throw new Error(`Failed to delete daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
+    

@@ -3,11 +3,11 @@
 
 import { useState, useEffect } from "react";
 import { collection, onSnapshot, orderBy, Timestamp, query as firestoreQuery } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, Eye } from "lucide-react";
 import { format } from "date-fns";
 
 import { db } from "@/lib/firebase";
-import type { DailyFinancialSummary } from "@/types";
+import type { DailyFinancialSummary, FoodCostEntry, FoodCostDetail } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -36,10 +36,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import DailyFinancialSummaryForm from "./DailyFinancialSummaryForm";
+import DailyFinancialSummaryDetailDialog from "./DailyFinancialSummaryDetailDialog"; // New component
 import { useToast } from "@/hooks/use-toast";
 import { deleteDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
+import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions"; // New action
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialSummary => {
@@ -56,6 +57,12 @@ export default function DailyFinancialSummaryListClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSummary, setEditingSummary] = useState<DailyFinancialSummary | null>(null);
+  
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [selectedSummaryForDetail, setSelectedSummaryForDetail] = useState<DailyFinancialSummary | null>(null);
+  const [detailedFoodCosts, setDetailedFoodCosts] = useState<(FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[]>([]);
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -91,6 +98,30 @@ export default function DailyFinancialSummaryListClient() {
     setIsFormOpen(true);
   };
 
+  const handleViewDetails = async (summary: DailyFinancialSummary) => {
+    setSelectedSummaryForDetail(summary);
+    setIsLoadingDetails(true);
+    setIsDetailDialogOpen(true);
+    try {
+      if (summary.date) {
+        const details = await getFoodCostEntriesForDateAction(summary.date instanceof Date ? summary.date : new Date(summary.date));
+        setDetailedFoodCosts(details);
+      } else {
+        setDetailedFoodCosts([]);
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error Fetching Details",
+        description: (error as Error).message || "Could not load detailed food costs.",
+      });
+      setDetailedFoodCosts([]);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
+
   const handleDelete = async (summaryId: string) => {
     try {
       await deleteDailyFinancialSummaryAction(summaryId);
@@ -122,18 +153,10 @@ export default function DailyFinancialSummaryListClient() {
 
   const getVarianceColor = (variance: number | null | undefined) => {
     if (variance == null) return "";
-    if (variance > 1) return "text-destructive"; // Significantly over budget
-    if (variance < -1) return "text-green-600"; // Significantly under budget (good)
-    return ""; // Within acceptable range
+    if (variance > 1) return "text-destructive"; 
+    if (variance < -1) return "text-green-600 dark:text-green-500"; 
+    return ""; 
   }
-
-  const getActualCostColor = (actualCost: number | null | undefined, budgetCost: number | null | undefined) => {
-    if (actualCost == null || budgetCost == null) return "";
-    if (actualCost > budgetCost) return 'text-destructive'; // Over budget (bad)
-    if (actualCost < budgetCost) return 'text-green-600'; // Under budget (good)
-    return ''; // On budget
-  }
-
 
   if (isLoading) {
     return (
@@ -145,15 +168,17 @@ export default function DailyFinancialSummaryListClient() {
           <Skeleton className="h-12 w-full bg-muted/50" />
           {[...Array(3)].map((_, i) => (
             <div key={i} className="grid grid-cols-8 items-center p-4 border-b">
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Date */}
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Food Revenue */}
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Budget Food % */}
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Actual Food Cost */}
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Actual Food % */}
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Food Variance % */}
-              <Skeleton className="h-6 bg-muted col-span-1" /> {/* Bev Revenue (Placeholder) */}
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
+              <Skeleton className="h-6 bg-muted col-span-1" /> 
               <div className="col-span-1 flex justify-end gap-1">
-                 <Skeleton className="h-8 w-8 bg-muted" /> <Skeleton className="h-8 w-8 bg-muted" />
+                 <Skeleton className="h-8 w-8 bg-muted" /> 
+                 <Skeleton className="h-8 w-8 bg-muted" />
+                 <Skeleton className="h-8 w-8 bg-muted" />
               </div>
             </div>
           ))}
@@ -188,32 +213,34 @@ export default function DailyFinancialSummaryListClient() {
                 <TableHead className="font-headline text-right">Actual Food %</TableHead>
                 <TableHead className="font-headline text-right">Food Variance %</TableHead>
                 <TableHead className="font-headline text-right">Bev Revenue</TableHead>
-                {/* Add Bev calculated columns when ready */}
-                <TableHead className="font-headline w-[120px] text-right">Actions</TableHead>
+                <TableHead className="font-headline w-[150px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summaries.map((summary) => (
-                <TableRow key={summary.id}>
-                  <TableCell className="font-code">
+                <TableRow key={summary.id} className="hover:bg-muted/30 cursor-default">
+                  <TableCell className="font-code" onClick={() => handleViewDetails(summary)}>
                     {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}
                   </TableCell>
-                  <TableCell className="text-right font-code">{renderCurrency(summary.food_revenue)}</TableCell>
-                  <TableCell className="text-right font-code">{renderPercentage(summary.budget_food_cost_pct)}</TableCell>
-                  <TableCell className="text-right font-code">{renderCurrency(summary.actual_food_cost)}</TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.actual_food_cost_pct,summary.food_variance_pct))}>
+                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.food_revenue)}</TableCell>
+                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderPercentage(summary.budget_food_cost_pct)}</TableCell>
+                  <TableCell className="text-right font-code font-semibold" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.actual_food_cost)}</TableCell>
+                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null ? summary.actual_food_cost_pct - summary.budget_food_cost_pct : null))} onClick={() => handleViewDetails(summary)}>
                     {renderPercentage(summary.actual_food_cost_pct)}
                   </TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))}>
+                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))} onClick={() => handleViewDetails(summary)}>
                     {summary.food_variance_pct != null && summary.food_variance_pct > 0 ?
                         <TrendingUp className="inline h-4 w-4 mr-1" /> : 
                         (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? 
                             <TrendingDown className="inline h-4 w-4 mr-1" /> : null)}
                     {renderPercentage(summary.food_variance_pct)}
                   </TableCell>
-                  <TableCell className="text-right font-code">{renderCurrency(summary.beverage_revenue)}</TableCell>
+                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.beverage_revenue)}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-2 hover:text-primary">
+                    <Button variant="ghost" size="icon" onClick={() => handleViewDetails(summary)} className="mr-1 hover:text-blue-500">
+                      <Eye className="h-4 w-4" /><span className="sr-only">View Details</span>
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary">
                       <Edit className="h-4 w-4" /><span className="sr-only">Edit</span>
                     </Button>
                     <AlertDialog>
@@ -249,7 +276,7 @@ export default function DailyFinancialSummaryListClient() {
             <DialogTitle className="font-headline text-xl">{editingSummary ? "Edit" : "Add New"} Daily Financial Summary</DialogTitle>
             <DialogDescription>
               {editingSummary ? `Update summary for ${editingSummary.date instanceof Date ? format(editingSummary.date, "PPP") : editingSummary.id}.` : "Enter details for a new daily summary."}
-              {" Calculated fields (actual costs, variances) are updated when Food/Beverage Cost Entries are saved."}
+              {" Calculated fields (actual costs, variances) are updated when Food/Beverage Cost Entries are saved or when this summary is saved."}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-grow overflow-y-auto pr-2 pl-1 py-2">
@@ -262,6 +289,22 @@ export default function DailyFinancialSummaryListClient() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {selectedSummaryForDetail && (
+        <DailyFinancialSummaryDetailDialog
+          isOpen={isDetailDialogOpen}
+          onClose={() => {
+            setIsDetailDialogOpen(false);
+            setSelectedSummaryForDetail(null);
+            setDetailedFoodCosts([]);
+          }}
+          summary={selectedSummaryForDetail}
+          foodCostEntries={detailedFoodCosts}
+          isLoadingDetails={isLoadingDetails}
+        />
+      )}
     </div>
   );
 }
+
+    

@@ -1,0 +1,182 @@
+
+"use client";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { DailyFinancialSummary, FoodCostEntry, FoodCostDetail } from "@/types";
+import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Utensils, DollarSign, Percent, TrendingUp, TrendingDown, Building, ListChecks, Tag } from "lucide-react";
+
+interface DailyFinancialSummaryDetailDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  summary: DailyFinancialSummary | null;
+  foodCostEntries: (FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[];
+  isLoadingDetails: boolean;
+}
+
+const DetailItem: React.FC<{ label: string; value: string | number | null | undefined; icon?: React.ElementType, isCurrency?: boolean, isPercentage?: boolean, className?: string }> = 
+({ label, value, icon: Icon, isCurrency, isPercentage, className }) => {
+  let displayValue: React.ReactNode = value ?? <span className="text-muted-foreground/70">N/A</span>;
+  if (value != null) {
+    if (isCurrency) displayValue = `$${Number(value).toFixed(2)}`;
+    else if (isPercentage) displayValue = `${Number(value).toFixed(2)}%`;
+  }
+  return (
+    <div className={cn("flex items-center justify-between py-2", className)}>
+      <div className="flex items-center">
+        {Icon && <Icon className="h-4 w-4 mr-2 text-muted-foreground" />}
+        <span className="text-sm text-muted-foreground">{label}:</span>
+      </div>
+      <span className="text-sm font-medium text-foreground">{displayValue}</span>
+    </div>
+  );
+};
+
+
+export default function DailyFinancialSummaryDetailDialog({
+  isOpen,
+  onClose,
+  summary,
+  foodCostEntries,
+  isLoadingDetails,
+}: DailyFinancialSummaryDetailDialogProps) {
+  if (!summary) return null;
+
+  const summaryDate = summary.date instanceof Date ? format(summary.date, "PPP") : "N/A";
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl w-full max-h-[90vh] flex flex-col bg-card">
+        <DialogHeader className="pb-4 border-b">
+          <DialogTitle className="font-headline text-2xl flex items-center">
+            <Utensils className="mr-3 h-6 w-6 text-primary" />
+            Financial Summary Details
+          </DialogTitle>
+          <DialogDescription>
+            Detailed breakdown for {summaryDate}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <ScrollArea className="flex-grow p-1 pr-3 -mr-1">
+          <div className="space-y-6 py-4">
+            {/* Summary Section */}
+            <section className="p-4 border rounded-lg shadow-sm bg-background">
+              <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2">Overall Summary</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+                <div>
+                  <DetailItem label="Date" value={summaryDate} />
+                  <DetailItem label="Total Food Revenue" value={summary.food_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Food Cost %" value={summary.budget_food_cost_pct} isPercentage icon={Percent} />
+                  <DetailItem label="Actual Food Cost" value={summary.actual_food_cost} isCurrency icon={DollarSign} className="font-bold" />
+                   <DetailItem 
+                    label="Actual Food Cost %" 
+                    value={summary.actual_food_cost_pct} 
+                    isPercentage 
+                    icon={summary.actual_food_cost_pct && summary.budget_food_cost_pct && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? TrendingUp : TrendingDown} 
+                    className={cn("font-bold", summary.actual_food_cost_pct && summary.budget_food_cost_pct && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? 'text-destructive' : 'text-green-600')}
+                  />
+                  <DetailItem 
+                    label="Food Variance %" 
+                    value={summary.food_variance_pct} 
+                    isPercentage 
+                    icon={summary.food_variance_pct && summary.food_variance_pct > 0 ? TrendingUp : TrendingDown} 
+                    className={cn("font-bold", summary.food_variance_pct && summary.food_variance_pct > 0 ? 'text-destructive' : (summary.food_variance_pct && summary.food_variance_pct < 0 ? 'text-green-600' : ''))}
+                  />
+                </div>
+                <div>
+                  <DetailItem label="Entertainment Food" value={summary.ent_food} isCurrency />
+                  <DetailItem label="OC Food" value={summary.oc_food} isCurrency />
+                  <DetailItem label="Other Food Adjustments" value={summary.other_food_adjustment} isCurrency />
+                  <Separator className="my-3" />
+                  <DetailItem label="Total Beverage Revenue" value={summary.beverage_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Beverage Cost %" value={summary.budget_beverage_cost_pct} isPercentage icon={Percent}/>
+                  {/* Placeholder for actual beverage costs - add when implemented */}
+                  <DetailItem label="Actual Beverage Cost" value={summary.actual_beverage_cost} isCurrency className="text-muted-foreground"/>
+                  <DetailItem label="Actual Beverage Cost %" value={summary.actual_beverage_cost_pct} isPercentage className="text-muted-foreground"/>
+                </div>
+              </div>
+              {summary.notes && (
+                <>
+                  <Separator className="my-4" />
+                  <h4 className="text-sm font-medium text-muted-foreground mb-1">Notes:</h4>
+                  <p className="text-sm text-foreground bg-muted/50 p-3 rounded-md">{summary.notes}</p>
+                </>
+              )}
+            </section>
+
+            {/* Detailed Food Cost Entries Section */}
+            <section className="p-4 border rounded-lg shadow-sm bg-background">
+              <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2">Detailed Food Cost Entries</h3>
+              {isLoadingDetails ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : foodCostEntries.length > 0 ? (
+                foodCostEntries.map((entry, index) => (
+                  <div key={entry.id} className="mb-6 last:mb-0 p-3 border rounded-md bg-card shadow-sm">
+                    <div className="flex justify-between items-center mb-2">
+                        <h4 className="text-md font-semibold text-foreground flex items-center">
+                            <Building className="h-5 w-5 mr-2 text-muted-foreground" />
+                            Outlet: {entry.outletName || entry.outlet_id}
+                        </h4>
+                        <Badge variant="secondary">Total: ${entry.total_food_cost.toFixed(2)}</Badge>
+                    </div>
+                    {entry.details && entry.details.length > 0 ? (
+                      <Table size="sm">
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[40%]">Category</TableHead>
+                            <TableHead className="w-[40%]">Description</TableHead>
+                            <TableHead className="text-right w-[20%]">Cost</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {entry.details.map((detail) => (
+                            <TableRow key={detail.id}>
+                              <TableCell className="text-xs flex items-center">
+                                <ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />
+                                {detail.categoryName || detail.category_id}
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell>
+                              <TableCell className="text-right text-xs font-code">${detail.cost.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-3">No specific items recorded for this outlet entry.</p>
+                    )}
+                    {index < foodCostEntries.length - 1 && <Separator className="mt-4" />}
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No detailed food cost entries found for this date.</p>
+              )}
+            </section>
+          </div>
+        </ScrollArea>
+
+        <DialogFooter className="pt-4 border-t mt-auto">
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+    
