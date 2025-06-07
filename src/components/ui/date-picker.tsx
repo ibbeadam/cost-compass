@@ -38,22 +38,10 @@ export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
           {date ? format(date, "yyyy-MM-dd") : <span>Pick a date</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent 
-        className="w-auto p-0 bg-card" 
+      <PopoverContent
+        className="w-auto p-0 bg-card"
         align="start"
-        onPointerDownOutside={(e) => {
-            // Prevent Dialog from closing Popover:
-            // Check if the event target is inside another Radix Primitive (like a Select in the Dialog)
-            // This is a common pattern for nested Radix UI components.
-            if ((e.target as HTMLElement)?.closest('[data-radix-popper-content-wrapper]')) {
-                e.preventDefault();
-            }
-        }}
-        // onInteractOutside={(e) => { // Another option to explore if onPointerDownOutside is not enough
-        //     if ((e.target as HTMLElement)?.closest('[data-radix-popper-content-wrapper]')) {
-        //         e.preventDefault();
-        //     }
-        // }}
+        onPointerDownOutside={(e) => e.preventDefault()}
       >
         <Calendar
           mode="single"
