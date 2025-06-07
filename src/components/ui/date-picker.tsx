@@ -18,7 +18,7 @@ interface DatePickerProps {
   date: Date | undefined;
   setDate: (date: Date | undefined) => void;
   className?: string;
-  id?: string; // Added id prop
+  id?: string; 
 }
 
 export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
@@ -26,7 +26,7 @@ export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          id={id} // Use the id on the button
+          id={id} 
           variant={"outline"}
           className={cn(
             "w-full sm:w-[280px] justify-start text-left font-normal text-base md:text-sm",
@@ -41,7 +41,7 @@ export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
       <PopoverContent
         className="w-auto p-0 bg-card"
         align="start"
-        onPointerDownOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()} // Key fix for Dialog/Popover interaction
       >
         <Calendar
           mode="single"

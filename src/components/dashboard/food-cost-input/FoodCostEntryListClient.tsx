@@ -1,9 +1,10 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { collection, onSnapshot, orderBy, query as firestoreQuery, Timestamp } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle } from "lucide-react";
-import { format, isValid, addDays } from "date-fns"; // Added addDays
+import { format, isValid } from "date-fns";
 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export default function FoodCostEntryListClient() {
 
   useEffect(() => {
     if (isClient) {
-      console.log("[FoodCostEntryListClient] dateForNewEntry changed to:", dateForNewEntry);
+      console.log("[FoodCostEntryListClient] dateForNewEntry state changed to:", dateForNewEntry);
     }
   }, [dateForNewEntry, isClient]);
 
@@ -214,24 +215,6 @@ export default function FoodCostEntryListClient() {
     }
   };
 
-  const handleDateSelectForNewEntry = (newDate: Date | undefined) => {
-    console.log("[FoodCostEntryListClient] DatePicker (new entry) - onSelect called with:", newDate);
-    if (newDate && isValid(newDate)) {
-      console.log("[FoodCostEntryListClient] DatePicker (new entry) - Setting dateForNewEntry to:", newDate);
-      setDateForNewEntry(newDate);
-    } else {
-      console.warn("[FoodCostEntryListClient] DatePicker (new entry) - Received invalid or undefined date:", newDate);
-    }
-  };
-
-  // Test function, remove after debugging
-  const testSetDate = () => {
-    const newTestDate = addDays(dateForNewEntry, 1);
-    console.log("[FoodCostEntryListClient] Test button clicked, attempting to set date to:", newTestDate);
-    setDateForNewEntry(newTestDate);
-  };
-
-
   if (error) {
     return (
       <div className="text-center py-10 text-destructive-foreground bg-destructive/20 rounded-lg border border-destructive">
@@ -326,7 +309,7 @@ export default function FoodCostEntryListClient() {
       )}
 
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingEntry(null); }}>
-        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card"> {/* Removed overflow-hidden */}
+        <DialogContent className="sm:max-w-xl md:max-w-2xl lg:max-w-3xl max-h-[90vh] flex flex-col bg-card">
           <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
@@ -336,18 +319,17 @@ export default function FoodCostEntryListClient() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-grow min-h-0 overflow-y-auto"> {/* Content wrapper for scrolling */}
+          <div className="flex-grow min-h-0 overflow-y-auto">
             {!editingEntry && isClient && (outlets.length > 0 || isLoadingOutlets) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
                 <div>
                   <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
                   <DatePicker 
                     date={dateForNewEntry} 
-                    setDate={handleDateSelectForNewEntry}
+                    setDate={setDateForNewEntry} // Pass state setter directly
                     id="new-entry-date"
                     className="w-full"
                   />
-                  {/* <Button onClick={testSetDate} variant="outline" size="sm" className="mt-2">Increment Date (Test)</Button> */}
                 </div>
                 <div>
                   <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
@@ -374,7 +356,7 @@ export default function FoodCostEntryListClient() {
               </div>
             )}
 
-            <div className="p-6"> {/* Padding for the form itself */}
+            <div className="p-6">
               {isClient && (isLoadingOutlets || isLoadingCategories) ? (
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
@@ -402,4 +384,3 @@ export default function FoodCostEntryListClient() {
     </>
  );
 }
-
