@@ -17,7 +17,8 @@ import { format } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Utensils, DollarSign, Percent, TrendingUp, TrendingDown, Building, ListChecks, Tag } from "lucide-react";
+import { Utensils, DollarSign, Percent, TrendingUp, TrendingDown, Building, ListChecks } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface DailyFinancialSummaryDetailDialogProps {
   isOpen: boolean;
@@ -60,7 +61,7 @@ export default function DailyFinancialSummaryDetailDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl w-full max-h-[90vh] flex flex-col bg-card">
-        <DialogHeader className="pb-4 border-b">
+        <DialogHeader className="pb-4 border-b flex-shrink-0">
           <DialogTitle className="font-headline text-2xl flex items-center">
             <Utensils className="mr-3 h-6 w-6 text-primary" />
             Financial Summary Details
@@ -70,8 +71,8 @@ export default function DailyFinancialSummaryDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-grow p-1 pr-3 -mr-1">
-          <div className="space-y-6 py-4">
+        <ScrollArea className="flex-grow">
+          <div className="space-y-6 p-4 md:p-6">
             {/* Summary Section */}
             <section className="p-4 border rounded-lg shadow-sm bg-background">
               <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2">Overall Summary</h3>
@@ -171,12 +172,11 @@ export default function DailyFinancialSummaryDetailDialog({
           </div>
         </ScrollArea>
 
-        <DialogFooter className="pt-4 border-t mt-auto">
+        <DialogFooter className="pt-4 border-t flex-shrink-0">
           <Button variant="outline" onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
     
