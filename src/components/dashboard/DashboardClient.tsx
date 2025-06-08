@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, TrendingUp, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChart, ListChecks } from "lucide-react";
-import { addDays, format, subDays } from "date-fns";
+import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChart, ListChecks } from "lucide-react";
+import { subDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { collection, getDocs } from "firebase/firestore";
 
@@ -12,11 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { outlets as mockOutlets, generateDashboardData } from "@/lib/mockData"; // Updated mockData import
+import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData"; // Updated mockData import
 import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBar, RadialBarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend as RechartsLegend, ResponsiveContainer, Cell } from "recharts";
+import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBar, RadialBarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend as RechartsLegend, ResponsiveContainer, Cell, } from "recharts";
 
 
 const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, percentageChange, icon: Icon, iconColor = "text-primary", isLoading }) => {
@@ -122,8 +122,12 @@ export default function DashboardClient() {
   }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets]);
 
   const summaryStats: SummaryStat[] = useMemo(() => {
-    if (!dashboardData) return [];
+    if (!dashboardData?.summaryStats) return [];
     const { summaryStats: stats } = dashboardData;
+    console.log("summaryStats values:", {
+      totalFoodRevenue: stats.totalFoodRevenue, totalBeverageRevenue: stats.totalBeverageRevenue,
+      avgFoodCostPct: stats.avgFoodCostPct, avgBeverageCostPct: stats.avgBeverageCostPct
+    });
     return [
       { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue.toLocaleString()}`, icon: Utensils, percentageChange: getRandomFloat(-5,10) },
       { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue.toLocaleString()}`, icon: GlassWater, percentageChange: getRandomFloat(-5,10) },
@@ -168,12 +172,20 @@ export default function DashboardClient() {
 
       {/* KPI Cards Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {summaryStats.map((stat, index) => (
-          <StatCard key={index} {...stat} isLoading={isLoadingData} />
-        ))}
+        {isLoadingData ? (
+          // Render Skeleton cards when loading
+          <>
+            {[...Array(4)].map((_, index) => (
+              <StatCard key={index} isLoading={true} title="" value="" />
+            ))}
+          </>
+        ) : (
+          // Render actual StatCards when data is loaded
+          summaryStats.map((stat, index) => (<StatCard key={index} {...stat} />))
+        )}
       </div>
 
-      {/* Charts Grid */}
+      {/* Charts Grid (Placeholder for now) */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* Overview Chart Card (Main Bar Chart) */}
         <Card className="lg:col-span-2 shadow-md bg-card">
@@ -207,8 +219,8 @@ export default function DashboardClient() {
           <CardContent className="h-[400px] flex items-center justify-center">
             {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ResponsiveContainer width="100%" height="100%">
-                <RechartsPieChart>
-                  <RechartsPie
+                <RechartsPie>
+                  <Pie
                     data={dashboardData?.costDistributionChartData}
                     cx="50%"
                     cy="50%"
@@ -232,10 +244,10 @@ export default function DashboardClient() {
                     {dashboardData?.costDistributionChartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={costDistributionChartColors[index % costDistributionChartColors.length]} />
                     ))}
-                  </RechartsPie>
+                  </Pie>
                   <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}/>
                   <RechartsLegend wrapperStyle={{fontSize: "0.8rem"}}/>
-                </RechartsPieChart>
+                </RechartsPie>
               </ResponsiveContainer>
             )}
           </CardContent>

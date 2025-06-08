@@ -28,7 +28,7 @@ const beverageItems: Omit<TransferItem, 'id' | 'quantity' | 'totalCost'>[] = [
   { itemName: 'Milk (liter)', category: 'Beverage', unitCost: 1.2, itemId: 'B4' },
 ];
 
-const getRandomFloat = (min: number, max: number, decimals: number = 2) => {
+export const getRandomFloat = (min: number, max: number, decimals: number = 2) => {
   return parseFloat((Math.random() * (max - min) + min).toFixed(decimals));
 };
 
@@ -246,3 +246,4 @@ export const generateDashboardData = (
     outletPerformanceData,
   };
 };
+
