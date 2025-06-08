@@ -1,5 +1,7 @@
-import { DailyCostData, HistoricalDataPoint, Outlet, TransferItem } from '@/types';
-import { format, subDays } from 'date-fns';
+
+import type { DailyCostData, HistoricalDataPoint, Outlet, TransferItem, DashboardReportData, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from '@/types';
+import { format, subDays, addDays, eachDayOfInterval, differenceInDays } from 'date-fns';
+import type { DateRange } from 'react-day-picker';
 
 export const outlets: Outlet[] = [
   { id: '1', name: 'Outlet A - Downtown' },
@@ -36,19 +38,17 @@ const getRandomInt = (min: number, max: number) => {
 
 export const generateDailyCosts = (date: Date, outlet: Outlet): DailyCostData => {
   const foodRevenue = getRandomFloat(500, 2000);
-  let foodCost = foodRevenue * getRandomFloat(0.25, 0.45); // Food cost % between 25-45%
+  let foodCost = foodRevenue * getRandomFloat(0.25, 0.45); 
   const beverageRevenue = getRandomFloat(300, 1500);
-  let beverageCost = beverageRevenue * getRandomFloat(0.20, 0.40); // Beverage cost % between 20-40%
+  let beverageCost = beverageRevenue * getRandomFloat(0.20, 0.40); 
 
-  // Simulate occasional anomalies for specific outlets/dates for testing AI
   const dateString = format(date, 'yyyy-MM-dd');
-  if (outlet.id === '2' && Math.random() < 0.3) { // Outlet B has higher chance of food cost anomaly
+  if (outlet.id === '2' && Math.random() < 0.3) { 
      foodCost = foodRevenue * getRandomFloat(0.50, 0.65);
   }
-  if (outlet.id === '4' && Math.random() < 0.3) { // Outlet D has higher chance of beverage cost anomaly
+  if (outlet.id === '4' && Math.random() < 0.3) { 
      beverageCost = beverageRevenue * getRandomFloat(0.45, 0.60);
   }
-
 
   return {
     id: `${outlet.id}-${dateString}`,
@@ -121,4 +121,128 @@ export const getHistoricalPercentagesForOutlet = (outletId: string, endDate: Dat
     beverage.push(dailyData.beverageCostPct);
   }
   return { food: food.reverse(), beverage: beverage.reverse() };
+};
+
+
+// --- New Mock Data Generation for Dashboard ---
+export const generateDashboardData = (
+  dateRange: DateRange | undefined,
+  selectedOutletId: string | undefined,
+  allOutlets: Outlet[]
+): DashboardReportData => {
+  const today = new Date();
+  const fromDate = dateRange?.from || subDays(today, 30);
+  const toDate = dateRange?.to || today;
+  
+  const daysInInterval = eachDayOfInterval({ start: fromDate, end: toDate });
+  const numDays = differenceInDays(toDate, fromDate) + 1;
+
+  let dailyRecords: DailyCostData[] = [];
+  daysInInterval.forEach(day => {
+    if (selectedOutletId) {
+      const outlet = allOutlets.find(o => o.id === selectedOutletId);
+      if (outlet) {
+        dailyRecords.push(generateDailyCosts(day, outlet));
+      }
+    } else {
+      allOutlets.forEach(outlet => {
+        dailyRecords.push(generateDailyCosts(day, outlet));
+      });
+    }
+  });
+
+  // Summary Stats
+  const totalFoodRevenue = dailyRecords.reduce((sum, r) => sum + r.foodRevenue, 0);
+  const totalFoodCost = dailyRecords.reduce((sum, r) => sum + r.foodCost, 0);
+  const totalBeverageRevenue = dailyRecords.reduce((sum, r) => sum + r.beverageRevenue, 0);
+  const totalBeverageCost = dailyRecords.reduce((sum, r) => sum + r.beverageCost, 0);
+  
+  const avgFoodCostPct = totalFoodRevenue > 0 ? (totalFoodCost / totalFoodRevenue) * 100 : 0;
+  const avgBeverageCostPct = totalBeverageRevenue > 0 ? (totalBeverageCost / totalBeverageRevenue) * 100 : 0;
+
+  // Overview Chart Data (Daily Cost % for selected outlet or all)
+  let overviewChartData: ChartDataPoint[] = [];
+  if (selectedOutletId) {
+    overviewChartData = daysInInterval.map(day => {
+      const record = dailyRecords.find(r => r.date === format(day, 'yyyy-MM-dd') && r.outletId === selectedOutletId);
+      return {
+        date: format(day, 'MMM dd'),
+        foodCostPct: record?.foodCostPct || 0,
+        beverageCostPct: record?.beverageCostPct || 0,
+      };
+    });
+  } else { // Aggregate for all outlets per day
+    overviewChartData = daysInInterval.map(day => {
+      const recordsForDay = dailyRecords.filter(r => r.date === format(day, 'yyyy-MM-dd'));
+      const dayFoodRevenue = recordsForDay.reduce((sum, r) => sum + r.foodRevenue, 0);
+      const dayFoodCost = recordsForDay.reduce((sum, r) => sum + r.foodCost, 0);
+      const dayBevRevenue = recordsForDay.reduce((sum, r) => sum + r.beverageRevenue, 0);
+      const dayBevCost = recordsForDay.reduce((sum, r) => sum + r.beverageCost, 0);
+      return {
+        date: format(day, 'MMM dd'),
+        foodCostPct: dayFoodRevenue > 0 ? (dayFoodCost / dayFoodRevenue) * 100 : 0,
+        beverageCostPct: dayBevRevenue > 0 ? (dayBevCost / dayBevRevenue) * 100 : 0,
+      };
+    });
+  }
+
+
+  // Cost Trends Chart Data (Line chart for a single selected outlet's historical performance)
+  let costTrendsChartData: ChartDataPoint[] = [];
+  if (selectedOutletId) {
+    costTrendsChartData = daysInInterval.map(day => {
+      const record = dailyRecords.find(r => r.date === format(day, 'yyyy-MM-dd') && r.outletId === selectedOutletId);
+      return {
+        date: format(day, 'MMM dd'),
+        foodCostPct: record?.foodCostPct || 0,
+        beverageCostPct: record?.beverageCostPct || 0,
+      };
+    });
+  }
+
+
+  // Cost Distribution Chart Data (Donut chart - by outlet)
+  const costByOutlet: Record<string, number> = {};
+  dailyRecords.forEach(r => {
+    costByOutlet[r.outletName] = (costByOutlet[r.outletName] || 0) + r.foodCost + r.beverageCost;
+  });
+  const costDistributionChartData: DonutChartDataPoint[] = Object.entries(costByOutlet)
+    .map(([name, value], index) => ({
+      name: name.split(' - ')[0], // Shorten name
+      value: parseFloat(value.toFixed(2)),
+      fill: `hsl(var(--chart-${(index % 5) + 1}))`,
+    }))
+    .sort((a,b) => b.value - a.value)
+    .slice(0,5); // Top 5
+
+  // Outlet Performance Data
+  const outletPerformanceData: OutletPerformanceDataPoint[] = allOutlets.map(outlet => {
+    const outletRecords = dailyRecords.filter(r => r.outletId === outlet.id);
+    const outletFoodRevenue = outletRecords.reduce((sum, r) => sum + r.foodRevenue, 0);
+    const outletFoodCost = outletRecords.reduce((sum, r) => sum + r.foodCost, 0);
+    const outletFoodCostPct = outletFoodRevenue > 0 ? (outletFoodCost / outletFoodRevenue) * 100 : 0;
+    return {
+      id: outlet.id,
+      outletName: outlet.name.split(' - ')[0], // Shorten name
+      metricName: "Food Cost %",
+      value: `${outletFoodCostPct.toFixed(1)}%`,
+      metricValue: outletFoodCostPct, 
+    };
+  }).sort((a,b) => b.metricValue - a.metricValue).slice(0,3).map(d => ({...d, trend: Math.random() > 0.5 ? 'up' : 'down'}));
+
+
+  return {
+    summaryStats: {
+      totalFoodRevenue: parseFloat(totalFoodRevenue.toFixed(2)),
+      totalBeverageRevenue: parseFloat(totalBeverageRevenue.toFixed(2)),
+      avgFoodCostPct: parseFloat(avgFoodCostPct.toFixed(2)),
+      avgBeverageCostPct: parseFloat(avgBeverageCostPct.toFixed(2)),
+      totalOrders: getRandomInt(numDays * 50, numDays * 200),
+      totalCustomers: getRandomInt(numDays * 100, numDays * 500),
+    },
+    overviewChartData,
+    costTrendsChartData: costTrendsChartData.length > 0 ? costTrendsChartData : overviewChartData, // Fallback for line chart if no single outlet
+    costDistributionChartData,
+    outletPerformanceData,
+  };
 };

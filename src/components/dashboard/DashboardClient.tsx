@@ -1,301 +1,155 @@
 
-// @ts-nocheck
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { format } from "date-fns";
-import { Download, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { DollarSign, TrendingUp, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChart, ListChecks } from "lucide-react";
+import { addDays, format, subDays } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { collection, getDocs } from "firebase/firestore";
 
-import { DatePicker } from "@/components/ui/date-picker";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { DailySummaryTable } from "./DailySummaryTable";
-import { DrillDownModal } from "./DrillDownModal";
-import { CostChartToggle } from "./CostChartToggle";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-
 import { db } from "@/lib/firebase";
-import { outlets as mockOutlets, generateDailyCosts, generateTransferItems, generateHistoricalData, getHistoricalPercentagesForOutlet } from "@/lib/mockData";
-import type { DailyCostData, TransferItem, HistoricalDataPoint, CostFluctuationInput, Outlet } from "@/types";
-import { detectCostFluctuation } from '@/ai/flows/cost-fluctuation-detection';
+import { outlets as mockOutlets, generateDashboardData } from "@/lib/mockData"; // Updated mockData import
+import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBar, RadialBarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend as RechartsLegend, ResponsiveContainer, Cell } from "recharts";
+
+
+const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, percentageChange, icon: Icon, iconColor = "text-primary", isLoading }) => {
+  if (isLoading) {
+    return (
+      <Card className="shadow-md bg-card">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground"><Skeleton className="h-5 w-24 bg-muted" /></CardTitle>
+          <Skeleton className="h-6 w-6 rounded-sm bg-muted" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-8 w-32 mb-1 bg-muted" />
+          <Skeleton className="h-4 w-20 bg-muted" />
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card className="shadow-md bg-card">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <Icon className={`h-5 w-5 ${iconColor}`} />
+      </CardHeader>
+      <CardContent>
+        <div className="text-2xl font-bold font-headline">{value}</div>
+        {percentageChange !== undefined && (
+          <p className={`text-xs ${percentageChange >= 0 ? "text-green-600" : "text-destructive"}`}>
+            {percentageChange >= 0 ? "+" : ""}{percentageChange.toFixed(2)}% from last period
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const overviewChartConfig = {
+  foodCostPct: { label: "Food Cost %", color: "hsl(var(--chart-1))" },
+  beverageCostPct: { label: "Bev Cost %", color: "hsl(var(--chart-2))" },
+} satisfies ChartConfig;
+
+const costDistributionChartColors = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+];
+
 
 export default function DashboardClient() {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 29),
+    to: new Date(),
+  });
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(undefined);
+  const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>("all"); // Default to "all"
 
-  const [dailySummaryData, setDailySummaryData] = useState<DailyCostData[]>([]);
-  const [transferItems, setTransferItems] = useState<TransferItem[] | null>(null);
-  const [historicalData, setHistoricalData] = useState<HistoricalDataPoint[]>([]);
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedRowData, setSelectedRowData] = useState<DailyCostData | null>(null);
-
+  const [dashboardData, setDashboardData] = useState<DashboardReportData | null>(null);
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   const { toast } = useToast();
-
-  // Set initial date on client-side to avoid hydration mismatch
-  useEffect(() => {
-    setSelectedDate(new Date());
-  }, []);
 
   useEffect(() => {
     const fetchFirestoreOutlets = async () => {
       setIsFetchingOutlets(true);
       try {
-        if (!db) {
-          throw new Error("Firestore database instance is not available.");
-        }
         const outletsCol = collection(db, 'outlets');
         const outletsSnapshot = await getDocs(outletsCol);
         const fetchedOutlets = outletsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Outlet));
-
+        
         if (fetchedOutlets.length > 0) {
-          setAllOutlets(fetchedOutlets);
-          if (!selectedOutletId) {
-            setSelectedOutletId(fetchedOutlets[0].id);
-          }
+          setAllOutlets([{ id: "all", name: "All Outlets" }, ...fetchedOutlets]);
         } else {
-          toast({
-            title: "No outlets found in database",
-            description: "Using sample outlet data. Please add outlets to your 'outlets' collection in Firestore.",
-            duration: 7000,
-          });
-          setAllOutlets(mockOutlets);
-           if (!selectedOutletId && mockOutlets.length > 0) {
-            setSelectedOutletId(mockOutlets[0].id);
-          }
+          toast({ title: "No outlets found", description: "Using sample outlet data." });
+          setAllOutlets([{ id: "all", name: "All Outlets" }, ...mockOutlets]);
         }
       } catch (error) {
-        console.error("Error fetching outlets from Firestore:", error);
-        toast({
-          variant: "destructive",
-          title: "Error fetching outlets",
-          description: `Could not load outlets from database. Using sample data. ${error.message}`,
-          duration: 7000,
-        });
-        setAllOutlets(mockOutlets);
-        if (!selectedOutletId && mockOutlets.length > 0) {
-          setSelectedOutletId(mockOutlets[0].id);
-        }
+        console.error("Error fetching outlets:", error);
+        toast({ variant: "destructive", title: "Error fetching outlets", description: (error as Error).message });
+        setAllOutlets([{ id: "all", name: "All Outlets" }, ...mockOutlets]);
       }
       setIsFetchingOutlets(false);
     };
-
     fetchFirestoreOutlets();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toast]);
 
   useEffect(() => {
-    const loadDashboardData = async () => {
-      if (!selectedDate || isFetchingOutlets || allOutlets.length === 0) {
-        if(!isFetchingOutlets && allOutlets.length === 0){
-            setIsLoadingData(false);
-        }
-        return;
-      }
+    const loadDashboardData = () => {
+      if (isFetchingOutlets) return; // Wait for outlets to be fetched
+      
       setIsLoadingData(true);
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      const summary = allOutlets.map(outlet => generateDailyCosts(selectedDate, outlet));
-      setDailySummaryData(summary);
-
-      const currentSelectedOutletExists = allOutlets.some(o => o.id === selectedOutletId);
-      let targetOutletId = selectedOutletId;
-
-      if (!targetOutletId || !currentSelectedOutletExists) {
-        targetOutletId = allOutlets[0]?.id;
-        if (targetOutletId && targetOutletId !== selectedOutletId) {
-            setSelectedOutletId(targetOutletId);
-        }
-      }
-
-      if (targetOutletId) {
-        const history = generateHistoricalData(targetOutletId, selectedDate, 30);
-        setHistoricalData(history);
-      } else {
-        setHistoricalData([]);
-      }
-      setIsLoadingData(false);
+      // Simulate API call
+      setTimeout(() => {
+        const outletIdToFilter = selectedOutletId === "all" ? undefined : selectedOutletId;
+        const data = generateDashboardData(dateRange, outletIdToFilter, allOutlets.filter(o => o.id !== "all"));
+        setDashboardData(data);
+        setIsLoadingData(false);
+      }, 500);
     };
 
     loadDashboardData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, allOutlets, selectedOutletId, isFetchingOutlets]);
+  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets]);
 
-
-  useEffect(() => {
-    const runAnomalyDetectionLogic = async () => {
-      if (isLoadingData || isAiProcessing || dailySummaryData.length === 0 || !selectedDate) {
-        return;
-      }
-
-      const needsProcessing = dailySummaryData.some(item => item.isAnomalous === undefined);
-      if (!needsProcessing) {
-        return;
-      }
-
-      setIsAiProcessing(true);
-      const processingDataSnapshot = [...dailySummaryData];
-      const results = [];
-      let anomaliesFoundThisRun = 0;
-
-      for (let i = 0; i < processingDataSnapshot.length; i++) {
-        const item = processingDataSnapshot[i];
-
-        if (item.isAnomalous !== undefined) {
-          results.push(item);
-          if (item.isAnomalous) anomaliesFoundThisRun++;
-          continue;
-        }
-
-        const currentDate = selectedDate ? new Date(selectedDate) : new Date();
-        const historicalPcts = getHistoricalPercentagesForOutlet(item.outletId, currentDate, 30);
-
-        const aiInput: CostFluctuationInput = {
-          outlet: item.outletName,
-          date: item.date,
-          foodCostPercentage: item.foodCostPct,
-          beverageCostPercentage: item.beverageCostPct,
-          historicalFoodCostPercentages: historicalPcts.food,
-          historicalBeverageCostPercentages: historicalPcts.beverage,
-        };
-
-        try {
-          const result = await detectCostFluctuation(aiInput);
-          const updatedItem = { ...item, isAnomalous: result.isAnomalous, anomalyExplanation: result.explanation };
-          results.push(updatedItem);
-
-          if (result.isAnomalous) {
-            anomaliesFoundThisRun++;
-            toast({
-              variant: "destructive",
-              title: ( <div className="flex items-center"> <AlertTriangle className="mr-2 h-5 w-5" /> Anomaly Detected! </div> ),
-              description: `${item.outletName}: ${result.explanation}`,
-              duration: 7000,
-            });
-          }
-        } catch (error) {
-          console.error("Error detecting cost fluctuation for", item.outletName, error);
-          results.push({ ...item, isAnomalous: false, anomalyExplanation: "AI analysis failed." });
-          
-          let specificErrorMessage = "Please try again later.";
-          if (error.message.includes("429")) {
-            specificErrorMessage = "Rate limit may have been exceeded. Please try again later.";
-          } else if (error.message.includes("503") || error.message.toLowerCase().includes("service unavailable")) {
-            specificErrorMessage = "The AI model is temporarily overloaded. Please try again in a few moments.";
-          }
-
-          toast({
-            variant: "destructive",
-            title: "AI Analysis Error",
-            description: `Could not analyze ${item.outletName}. ${specificErrorMessage}`,
-            duration: 7000,
-          });
-        }
-
-        if (i < processingDataSnapshot.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 4500));
-        }
-      }
-
-      setDailySummaryData(results);
-      setIsAiProcessing(false);
-
-      if (processingDataSnapshot.length > 0 && selectedDate) {
-        const successfullyProcessedCount = results.filter(r => r.anomalyExplanation !== "AI analysis failed.").length;
-        if (successfullyProcessedCount < results.length && successfullyProcessedCount > 0) {
-            toast({
-                title: "AI Analysis Partially Complete",
-                description: `${anomaliesFoundThisRun} anomalies found. Some items could not be analyzed.`,
-                duration: 5000,
-            });
-        } else if (successfullyProcessedCount === 0 && results.length > 0) {
-             toast({
-                variant: "destructive",
-                title: "AI Analysis Failed",
-                description: `Could not analyze cost data for ${format(selectedDate, "PPP")}.`,
-                duration: 5000,
-            });
-        } else if (results.length > 0) {
-            toast({
-                title: "AI Analysis Complete",
-                description: anomaliesFoundThisRun > 0 ? `${anomaliesFoundThisRun} potential cost anomalies identified for ${format(selectedDate, "PPP")}.` : `No significant cost anomalies detected for ${format(selectedDate, "PPP")}.`,
-                duration: 5000,
-            });
-        }
-      }
-    };
-
-    runAnomalyDetectionLogic();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoadingData, dailySummaryData, selectedDate, toast, isAiProcessing]);
-
-
-  const handleRowClick = async (rowData: DailyCostData) => {
-    setSelectedRowData(rowData);
-    await new Promise(resolve => setTimeout(resolve, 150));
-    if(selectedDate) {
-        const items = generateTransferItems(selectedDate, rowData.outletId);
-        setTransferItems(items);
-    }
-    setIsModalOpen(true);
-  };
-
-  const handleExport = () => {
-    if (dailySummaryData.length === 0) {
-      toast({ title: "No data to export", description: "Please select a date with available data."});
-      return;
-    }
-    const headers = ["Date", "Outlet", "Food Revenue", "Food Cost", "Food Cost %", "Beverage Revenue", "Beverage Cost", "Beverage Cost %", "Is Anomalous", "Anomaly Explanation"];
-    const rows = dailySummaryData.map(item => [
-      item.date,
-      `"${item.outletName.replace(/"/g, '""')}"`,
-      item.foodRevenue,
-      item.foodCost,
-      item.foodCostPct,
-      item.beverageRevenue,
-      item.beverageCost,
-      item.beverageCostPct,
-      item.isAnomalous ? "Yes" : "No",
-      `"${(item.anomalyExplanation || '').replace(/"/g, '""')}"`
-    ]);
-    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `cost_summary_${selectedDate ? format(selectedDate, 'yyyy-MM-dd') : 'export'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    toast({ title: "Export Successful", description: "Data exported as CSV."});
-  };
-
-  const currentSelectedOutletForChart = useMemo(() => allOutlets.find(o => o.id === selectedOutletId), [selectedOutletId, allOutlets]);
+  const summaryStats: SummaryStat[] = useMemo(() => {
+    if (!dashboardData) return [];
+    const { summaryStats: stats } = dashboardData;
+    return [
+      { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue.toLocaleString()}`, icon: Utensils, percentageChange: getRandomFloat(-5,10) },
+      { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue.toLocaleString()}`, icon: GlassWater, percentageChange: getRandomFloat(-5,10) },
+      { title: "Avg. Food Cost %", value: `${stats.avgFoodCostPct.toFixed(1)}%`, icon: Percent, iconColor: "text-green-500", percentageChange: getRandomFloat(-2,2) },
+      { title: "Avg. Beverage Cost %", value: `${stats.avgBeverageCostPct.toFixed(1)}%`, icon: Percent, iconColor: "text-orange-500", percentageChange: getRandomFloat(-2,2) },
+    ];
+  }, [dashboardData]);
 
 
   return (
-    <div className="flex flex-col flex-grow w-full">
-      <Card className="mb-6 shadow-lg bg-card w-full">
-        <CardContent className="p-4 sm:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+    <div className="flex flex-col flex-grow w-full space-y-6">
+      {/* Filters Row */}
+      <Card className="shadow-sm bg-card">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
-              <label htmlFor="date-picker" className="block text-sm font-medium text-foreground mb-1">Select Date</label>
-              <DatePicker date={selectedDate} setDate={setSelectedDate} className="w-full" />
+              <label htmlFor="date-range-picker" className="block text-sm font-medium text-foreground mb-1">Select Date Range</label>
+              <DateRangePicker date={dateRange} setDate={setDateRange} />
             </div>
             <div>
-              <label htmlFor="outlet-select" className="block text-sm font-medium text-foreground mb-1">Outlet (for Line Chart)</label>
+              <label htmlFor="outlet-select-dashboard" className="block text-sm font-medium text-foreground mb-1">Select Outlet</label>
               {isFetchingOutlets ? (
                 <Skeleton className="h-10 w-full bg-muted" />
               ) : (
                 <Select value={selectedOutletId} onValueChange={setSelectedOutletId}>
-                  <SelectTrigger id="outlet-select" className="w-full text-base md:text-sm">
+                  <SelectTrigger id="outlet-select-dashboard" className="w-full text-base md:text-sm">
                     <SelectValue placeholder="Select an outlet" />
                   </SelectTrigger>
                   <SelectContent>
@@ -308,60 +162,155 @@ export default function DashboardClient() {
                 </Select>
               )}
             </div>
-            <Button onClick={handleExport} variant="outline" className="w-full md:w-auto md:self-end text-base md:text-sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export Data
-            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {(isAiProcessing || isFetchingOutlets) && (
-        <div className="mb-4 flex items-center justify-center p-3 bg-primary/10 text-primary rounded-md border border-primary/30 w-full">
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span className="font-medium">
-            {isFetchingOutlets ? "Fetching outlet data..." : (isAiProcessing ? "AI analyzing cost data..." : "Processing...")}
-          </span>
-        </div>
-      )}
-
-      <div className="mb-6 w-full">
-        {isLoadingData || isFetchingOutlets ? (
-          <Card className="shadow-lg bg-card w-full">
-            <CardContent className="p-6">
-              <Skeleton className="h-8 w-3/4 mb-4 bg-muted" />
-              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full mb-2 bg-muted" />)}
-            </CardContent>
-          </Card>
-        ) : (
-          <DailySummaryTable data={dailySummaryData} onRowClick={handleRowClick} />
-        )}
+      {/* KPI Cards Row */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {summaryStats.map((stat, index) => (
+          <StatCard key={index} {...stat} isLoading={isLoadingData} />
+        ))}
       </div>
 
-      <div className="w-full">
-       {isLoadingData || isFetchingOutlets ? (
-          <Card className="shadow-lg bg-card w-full">
-            <CardContent className="p-6">
-              <Skeleton className="h-8 w-1/2 mb-4 bg-muted" />
-              <Skeleton className="h-96 w-full bg-muted" />
-            </CardContent>
-          </Card>
-        ) : (
-          <CostChartToggle dailyData={dailySummaryData} historicalData={historicalData} selectedOutletName={currentSelectedOutletForChart?.name}/>
-        )}
+      {/* Charts Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* Overview Chart Card (Main Bar Chart) */}
+        <Card className="lg:col-span-2 shadow-md bg-card">
+          <CardHeader>
+            <CardTitle className="font-headline text-xl">Costs Overview (Daily %)</CardTitle>
+            <CardDescription>Food & Beverage cost percentages over the selected period.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[400px]">
+            {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+              <ChartContainer config={overviewChartConfig} className="h-full w-full">
+                <BarChart data={dashboardData?.overviewChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <ChartTooltipContent indicator="dashed" />
+                  <ChartLegendContent />
+                  <Bar dataKey="foodCostPct" fill="var(--color-foodCostPct)" radius={4} name="Food Cost %" />
+                  <Bar dataKey="beverageCostPct" fill="var(--color-beverageCostPct)" radius={4} name="Bev Cost %" />
+                </BarChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Cost Distribution by Outlet (Donut Chart) */}
+         <Card className="shadow-md bg-card">
+          <CardHeader>
+            <CardTitle className="font-headline text-xl">Cost Distribution by Outlet</CardTitle>
+            <CardDescription>Total costs breakdown per outlet.</CardDescription>
+          </CardHeader>
+          <CardContent className="h-[400px] flex items-center justify-center">
+            {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <RechartsPieChart>
+                  <RechartsPie
+                    data={dashboardData?.costDistributionChartData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={120}
+                    innerRadius={70}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
+                        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                        const x = cx + (radius + 20) * Math.cos(-midAngle * (Math.PI / 180));
+                        const y = cy + (radius + 20) * Math.sin(-midAngle * (Math.PI / 180));
+                        return (
+                          <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs">
+                            {`${name} ${(percent * 100).toFixed(0)}%`}
+                          </text>
+                        );
+                    }}
+                  >
+                    {dashboardData?.costDistributionChartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={costDistributionChartColors[index % costDistributionChartColors.length]} />
+                    ))}
+                  </RechartsPie>
+                  <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}/>
+                  <RechartsLegend wrapperStyle={{fontSize: "0.8rem"}}/>
+                </RechartsPieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {selectedRowData && (
-        <DrillDownModal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          data={transferItems}
-          selectedEntry={selectedRowData}
-        />
-      )}
+      <div className="grid gap-6 md:grid-cols-2">
+          {/* Cost Trends (Line Chart) */}
+          <Card className="shadow-md bg-card">
+            <CardHeader>
+              <CardTitle className="font-headline text-xl">Cost Trends</CardTitle>
+              <CardDescription>
+                {selectedOutletId && selectedOutletId !== 'all' 
+                  ? `Food & Beverage cost % trend for ${allOutlets.find(o => o.id === selectedOutletId)?.name || 'selected outlet'}.`
+                  : "Average daily cost % trends across all outlets."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="h-[350px]">
+              {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+                <ChartContainer config={overviewChartConfig} className="h-full w-full">
+                   <RechartsLineChart data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                    <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                    <ChartTooltipContent indicator="dot"/>
+                    <ChartLegendContent />
+                    <Line type="monotone" dataKey="foodCostPct" stroke="var(--color-foodCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Food Cost %"/>
+                    <Line type="monotone" dataKey="beverageCostPct" stroke="var(--color-beverageCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bev Cost %"/>
+                  </RechartsLineChart>
+                </ChartContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Outlet Performance */}
+          <Card className="shadow-md bg-card">
+            <CardHeader>
+              <CardTitle className="font-headline text-xl">Top Outlet Performance</CardTitle>
+              <CardDescription>Highlights of outlet food cost percentages.</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[350px] overflow-y-auto">
+              {isLoadingData ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full bg-muted" />)}
+                </div>
+              ) : dashboardData?.outletPerformanceData && dashboardData.outletPerformanceData.length > 0 ? (
+                <ul className="space-y-3">
+                  {dashboardData.outletPerformanceData.map((item) => (
+                    <li key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md hover:bg-muted/60 transition-colors">
+                      <div className="flex items-center space-x-3">
+                        <ListChecks className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="font-medium text-sm text-foreground">{item.outletName}</p>
+                          <p className="text-xs text-muted-foreground">{item.metricName}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-sm text-foreground">{item.value}</p>
+                        {item.trend && (
+                           <p className={`text-xs ${item.trend === 'up' ? 'text-destructive' : 'text-green-600'}`}>
+                            {item.trend === 'up' ? <TrendingUp className="inline h-3 w-3 mr-0.5"/> : <TrendingDown className="inline h-3 w-3 mr-0.5"/>}
+                            {item.trend === 'up' ? 'Higher' : 'Lower'}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center pt-10">No outlet performance data available.</p>
+              )}
+            </CardContent>
+          </Card>
+      </div>
     </div>
   );
 }
+

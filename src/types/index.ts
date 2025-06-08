@@ -215,3 +215,48 @@ export interface BeverageCostDetail {
   updatedAt?: Timestamp | Date;
 }
 
+// Types for the new Dashboard
+export interface SummaryStat {
+  title: string;
+  value: string;
+  percentageChange?: number;
+  icon: React.ElementType;
+  iconColor?: string;
+}
+
+export interface ChartDataPoint {
+  date: string; // e.g., "MMM dd"
+  foodCostPct: number;
+  beverageCostPct: number;
+  outletName?: string; // Optional for multi-outlet views
+}
+
+export interface DonutChartDataPoint {
+  name: string;
+  value: number;
+  fill: string;
+}
+
+export interface OutletPerformanceDataPoint {
+  id: string;
+  outletName: string;
+  metricName: string;
+  value: string | number;
+  metricValue: number; // raw value for sorting
+  trend?: "up" | "down" | "neutral";
+}
+
+export interface DashboardReportData {
+  summaryStats: {
+    totalFoodRevenue: number;
+    totalBeverageRevenue: number;
+    avgFoodCostPct: number;
+    avgBeverageCostPct: number;
+    totalOrders: number; // Example from Borex, adapt as needed
+    totalCustomers: number; // Example from Borex, adapt as needed
+  };
+  overviewChartData: ChartDataPoint[];
+  costTrendsChartData: ChartDataPoint[];
+  costDistributionChartData: DonutChartDataPoint[];
+  outletPerformanceData: OutletPerformanceDataPoint[];
+}
