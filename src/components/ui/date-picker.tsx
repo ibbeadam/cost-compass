@@ -41,7 +41,7 @@ export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
       <PopoverContent
         className="w-auto p-0 bg-card"
         align="start"
-        onPointerDownOutside={(e) => e.preventDefault()} // Key fix for Dialog/Popover interaction
+        // Removed: onPointerDownOutside={(e) => e.preventDefault()}
       >
         <Calendar
           mode="single"

@@ -55,7 +55,7 @@ export function DateRangePicker({
         <PopoverContent 
           className="w-auto p-0 bg-card" 
           align="start"
-          onPointerDownOutside={(e) => e.preventDefault()}
+          // Removed: onPointerDownOutside={(e) => e.preventDefault()}
         >
           <Calendar
             initialFocus
