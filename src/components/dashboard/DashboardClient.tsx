@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChart, ListChecks } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChartIcon as RechartsPieChartIcon, ListChecks } from "lucide-react";
 import { subDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { collection, getDocs } from "firebase/firestore";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData"; // Updated mockData import
+import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData"; 
 import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
@@ -124,10 +124,6 @@ export default function DashboardClient() {
   const summaryStats: SummaryStat[] = useMemo(() => {
     if (!dashboardData?.summaryStats) return [];
     const { summaryStats: stats } = dashboardData;
-    console.log("summaryStats values:", {
-      totalFoodRevenue: stats.totalFoodRevenue, totalBeverageRevenue: stats.totalBeverageRevenue,
-      avgFoodCostPct: stats.avgFoodCostPct, avgBeverageCostPct: stats.avgBeverageCostPct
-    });
     return [
       { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue.toLocaleString()}`, icon: Utensils, percentageChange: getRandomFloat(-5,10) },
       { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue.toLocaleString()}`, icon: GlassWater, percentageChange: getRandomFloat(-5,10) },
@@ -325,4 +321,3 @@ export default function DashboardClient() {
     </div>
   );
 }
-
