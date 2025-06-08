@@ -12,11 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData"; // Updated mockData import
+import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData";
 import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from "@/types";
 import { useToast } from "@/hooks/use-toast";
-import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBar, RadialBarChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend as RechartsLegend, ResponsiveContainer, Cell, } from "recharts";
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBar, RadialBarChart, XAxis, YAxis, CartesianGrid, Legend as RechartsLegend, ResponsiveContainer, Cell, } from "recharts";
 
 
 const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, percentageChange, icon: Icon, iconColor = "text-primary", isLoading }) => {
@@ -181,7 +181,7 @@ export default function DashboardClient() {
         )}
       </div>
 
-      {/* Charts Grid (Placeholder for now) */}
+      {/* Charts Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* Overview Chart Card (Main Bar Chart) */}
         <Card className="lg:col-span-2 shadow-md bg-card">
@@ -196,7 +196,7 @@ export default function DashboardClient() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
                   <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
                   <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                  <ChartTooltipContent indicator="dashed" />
+                  <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dashed" />} />
                   <ChartLegendContent />
                   <Bar dataKey="foodCostPct" fill="var(--color-foodCostPct)" radius={4} name="Food Cost %" />
                   <Bar dataKey="beverageCostPct" fill="var(--color-beverageCostPct)" radius={4} name="Bev Cost %" />
@@ -241,7 +241,7 @@ export default function DashboardClient() {
                       <Cell key={`cell-${index}`} fill={costDistributionChartColors[index % costDistributionChartColors.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}/>
+                  <ChartTooltip content={<ChartTooltipContent />} />
                   <RechartsLegend wrapperStyle={{fontSize: "0.8rem"}}/>
                 </RechartsPie>
               </ResponsiveContainer>
@@ -268,7 +268,7 @@ export default function DashboardClient() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
                     <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
                     <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                    <ChartTooltipContent indicator="dot"/>
+                    <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot"/>} />
                     <ChartLegendContent />
                     <Line type="monotone" dataKey="foodCostPct" stroke="var(--color-foodCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Food Cost %"/>
                     <Line type="monotone" dataKey="beverageCostPct" stroke="var(--color-beverageCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bev Cost %"/>
