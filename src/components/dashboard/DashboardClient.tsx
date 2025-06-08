@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChartIcon, ListChecks } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart as LucideLineChart, PieChartIcon, ListChecks } from "lucide-react";
 import { subDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { collection, getDocs } from "firebase/firestore";
@@ -56,6 +56,13 @@ const overviewChartConfig = {
   foodCostPct: { label: "Food Cost %", color: "hsl(var(--chart-1))" },
   beverageCostPct: { label: "Bev Cost %", color: "hsl(var(--chart-2))" },
 } satisfies ChartConfig;
+
+const donutChartConfig = {
+  // This config can be expanded if specific labels or icons are needed per slice in the tooltip.
+  // For now, ChartTooltipContent will default to item.name if no specific config entry for a slice.
+  // Example: "Outlet A": { label: "Outlet A Cost" }
+} satisfies ChartConfig;
+
 
 const costDistributionChartColors = [
   "hsl(var(--chart-1))",
@@ -196,8 +203,11 @@ export default function DashboardClient() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
                   <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
                   <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                  <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dashed" />} />
-                  <ChartLegendContent />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dashed" />}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
                   <Bar dataKey="foodCostPct" fill="var(--color-foodCostPct)" radius={4} name="Food Cost %" />
                   <Bar dataKey="beverageCostPct" fill="var(--color-beverageCostPct)" radius={4} name="Bev Cost %" />
                 </BarChart>
@@ -214,37 +224,39 @@ export default function DashboardClient() {
           </CardHeader>
           <CardContent className="h-[400px] flex items-center justify-center">
             {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsPie>
-                  <Pie
-                    data={dashboardData?.costDistributionChartData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    outerRadius={120}
-                    innerRadius={70}
-                    fill="#8884d8"
-                    dataKey="value"
-                    nameKey="name"
-                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
-                        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                        const x = cx + (radius + 20) * Math.cos(-midAngle * (Math.PI / 180));
-                        const y = cy + (radius + 20) * Math.sin(-midAngle * (Math.PI / 180));
-                        return (
-                          <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs">
-                            {`${name} ${(percent * 100).toFixed(0)}%`}
-                          </text>
-                        );
-                    }}
-                  >
-                    {dashboardData?.costDistributionChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={costDistributionChartColors[index % costDistributionChartColors.length]} />
-                    ))}
-                  </Pie>
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <RechartsLegend wrapperStyle={{fontSize: "0.8rem"}}/>
-                </RechartsPie>
-              </ResponsiveContainer>
+              <ChartContainer config={donutChartConfig} className="h-full w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsPie>
+                    <Pie
+                      data={dashboardData?.costDistributionChartData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={120}
+                      innerRadius={70}
+                      fill="#8884d8"
+                      dataKey="value"
+                      nameKey="name"
+                      label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
+                          const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                          const x = cx + (radius + 20) * Math.cos(-midAngle * (Math.PI / 180));
+                          const y = cy + (radius + 20) * Math.sin(-midAngle * (Math.PI / 180));
+                          return (
+                            <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs">
+                              {`${name} ${(percent * 100).toFixed(0)}%`}
+                            </text>
+                          );
+                      }}
+                    >
+                      {dashboardData?.costDistributionChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={costDistributionChartColors[index % costDistributionChartColors.length]} />
+                      ))}
+                    </Pie>
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <RechartsLegend wrapperStyle={{fontSize: "0.8rem"}}/>
+                  </RechartsPie>
+                </ResponsiveContainer>
+              </ChartContainer>
             )}
           </CardContent>
         </Card>
@@ -268,8 +280,11 @@ export default function DashboardClient() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
                     <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
                     <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                    <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot"/>} />
-                    <ChartLegendContent />
+                    <ChartTooltip
+                      cursor={false}
+                      content={<ChartTooltipContent indicator="dot"/>}
+                    />
+                    <ChartLegend content={<ChartLegendContent />} />
                     <Line type="monotone" dataKey="foodCostPct" stroke="var(--color-foodCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Food Cost %"/>
                     <Line type="monotone" dataKey="beverageCostPct" stroke="var(--color-beverageCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bev Cost %"/>
                   </RechartsLine>
