@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChartIcon as RechartsPieChartIcon, ListChecks } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart, PieChartIcon, ListChecks } from "lucide-react";
 import { subDays } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { collection, getDocs } from "firebase/firestore";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData"; 
+import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData"; // Updated mockData import
 import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
@@ -264,7 +264,7 @@ export default function DashboardClient() {
             <CardContent className="h-[350px]">
               {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
                 <ChartContainer config={overviewChartConfig} className="h-full w-full">
-                   <RechartsLineChart data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                   <RechartsLine data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
                     <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
                     <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
@@ -272,7 +272,7 @@ export default function DashboardClient() {
                     <ChartLegendContent />
                     <Line type="monotone" dataKey="foodCostPct" stroke="var(--color-foodCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Food Cost %"/>
                     <Line type="monotone" dataKey="beverageCostPct" stroke="var(--color-beverageCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bev Cost %"/>
-                  </RechartsLineChart>
+                  </RechartsLine>
                 </ChartContainer>
               )}
             </CardContent>
