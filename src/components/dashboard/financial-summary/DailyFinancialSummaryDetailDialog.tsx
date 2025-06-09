@@ -25,11 +25,18 @@ interface DailyFinancialSummaryDetailDialogProps {
   summary: DailyFinancialSummary | null;
   foodCostEntries: (FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[];
   beverageCostEntries: (BeverageCostEntry & { details: BeverageCostDetail[]; outletName?: string })[];
-  isLoadingDetails: boolean; // Single flag for loading both food and beverage details
+  isLoadingDetails: boolean; 
 }
 
-const DetailItem: React.FC<{ label: string; value: string | number | null | undefined; icon?: React.ElementType, isCurrency?: boolean, isPercentage?: boolean, className?: string }> = 
-({ label, value, icon: Icon, isCurrency, isPercentage, className }) => {
+const DetailItem: React.FC<{
+  label: string;
+  value: string | number | null | undefined;
+  icon?: React.ElementType;
+  isCurrency?: boolean;
+  isPercentage?: boolean;
+  rootClassName?: string; 
+  valueClassName?: string; 
+}> = ({ label, value, icon: Icon, isCurrency, isPercentage, rootClassName, valueClassName }) => {
   let displayValue: React.ReactNode = value ?? <span className="text-muted-foreground/70">N/A</span>;
   if (value != null) {
     if (typeof value === 'number') {
@@ -37,16 +44,16 @@ const DetailItem: React.FC<{ label: string; value: string | number | null | unde
       else if (isPercentage) displayValue = `${Number(value).toFixed(2)}%`;
       else displayValue = value;
     } else {
-        displayValue = value; // If it's a string (like date)
+        displayValue = value; 
     }
   }
   return (
-    <div className={cn("flex items-center justify-between py-2", className)}>
+    <div className={cn("flex items-center justify-between py-2", rootClassName)}>
       <div className="flex items-center">
         {Icon && <Icon className="h-4 w-4 mr-2 text-muted-foreground" />}
         <span className="text-sm text-muted-foreground">{label}:</span>
       </div>
-      <span className="text-sm font-medium text-foreground">{displayValue}</span>
+      <span className={cn("text-sm font-medium text-foreground", valueClassName)}>{displayValue}</span>
     </div>
   );
 };
@@ -73,8 +80,8 @@ export default function DailyFinancialSummaryDetailDialog({
 
   const getVarianceColorClass = (variance: number | null | undefined) => {
     if (variance == null) return "";
-    if (variance > 0) return "text-destructive"; // Variance > 0 means actual > budget
-    if (variance < 0) return "text-green-600 dark:text-green-500"; // Variance < 0 means actual < budget
+    if (variance > 0) return "text-destructive"; 
+    if (variance < 0) return "text-green-600 dark:text-green-500"; 
     return "";
   };
 
@@ -102,20 +109,26 @@ export default function DailyFinancialSummaryDetailDialog({
                   <h4 className="text-md font-semibold text-foreground flex items-center mb-2"><Utensils className="h-5 w-5 mr-2 text-muted-foreground" />Food</h4>
                   <DetailItem label="Food Revenue" value={summary.food_revenue} isCurrency icon={DollarSign} />
                   <DetailItem label="Budget Food Cost %" value={summary.budget_food_cost_pct} isPercentage icon={Percent} />
-                  <DetailItem label="Actual Food Cost" value={summary.actual_food_cost} isCurrency icon={DollarSign} className="font-bold" />
+                  <DetailItem 
+                    label="Actual Food Cost" 
+                    value={summary.actual_food_cost} 
+                    isCurrency 
+                    icon={DollarSign} 
+                    valueClassName="font-bold" 
+                  />
                    <DetailItem 
                     label="Actual Food Cost %" 
                     value={summary.actual_food_cost_pct} 
                     isPercentage 
                     icon={summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? TrendingUp : (summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct < summary.budget_food_cost_pct ? TrendingDown : Percent)} 
-                    className={cn("font-bold", getActualCostColorClass(summary.actual_food_cost_pct, summary.budget_food_cost_pct))}
+                    valueClassName={cn("font-bold", getActualCostColorClass(summary.actual_food_cost_pct, summary.budget_food_cost_pct))}
                   />
                   <DetailItem 
                     label="Food Variance %" 
                     value={summary.food_variance_pct} 
                     isPercentage 
                     icon={summary.food_variance_pct != null && summary.food_variance_pct > 0 ? TrendingUp : (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? TrendingDown : Percent)} 
-                    className={cn("font-bold", getVarianceColorClass(summary.food_variance_pct))}
+                    valueClassName={cn("font-bold", getVarianceColorClass(summary.food_variance_pct))}
                   />
                   <DetailItem label="Entertainment Food" value={summary.ent_food} isCurrency />
                   <DetailItem label="OC Food" value={summary.oc_food} isCurrency />
@@ -126,20 +139,26 @@ export default function DailyFinancialSummaryDetailDialog({
                   <h4 className="text-md font-semibold text-foreground flex items-center mb-2"><GlassWater className="h-5 w-5 mr-2 text-muted-foreground" />Beverage</h4>
                   <DetailItem label="Beverage Revenue" value={summary.beverage_revenue} isCurrency icon={DollarSign} />
                   <DetailItem label="Budget Beverage Cost %" value={summary.budget_beverage_cost_pct} isPercentage icon={Percent}/>
-                  <DetailItem label="Actual Beverage Cost" value={summary.actual_beverage_cost} isCurrency icon={DollarSign} className="font-bold" />
+                  <DetailItem 
+                    label="Actual Beverage Cost" 
+                    value={summary.actual_beverage_cost} 
+                    isCurrency 
+                    icon={DollarSign} 
+                    valueClassName="font-bold" 
+                  />
                   <DetailItem 
                     label="Actual Beverage Cost %" 
                     value={summary.actual_beverage_cost_pct} 
                     isPercentage 
                     icon={summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct > summary.budget_beverage_cost_pct ? TrendingUp : (summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct < summary.budget_beverage_cost_pct ? TrendingDown : Percent)} 
-                    className={cn("font-bold", getActualCostColorClass(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))}
+                    valueClassName={cn("font-bold", getActualCostColorClass(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))}
                   />
                   <DetailItem 
                     label="Beverage Variance %" 
                     value={summary.beverage_variance_pct} 
                     isPercentage 
                     icon={summary.beverage_variance_pct != null && summary.beverage_variance_pct > 0 ? TrendingUp : (summary.beverage_variance_pct != null && summary.beverage_variance_pct < 0 ? TrendingDown : Percent)} 
-                    className={cn("font-bold", getVarianceColorClass(summary.beverage_variance_pct))}
+                    valueClassName={cn("font-bold", getVarianceColorClass(summary.beverage_variance_pct))}
                   />
                   <DetailItem label="Entertainment Beverage" value={summary.ent_beverage} isCurrency />
                   <DetailItem label="OC Beverage" value={summary.oc_beverage} isCurrency />
@@ -229,3 +248,4 @@ export default function DailyFinancialSummaryDetailDialog({
     </Dialog>
   );
 }
+
