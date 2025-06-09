@@ -17,6 +17,9 @@ import { useToast } from "@/hooks/use-toast";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, ResponsiveContainer, Cell, CartesianGrid, XAxis, YAxis, Legend as RechartsLegend } from "recharts";
 
+import { analyzeDashboardData, type DashboardAdvisorInput, type DashboardAdvisorOutput } from "@/ai/flows/dashboard-cost-advisor-flow";
+import { AIInsightsCard } from "./AIInsightsCard";
+
 
 const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, icon: Icon, iconColor = "text-primary", isLoading }) => {
   if (isLoading) {
@@ -41,7 +44,6 @@ const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, valu
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold font-headline">{value}</div>
-        {/* Percentage change removed for simplicity with real data for now */}
       </CardContent>
     </Card>
   );
@@ -74,9 +76,14 @@ export default function DashboardClient() {
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
   const [isLoadingData, setIsLoadingData] = useState(true);
 
+  const [aiInsights, setAiInsights] = useState<DashboardAdvisorOutput | null>(null);
+  const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   const { toast } = useToast();
 
   useEffect(() => {
+    // Initialize dateRange on client-side to prevent hydration mismatch
     setDateRange({
       from: subDays(new Date(), 29),
       to: new Date(),
@@ -104,14 +111,18 @@ export default function DashboardClient() {
 
   useEffect(() => {
     if (!dateRange?.from || !dateRange?.to || !allOutlets.length || isFetchingOutlets) {
-      if(!isFetchingOutlets && (!dateRange?.from || !dateRange?.to)){ // only set loading to false if outlets are fetched and date range is not set
+      if(!isFetchingOutlets && (!dateRange?.from || !dateRange?.to)){ 
          setIsLoadingData(false);
-         setDashboardData(null); // Clear data if date range is invalid
+         setDashboardData(null); 
+         setAiInsights(null); // Clear AI insights if date range is invalid
       }
       return;
     }
     
     setIsLoadingData(true);
+    setIsLoadingAIInsights(true);
+    setAiInsights(null);
+    setAiError(null);
 
     async function fetchDataForDashboard() {
       try {
@@ -170,21 +181,39 @@ export default function DashboardClient() {
         });
 
         const daysInInterval = eachDayOfInterval({ start: dateRange.from!, end: dateRange.to! });
+        const numberOfDaysInPeriod = differenceInDays(dateRange.to!, dateRange.from!) + 1;
+
 
         let totalHotelFoodRevenue = 0;
         let totalHotelBeverageRevenue = 0;
         let totalHotelActualFoodCost = 0;
         let totalHotelActualBeverageCost = 0;
+        let sumOfBudgetFoodCostPct = 0;
+        let sumOfBudgetBeverageCostPct = 0;
+        let countBudgetFoodCostPct = 0;
+        let countBudgetBeverageCostPct = 0;
+
 
         dailySummaries.forEach(summary => {
             totalHotelFoodRevenue += summary.food_revenue || 0;
             totalHotelBeverageRevenue += summary.beverage_revenue || 0;
             totalHotelActualFoodCost += summary.actual_food_cost || 0;
             totalHotelActualBeverageCost += summary.actual_beverage_cost || 0;
+            if (summary.budget_food_cost_pct != null) {
+              sumOfBudgetFoodCostPct += summary.budget_food_cost_pct;
+              countBudgetFoodCostPct++;
+            }
+            if (summary.budget_beverage_cost_pct != null) {
+              sumOfBudgetBeverageCostPct += summary.budget_beverage_cost_pct;
+              countBudgetBeverageCostPct++;
+            }
         });
         
-        let avgFoodCostPctVal = totalHotelFoodRevenue > 0 ? (totalHotelActualFoodCost / totalHotelFoodRevenue) * 100 : 0;
-        let avgBeverageCostPctVal = totalHotelBeverageRevenue > 0 ? (totalHotelActualBeverageCost / totalHotelBeverageRevenue) * 100 : 0;
+        let avgActualFoodCostPctVal = totalHotelFoodRevenue > 0 ? (totalHotelActualFoodCost / totalHotelFoodRevenue) * 100 : 0;
+        let avgActualBeverageCostPctVal = totalHotelBeverageRevenue > 0 ? (totalHotelActualBeverageCost / totalHotelBeverageRevenue) * 100 : 0;
+        const avgBudgetFoodCostPct = countBudgetFoodCostPct > 0 ? sumOfBudgetFoodCostPct / countBudgetFoodCostPct : 0;
+        const avgBudgetBeverageCostPct = countBudgetBeverageCostPct > 0 ? sumOfBudgetBeverageCostPct / countBudgetBeverageCostPct : 0;
+
 
         if (selectedOutletId && selectedOutletId !== "all") {
             let outletTotalFoodCost = 0;
@@ -194,7 +223,7 @@ export default function DashboardClient() {
                 const daySummary = summariesMap.get(formatDateFn(fce.date, 'yyyy-MM-dd'));
                 if (daySummary) outletTotalFoodRevenueSumForPct += daySummary.food_revenue || 0;
             });
-            avgFoodCostPctVal = outletTotalFoodRevenueSumForPct > 0 ? (outletTotalFoodCost / outletTotalFoodRevenueSumForPct) * 100 : 0;
+            avgActualFoodCostPctVal = outletTotalFoodRevenueSumForPct > 0 ? (outletTotalFoodCost / outletTotalFoodRevenueSumForPct) * 100 : 0;
             
             let outletTotalBeverageCost = 0;
             let outletTotalBeverageRevenueSumForPct = 0;
@@ -203,15 +232,15 @@ export default function DashboardClient() {
                 const daySummary = summariesMap.get(formatDateFn(bce.date, 'yyyy-MM-dd'));
                 if (daySummary) outletTotalBeverageRevenueSumForPct += daySummary.beverage_revenue || 0;
             });
-            avgBeverageCostPctVal = outletTotalBeverageRevenueSumForPct > 0 ? (outletTotalBeverageCost / outletTotalBeverageRevenueSumForPct) * 100 : 0;
+            avgActualBeverageCostPctVal = outletTotalBeverageRevenueSumForPct > 0 ? (outletTotalBeverageCost / outletTotalBeverageRevenueSumForPct) * 100 : 0;
         }
 
 
         const summaryStatsData = {
             totalFoodRevenue: parseFloat(totalHotelFoodRevenue.toFixed(2)),
             totalBeverageRevenue: parseFloat(totalHotelBeverageRevenue.toFixed(2)),
-            avgFoodCostPct: parseFloat(avgFoodCostPctVal.toFixed(1)),
-            avgBeverageCostPct: parseFloat(avgBeverageCostPctVal.toFixed(1)),
+            avgFoodCostPct: parseFloat(avgActualFoodCostPctVal.toFixed(1)),
+            avgBeverageCostPct: parseFloat(avgActualBeverageCostPctVal.toFixed(1)),
         };
 
         const overviewChartDataResult: ChartDataPoint[] = daysInInterval.map(day => {
@@ -305,26 +334,54 @@ export default function DashboardClient() {
             .sort((a,b) => b.metricValue - a.metricValue)
             .slice(0,3);
 
-        setDashboardData({
+        const currentDashboardData = {
           summaryStats: summaryStatsData,
           overviewChartData: overviewChartDataResult,
           costTrendsChartData: costTrendsChartDataResult,
           costDistributionChartData: costDistributionChartDataResult,
           outletPerformanceData: outletPerformanceDataResult,
-        });
+        };
+        setDashboardData(currentDashboardData);
+        setIsLoadingData(false); // Set loading to false for main data first
+
+        // Prepare input for AI analysis
+        if (numberOfDaysInPeriod > 0 && currentDashboardData.summaryStats.totalFoodRevenue > 0 && currentDashboardData.summaryStats.totalBeverageRevenue > 0) {
+          const aiInput: DashboardAdvisorInput = {
+            numberOfDays: numberOfDaysInPeriod,
+            totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+            budgetFoodCostPct: avgBudgetFoodCostPct, // Using average budget from summaries
+            actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
+            totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+            budgetBeverageCostPct: avgBudgetBeverageCostPct, // Using average budget from summaries
+            actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+          };
+          try {
+            const analysisResult = await analyzeDashboardData(aiInput);
+            setAiInsights(analysisResult);
+          } catch (aiErr) {
+            console.error("Error fetching AI insights:", aiErr);
+            setAiError((aiErr as Error).message || "Failed to load AI analysis.");
+            toast({ variant: "destructive", title: "AI Analysis Error", description: (aiErr as Error).message });
+          }
+        } else {
+            setAiInsights(null); // Not enough data for AI
+        }
 
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
         toast({ variant: "destructive", title: "Error loading dashboard", description: (err as Error).message });
         setDashboardData(null);
+        setAiInsights(null);
+        setAiError((err as Error).message || "Failed to load dashboard data.");
       } finally {
-        setIsLoadingData(false);
+        if (isLoadingData) setIsLoadingData(false); // Ensure main loading is false if it hasn't been set
+        setIsLoadingAIInsights(false);
       }
     };
 
     fetchDataForDashboard();
 
-  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets, toast]);
+  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets, toast, isLoadingData]);
 
 
   const summaryStatsList: SummaryStat[] = useMemo(() => {
@@ -395,6 +452,14 @@ export default function DashboardClient() {
           summaryStatsList.map((stat, index) => (<StatCard key={index} {...stat} />))
         )}
       </div>
+
+      {/* AI Insights Card */}
+      <AIInsightsCard 
+        isLoading={isLoadingAIInsights} 
+        insights={aiInsights} 
+        error={aiError} 
+      />
+
 
       {/* Charts Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -543,5 +608,3 @@ export default function DashboardClient() {
     </div>
   );
 }
-
-    
