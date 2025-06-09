@@ -18,16 +18,18 @@ interface DatePickerProps {
   date: Date | undefined;
   setDate: (date: Date | undefined) => void;
   className?: string;
-  id?: string; 
+  id?: string;
+  disabled?: boolean; // Added disabled prop
 }
 
-export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
+export function DatePicker({ date, setDate, className, id, disabled }: DatePickerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          id={id} 
+          id={id}
           variant={"outline"}
+          disabled={disabled} // Use the disabled prop here
           className={cn(
             "w-full sm:w-[280px] justify-start text-left font-normal text-base md:text-sm",
             !date && "text-muted-foreground",
@@ -41,13 +43,13 @@ export function DatePicker({ date, setDate, className, id }: DatePickerProps) {
       <PopoverContent
         className="w-auto p-0 bg-card"
         align="start"
-        // Removed: onPointerDownOutside={(e) => e.preventDefault()}
       >
         <Calendar
           mode="single"
           selected={date}
           onSelect={setDate}
           initialFocus
+          disabled={disabled || (date => date < new Date("1900-01-01"))} // Also disable calendar interaction if button is disabled
         />
       </PopoverContent>
     </Popover>
