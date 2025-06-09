@@ -164,14 +164,13 @@ export default function DailyFinancialSummaryListClient() {
     return (
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
-        <div className="rounded-lg border shadow-md bg-card"> {/* Removed overflow-hidden here */}
-          <div className="relative w-full overflow-auto">
+        <div className="rounded-lg border shadow-md bg-card overflow-x-auto">
             <table className="w-full caption-bottom text-sm">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                  {[...Array(12)].map((_, i) => ( // Increased skeleton columns to 12
+                  {[...Array(12)].map((_, i) => (
                     <th key={i} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                      <Skeleton className="h-6 w-full bg-muted/50" />
+                      <Skeleton className="h-6 w-full bg-muted/50 min-w-[100px]" />
                     </th>
                   ))}
                 </tr>
@@ -195,7 +194,6 @@ export default function DailyFinancialSummaryListClient() {
                 ))}
               </tbody>
             </table>
-          </div>
         </div>
       </div>
     );
@@ -214,7 +212,7 @@ export default function DailyFinancialSummaryListClient() {
           <p>Click "Add New Daily Summary" to get started.</p>
         </div>
       ) : (
-        <div className="rounded-lg border shadow-md bg-card"> {/* Removed overflow-hidden here */}
+        <div className="rounded-lg border shadow-md bg-card overflow-x-auto">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
@@ -229,7 +227,7 @@ export default function DailyFinancialSummaryListClient() {
                 <TableHead className="font-headline text-right min-w-[130px]">Act. Bev Cost</TableHead>
                 <TableHead className="font-headline text-right min-w-[120px]">Act. Bev %</TableHead>
                 <TableHead className="font-headline text-right min-w-[130px]">Bev Var. %</TableHead>
-                <TableHead className="font-headline w-[150px] text-right">Actions</TableHead>
+                <TableHead className="font-headline w-[150px] text-right min-w-[150px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -310,5 +308,3 @@ export default function DailyFinancialSummaryListClient() {
     </div>
   );
 }
-
-    
