@@ -185,9 +185,8 @@ export default function DailyFinancialSummaryListClient() {
                     ))}
                     <td className="p-4 align-middle">
                       <div className="flex justify-end gap-1">
-                        <Skeleton className="h-8 w-8 bg-muted" />
-                        <Skeleton className="h-8 w-8 bg-muted" />
-                        <Skeleton className="h-8 w-8 bg-muted" />
+                        <Skeleton className="h-8 w-8 bg-muted" /> {/* Edit */}
+                        <Skeleton className="h-8 w-8 bg-muted" /> {/* Delete */}
                       </div>
                     </td>
                   </tr>
@@ -216,7 +215,7 @@ export default function DailyFinancialSummaryListClient() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="font-headline min-w-[150px]">Date</TableHead>
+                <TableHead className="font-headline min-w-[150px] cursor-pointer hover:text-primary" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>Date</TableHead>
                 <TableHead className="font-headline text-right min-w-[120px]">Food Rev.</TableHead>
                 <TableHead className="font-headline text-right min-w-[120px]">Bud. Food %</TableHead>
                 <TableHead className="font-headline text-right min-w-[130px]">Act. Food Cost</TableHead>
@@ -227,12 +226,12 @@ export default function DailyFinancialSummaryListClient() {
                 <TableHead className="font-headline text-right min-w-[130px]">Act. Bev Cost</TableHead>
                 <TableHead className="font-headline text-right min-w-[120px]">Act. Bev %</TableHead>
                 <TableHead className="font-headline text-right min-w-[130px]">Bev Var. %</TableHead>
-                <TableHead className="font-headline w-[150px] text-right min-w-[150px]">Actions</TableHead>
+                <TableHead className="font-headline w-[100px] text-right min-w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summaries.map((summary) => (
-                <TableRow key={summary.id} className="hover:bg-muted/30 cursor-default">
+                <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
                   <TableCell className="font-code" onClick={() => handleViewDetails(summary)}> {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id} </TableCell>
                   <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.food_revenue)}</TableCell>
                   <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderPercentage(summary.budget_food_cost_pct)}</TableCell>
@@ -251,7 +250,6 @@ export default function DailyFinancialSummaryListClient() {
                     {renderPercentage(summary.beverage_variance_pct)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleViewDetails(summary)} className="mr-1 hover:text-blue-500"> <Eye className="h-4 w-4" /><span className="sr-only">View Details</span> </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary"> <Edit className="h-4 w-4" /><span className="sr-only">Edit</span> </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -308,3 +306,4 @@ export default function DailyFinancialSummaryListClient() {
     </div>
   );
 }
+
