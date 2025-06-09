@@ -77,7 +77,7 @@ export default function DashboardClient() {
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [aiInsights, setAiInsights] = useState<DashboardAdvisorOutput | null>(null);
-  const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
+  const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false); // Start as false, set true when AI call begins
   const [aiError, setAiError] = useState<string | null>(null);
 
   const { toast } = useToast();
@@ -114,17 +114,18 @@ export default function DashboardClient() {
       if(!isFetchingOutlets && (!dateRange?.from || !dateRange?.to)){ 
          setIsLoadingData(false);
          setDashboardData(null); 
-         setAiInsights(null); // Clear AI insights if date range is invalid
+         setAiInsights(null);
       }
       return;
     }
     
     setIsLoadingData(true);
-    setIsLoadingAIInsights(true);
-    setAiInsights(null);
-    setAiError(null);
+    setDashboardData(null); // Clear previous data while loading new data
+    setAiInsights(null); // Clear previous AI insights
+    setAiError(null);   // Clear previous AI errors
 
     async function fetchDataForDashboard() {
+      setIsLoadingAIInsights(true); // Set AI loading to true before starting any async operations for it
       try {
         const from = Timestamp.fromDate(dateRange.from!);
         const to = Timestamp.fromDate(dateRange.to!);
@@ -183,7 +184,6 @@ export default function DashboardClient() {
         const daysInInterval = eachDayOfInterval({ start: dateRange.from!, end: dateRange.to! });
         const numberOfDaysInPeriod = differenceInDays(dateRange.to!, dateRange.from!) + 1;
 
-
         let totalHotelFoodRevenue = 0;
         let totalHotelBeverageRevenue = 0;
         let totalHotelActualFoodCost = 0;
@@ -192,7 +192,6 @@ export default function DashboardClient() {
         let sumOfBudgetBeverageCostPct = 0;
         let countBudgetFoodCostPct = 0;
         let countBudgetBeverageCostPct = 0;
-
 
         dailySummaries.forEach(summary => {
             totalHotelFoodRevenue += summary.food_revenue || 0;
@@ -214,7 +213,6 @@ export default function DashboardClient() {
         const avgBudgetFoodCostPct = countBudgetFoodCostPct > 0 ? sumOfBudgetFoodCostPct / countBudgetFoodCostPct : 0;
         const avgBudgetBeverageCostPct = countBudgetBeverageCostPct > 0 ? sumOfBudgetBeverageCostPct / countBudgetBeverageCostPct : 0;
 
-
         if (selectedOutletId && selectedOutletId !== "all") {
             let outletTotalFoodCost = 0;
             let outletTotalFoodRevenueSumForPct = 0;
@@ -234,7 +232,6 @@ export default function DashboardClient() {
             });
             avgActualBeverageCostPctVal = outletTotalBeverageRevenueSumForPct > 0 ? (outletTotalBeverageCost / outletTotalBeverageRevenueSumForPct) * 100 : 0;
         }
-
 
         const summaryStatsData = {
             totalFoodRevenue: parseFloat(totalHotelFoodRevenue.toFixed(2)),
@@ -342,17 +339,17 @@ export default function DashboardClient() {
           outletPerformanceData: outletPerformanceDataResult,
         };
         setDashboardData(currentDashboardData);
-        setIsLoadingData(false); // Set loading to false for main data first
+        setIsLoadingData(false); // Set loading for main data to false HERE
 
         // Prepare input for AI analysis
         if (numberOfDaysInPeriod > 0 && currentDashboardData.summaryStats.totalFoodRevenue > 0 && currentDashboardData.summaryStats.totalBeverageRevenue > 0) {
           const aiInput: DashboardAdvisorInput = {
             numberOfDays: numberOfDaysInPeriod,
             totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
-            budgetFoodCostPct: avgBudgetFoodCostPct, // Using average budget from summaries
+            budgetFoodCostPct: avgBudgetFoodCostPct, 
             actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
             totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
-            budgetBeverageCostPct: avgBudgetBeverageCostPct, // Using average budget from summaries
+            budgetBeverageCostPct: avgBudgetBeverageCostPct, 
             actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
           };
           try {
@@ -362,26 +359,27 @@ export default function DashboardClient() {
             console.error("Error fetching AI insights:", aiErr);
             setAiError((aiErr as Error).message || "Failed to load AI analysis.");
             toast({ variant: "destructive", title: "AI Analysis Error", description: (aiErr as Error).message });
+            setAiInsights(null); // Clear AI insights on specific AI error
           }
         } else {
             setAiInsights(null); // Not enough data for AI
         }
 
-      } catch (err) {
+      } catch (err) { // This catch is for errors during main data fetching/processing
         console.error("Error fetching dashboard data:", err);
         toast({ variant: "destructive", title: "Error loading dashboard", description: (err as Error).message });
         setDashboardData(null);
-        setAiInsights(null);
+        setAiInsights(null); // Also clear AI if main data fails
         setAiError((err as Error).message || "Failed to load dashboard data.");
+        setIsLoadingData(false); // Ensure main loading is false if an error occurs here
       } finally {
-        if (isLoadingData) setIsLoadingData(false); // Ensure main loading is false if it hasn't been set
-        setIsLoadingAIInsights(false);
+        setIsLoadingAIInsights(false); // AI loading completes here, regardless of success/failure
       }
     };
 
     fetchDataForDashboard();
 
-  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets, toast, isLoadingData]);
+  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets, toast]);
 
 
   const summaryStatsList: SummaryStat[] = useMemo(() => {
@@ -608,3 +606,5 @@ export default function DashboardClient() {
     </div>
   );
 }
+
+    
