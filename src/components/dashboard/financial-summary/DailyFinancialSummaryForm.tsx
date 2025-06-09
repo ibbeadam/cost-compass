@@ -96,7 +96,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
       });
     } else {
       form.reset({
-        date: new Date(), // Default to today for new entries
+        date: new Date(), 
         food_revenue: 0,
         budget_food_cost_pct: 0,
         ent_food: 0,
@@ -116,7 +116,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
   async function onSubmit(data: FormValues) {
     setIsSubmitting(true);
     try {
-      const summaryData: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date } = {
+      const summaryDataPayload: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date } = {
         date: data.date,
         food_revenue: data.food_revenue,
         budget_food_cost_pct: data.budget_food_cost_pct,
@@ -131,17 +131,16 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
         notes: data.notes,
       };
       
-      // If editing, pass existing calculated fields to preserve them if not recalculated by this action
       if (initialData) {
-        summaryData.actual_food_cost = initialData.actual_food_cost;
-        summaryData.actual_food_cost_pct = initialData.actual_food_cost_pct;
-        summaryData.food_variance_pct = initialData.food_variance_pct;
-        summaryData.actual_beverage_cost = initialData.actual_beverage_cost;
-        summaryData.actual_beverage_cost_pct = initialData.actual_beverage_cost_pct;
-        summaryData.beverage_variance_pct = initialData.beverage_variance_pct;
+        summaryDataPayload.actual_food_cost = initialData.actual_food_cost;
+        summaryDataPayload.actual_food_cost_pct = initialData.actual_food_cost_pct;
+        summaryDataPayload.food_variance_pct = initialData.food_variance_pct;
+        summaryDataPayload.actual_beverage_cost = initialData.actual_beverage_cost;
+        summaryDataPayload.actual_beverage_cost_pct = initialData.actual_beverage_cost_pct;
+        summaryDataPayload.beverage_variance_pct = initialData.beverage_variance_pct;
       }
       
-      await saveDailyFinancialSummaryAction(summaryData);
+      await saveDailyFinancialSummaryAction(summaryDataPayload, initialData?.id);
       toast({
         title: initialData ? "Summary Updated" : "Summary Added",
         description: `Daily financial summary for ${format(data.date, "PPP")} has been successfully saved.`,
@@ -174,10 +173,8 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     date={field.value} 
                     setDate={field.onChange} 
                     className="w-full md:w-1/2"
-                    disabled={!!initialData} 
                   />
-                  {initialData && <FormMessage className="text-xs text-muted-foreground">Date cannot be changed for existing entries.</FormMessage>}
-                  {!initialData && <FormMessage />}
+                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -340,6 +337,5 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
     </Form>
   );
 }
-
 
     
