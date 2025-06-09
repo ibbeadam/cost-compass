@@ -64,6 +64,21 @@ export default function DailyFinancialSummaryDetailDialog({
 
   const summaryDate = summary.date instanceof Date ? format(summary.date, "PPP") : "N/A";
 
+  const getActualCostColorClass = (actualPct: number | null | undefined, budgetPct: number | null | undefined) => {
+    if (actualPct == null || budgetPct == null) return "";
+    if (actualPct > budgetPct) return "text-destructive";
+    if (actualPct < budgetPct) return "text-green-600 dark:text-green-500";
+    return "";
+  };
+
+  const getVarianceColorClass = (variance: number | null | undefined) => {
+    if (variance == null) return "";
+    if (variance > 0) return "text-destructive"; // Variance > 0 means actual > budget
+    if (variance < 0) return "text-green-600 dark:text-green-500"; // Variance < 0 means actual < budget
+    return "";
+  };
+
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl w-full max-h-[90vh] flex flex-col bg-card">
@@ -92,15 +107,15 @@ export default function DailyFinancialSummaryDetailDialog({
                     label="Actual Food Cost %" 
                     value={summary.actual_food_cost_pct} 
                     isPercentage 
-                    icon={summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? TrendingUp : TrendingDown} 
-                    className={cn("font-bold", summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? 'text-destructive' : (summary.actual_food_cost_pct != null ? 'text-green-600' : ''))}
+                    icon={summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? TrendingUp : (summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct < summary.budget_food_cost_pct ? TrendingDown : Percent)} 
+                    className={cn("font-bold", getActualCostColorClass(summary.actual_food_cost_pct, summary.budget_food_cost_pct))}
                   />
                   <DetailItem 
                     label="Food Variance %" 
                     value={summary.food_variance_pct} 
                     isPercentage 
-                    icon={summary.food_variance_pct != null && summary.food_variance_pct > 0 ? TrendingUp : TrendingDown} 
-                    className={cn("font-bold", summary.food_variance_pct != null && summary.food_variance_pct > 0 ? 'text-destructive' : (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? 'text-green-600' : ''))}
+                    icon={summary.food_variance_pct != null && summary.food_variance_pct > 0 ? TrendingUp : (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? TrendingDown : Percent)} 
+                    className={cn("font-bold", getVarianceColorClass(summary.food_variance_pct))}
                   />
                   <DetailItem label="Entertainment Food" value={summary.ent_food} isCurrency />
                   <DetailItem label="OC Food" value={summary.oc_food} isCurrency />
@@ -116,15 +131,15 @@ export default function DailyFinancialSummaryDetailDialog({
                     label="Actual Beverage Cost %" 
                     value={summary.actual_beverage_cost_pct} 
                     isPercentage 
-                    icon={summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct > summary.budget_beverage_cost_pct ? TrendingUp : TrendingDown} 
-                    className={cn("font-bold", summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct > summary.budget_beverage_cost_pct ? 'text-destructive' : (summary.actual_beverage_cost_pct != null ? 'text-green-600' : ''))}
+                    icon={summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct > summary.budget_beverage_cost_pct ? TrendingUp : (summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct < summary.budget_beverage_cost_pct ? TrendingDown : Percent)} 
+                    className={cn("font-bold", getActualCostColorClass(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))}
                   />
                   <DetailItem 
                     label="Beverage Variance %" 
                     value={summary.beverage_variance_pct} 
                     isPercentage 
-                    icon={summary.beverage_variance_pct != null && summary.beverage_variance_pct > 0 ? TrendingUp : TrendingDown} 
-                    className={cn("font-bold", summary.beverage_variance_pct != null && summary.beverage_variance_pct > 0 ? 'text-destructive' : (summary.beverage_variance_pct != null && summary.beverage_variance_pct < 0 ? 'text-green-600' : ''))}
+                    icon={summary.beverage_variance_pct != null && summary.beverage_variance_pct > 0 ? TrendingUp : (summary.beverage_variance_pct != null && summary.beverage_variance_pct < 0 ? TrendingDown : Percent)} 
+                    className={cn("font-bold", getVarianceColorClass(summary.beverage_variance_pct))}
                   />
                   <DetailItem label="Entertainment Beverage" value={summary.ent_beverage} isCurrency />
                   <DetailItem label="OC Beverage" value={summary.oc_beverage} isCurrency />
