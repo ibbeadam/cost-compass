@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart as LucideLineChart, PieChartIcon, ListChecks } from "lucide-react";
-import { subDays } from "date-fns";
+import { subDays, format as formatDateFn } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { collection, getDocs } from "firebase/firestore";
 
@@ -58,9 +58,7 @@ const overviewChartConfig = {
 } satisfies ChartConfig;
 
 const donutChartConfig = {
-  // This config can be expanded if specific labels or icons are needed per slice in the tooltip.
-  // For now, ChartTooltipContent will default to item.name if no specific config entry for a slice.
-  // Example: "Outlet A": { label: "Outlet A Cost" }
+  // Minimal config for the donut chart context
 } satisfies ChartConfig;
 
 
@@ -79,7 +77,7 @@ export default function DashboardClient() {
     to: new Date(),
   });
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
-  const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>("all"); // Default to "all"
+  const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>("all"); 
 
   const [dashboardData, setDashboardData] = useState<DashboardReportData | null>(null);
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
@@ -113,13 +111,13 @@ export default function DashboardClient() {
 
   useEffect(() => {
     const loadDashboardData = () => {
-      if (isFetchingOutlets) return; // Wait for outlets to be fetched
+      if (isFetchingOutlets) return; 
       
       setIsLoadingData(true);
-      // Simulate API call
       setTimeout(() => {
         const outletIdToFilter = selectedOutletId === "all" ? undefined : selectedOutletId;
-        const data = generateDashboardData(dateRange, outletIdToFilter, allOutlets.filter(o => o.id !== "all"));
+        const currentAllOutlets = allOutlets.filter(o => o.id !== "all");
+        const data = generateDashboardData(dateRange, outletIdToFilter, currentAllOutlets);
         setDashboardData(data);
         setIsLoadingData(false);
       }, 500);
@@ -129,16 +127,27 @@ export default function DashboardClient() {
   }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets]);
 
   const summaryStats: SummaryStat[] = useMemo(() => {
-    if (!dashboardData?.summaryStats) return [];
-    const { summaryStats: stats } = dashboardData;
+    if (!dashboardData || !dashboardData.summaryStats) {
+      return [
+        { title: "Total Food Revenue", value: "$0", icon: Utensils, percentageChange: 0 },
+        { title: "Total Beverage Revenue", value: "$0", icon: GlassWater, percentageChange: 0 },
+        { title: "Avg. Food Cost %", value: "0%", icon: Percent, iconColor: "text-green-500", percentageChange: 0 },
+        { title: "Avg. Beverage Cost %", value: "0%", icon: Percent, iconColor: "text-orange-500", percentageChange: 0 },
+      ];
+    }
+    const stats = dashboardData.summaryStats;
+    const pChangeFoodRevenue = getRandomFloat(-5,10);
+    const pChangeBevRevenue = getRandomFloat(-5,10);
+    const pChangeFoodCostPct = getRandomFloat(-2,2);
+    const pChangeBevCostPct = getRandomFloat(-2,2);
+
     return [
-      { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue.toLocaleString()}`, icon: Utensils, percentageChange: getRandomFloat(-5,10) },
-      { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue.toLocaleString()}`, icon: GlassWater, percentageChange: getRandomFloat(-5,10) },
-      { title: "Avg. Food Cost %", value: `${stats.avgFoodCostPct.toFixed(1)}%`, icon: Percent, iconColor: "text-green-500", percentageChange: getRandomFloat(-2,2) },
-      { title: "Avg. Beverage Cost %", value: `${stats.avgBeverageCostPct.toFixed(1)}%`, icon: Percent, iconColor: "text-orange-500", percentageChange: getRandomFloat(-2,2) },
+      { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue?.toLocaleString() ?? 'N/A'}`, icon: Utensils, percentageChange: pChangeFoodRevenue },
+      { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue?.toLocaleString() ?? 'N/A'}`, icon: GlassWater, percentageChange: pChangeBevRevenue },
+      { title: "Avg. Food Cost %", value: `${stats.avgFoodCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-green-500", percentageChange: pChangeFoodCostPct },
+      { title: "Avg. Beverage Cost %", value: `${stats.avgBeverageCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-orange-500", percentageChange: pChangeBevCostPct },
     ];
   }, [dashboardData]);
-
 
   return (
     <div className="flex flex-col flex-grow w-full space-y-6">
@@ -176,14 +185,12 @@ export default function DashboardClient() {
       {/* KPI Cards Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {isLoadingData ? (
-          // Render Skeleton cards when loading
           <>
             {[...Array(4)].map((_, index) => (
               <StatCard key={index} isLoading={true} title="" value="" />
             ))}
           </>
         ) : (
-          // Render actual StatCards when data is loaded
           summaryStats.map((stat, index) => (<StatCard key={index} {...stat} />))
         )}
       </div>
@@ -274,22 +281,22 @@ export default function DashboardClient() {
               </CardDescription>
             </CardHeader>
             <CardContent className="h-[350px]">
-              {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
-                <ChartContainer config={overviewChartConfig} className="h-full w-full">
-                   <RechartsLine data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                    <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                    <ChartTooltip
-                      cursor={false}
-                      content={<ChartTooltipContent indicator="dot"/>}
-                    />
-                    <ChartLegend content={<ChartLegendContent />} />
-                    <Line type="monotone" dataKey="foodCostPct" stroke="var(--color-foodCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Food Cost %"/>
-                    <Line type="monotone" dataKey="beverageCostPct" stroke="var(--color-beverageCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bev Cost %"/>
-                  </RechartsLine>
-                </ChartContainer>
-              )}
+            {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+              <ChartContainer config={overviewChartConfig} className="h-full w-full">
+                <RechartsLine data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
+                  <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dot"/>}
+                  />
+                  <ChartLegend content={<ChartLegendContent />} />
+                  <Line type="monotone" dataKey="foodCostPct" stroke="var(--color-foodCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Food Cost %"/>
+                  <Line type="monotone" dataKey="beverageCostPct" stroke="var(--color-beverageCostPct)" strokeWidth={2} dot={{r:3}} activeDot={{r:5}} name="Bev Cost %"/>
+                </RechartsLine>
+              </ChartContainer>
+            )}
             </CardContent>
           </Card>
 
