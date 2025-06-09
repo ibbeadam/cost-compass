@@ -164,19 +164,16 @@ export default function DailyFinancialSummaryListClient() {
     return (
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
-        <div className="rounded-lg border overflow-hidden shadow-md bg-card">
+        <div className="rounded-lg border shadow-md bg-card"> {/* Removed overflow-hidden here */}
           <div className="relative w-full overflow-auto">
             <table className="w-full caption-bottom text-sm">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                  {[...Array(11)].map((_, i) => (
+                  {[...Array(12)].map((_, i) => ( // Increased skeleton columns to 12
                     <th key={i} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                       <Skeleton className="h-6 w-full bg-muted/50" />
                     </th>
                   ))}
-                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[150px]">
-                    <Skeleton className="h-6 w-full bg-muted/50" />
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -217,7 +214,7 @@ export default function DailyFinancialSummaryListClient() {
           <p>Click "Add New Daily Summary" to get started.</p>
         </div>
       ) : (
-        <div className="rounded-lg border overflow-hidden shadow-md bg-card">
+        <div className="rounded-lg border shadow-md bg-card"> {/* Removed overflow-hidden here */}
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
@@ -314,3 +311,4 @@ export default function DailyFinancialSummaryListClient() {
   );
 }
 
+    
