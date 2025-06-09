@@ -72,10 +72,7 @@ const costDistributionChartColors = [
 
 
 export default function DashboardClient() {
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 29),
-    to: new Date(),
-  });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>("all"); 
 
@@ -84,6 +81,14 @@ export default function DashboardClient() {
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Initialize dateRange on the client after hydration
+    setDateRange({
+      from: subDays(new Date(), 29),
+      to: new Date(),
+    });
+  }, []);
 
   useEffect(() => {
     const fetchFirestoreOutlets = async () => {
@@ -111,7 +116,7 @@ export default function DashboardClient() {
 
   useEffect(() => {
     const loadDashboardData = () => {
-      if (isFetchingOutlets) return; 
+      if (isFetchingOutlets || !dateRange) return; // Wait for dateRange to be initialized
       
       setIsLoadingData(true);
       setTimeout(() => {
@@ -136,10 +141,11 @@ export default function DashboardClient() {
       ];
     }
     const stats = dashboardData.summaryStats;
-    const pChangeFoodRevenue = getRandomFloat(-5,10);
-    const pChangeBevRevenue = getRandomFloat(-5,10);
-    const pChangeFoodCostPct = getRandomFloat(-2,2);
-    const pChangeBevCostPct = getRandomFloat(-2,2);
+    // Using fixed percentages for now to avoid issues during parse error debugging
+    const pChangeFoodRevenue = 2.5; 
+    const pChangeBevRevenue = -1.0;
+    const pChangeFoodCostPct = 0.5;
+    const pChangeBevCostPct = -0.2;
 
     return [
       { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue?.toLocaleString() ?? 'N/A'}`, icon: Utensils, percentageChange: pChangeFoodRevenue },
@@ -157,7 +163,11 @@ export default function DashboardClient() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
               <label htmlFor="date-range-picker" className="block text-sm font-medium text-foreground mb-1">Select Date Range</label>
-              <DateRangePicker date={dateRange} setDate={setDateRange} />
+              {dateRange === undefined ? (
+                 <Skeleton className="h-10 w-full sm:w-[300px] bg-muted" />
+              ) : (
+                <DateRangePicker date={dateRange} setDate={setDateRange} />
+              )}
             </div>
             <div>
               <label htmlFor="outlet-select-dashboard" className="block text-sm font-medium text-foreground mb-1">Select Outlet</label>
@@ -184,7 +194,7 @@ export default function DashboardClient() {
 
       {/* KPI Cards Row */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {isLoadingData ? (
+        {isLoadingData || dateRange === undefined ? (
           <>
             {[...Array(4)].map((_, index) => (
               <StatCard key={index} isLoading={true} title="" value="" />
@@ -204,7 +214,7 @@ export default function DashboardClient() {
             <CardDescription>Food & Beverage cost percentages over the selected period.</CardDescription>
           </CardHeader>
           <CardContent className="h-[400px]">
-            {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+            {isLoadingData || dateRange === undefined ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ChartContainer config={overviewChartConfig} className="h-full w-full">
                 <BarChart data={dashboardData?.overviewChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
@@ -230,7 +240,7 @@ export default function DashboardClient() {
             <CardDescription>Total costs breakdown per outlet.</CardDescription>
           </CardHeader>
           <CardContent className="h-[400px] flex items-center justify-center">
-            {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+            {isLoadingData || dateRange === undefined ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ChartContainer config={donutChartConfig} className="h-full w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPie>
@@ -281,7 +291,7 @@ export default function DashboardClient() {
               </CardDescription>
             </CardHeader>
             <CardContent className="h-[350px]">
-            {isLoadingData ? <Skeleton className="h-full w-full bg-muted" /> : (
+            {isLoadingData || dateRange === undefined ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ChartContainer config={overviewChartConfig} className="h-full w-full">
                 <RechartsLine data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
@@ -307,7 +317,7 @@ export default function DashboardClient() {
               <CardDescription>Highlights of outlet food cost percentages.</CardDescription>
             </CardHeader>
             <CardContent className="h-[350px] overflow-y-auto">
-              {isLoadingData ? (
+              {isLoadingData || dateRange === undefined ? (
                 <div className="space-y-4">
                   {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full bg-muted" />)}
                 </div>
