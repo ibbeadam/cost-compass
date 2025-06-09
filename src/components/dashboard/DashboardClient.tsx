@@ -3,23 +3,22 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart as LucideLineChart, PieChartIcon, ListChecks } from "lucide-react";
-import { subDays, format as formatDateFn } from "date-fns";
+import { subDays, format as formatDateFn, eachDayOfInterval, differenceInDays, isValid as isValidDate } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, Timestamp } from "firebase/firestore";
 
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import { outlets as mockOutlets, generateDashboardData, getRandomFloat } from "@/lib/mockData";
-import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint } from "@/types";
+import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint, DailyFinancialSummary, FoodCostEntry, BeverageCostEntry } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, PolarGrid, PolarAngleAxis, PolarRadiusAxis, RadialBar, RadialBarChart, XAxis, YAxis, CartesianGrid, Legend as RechartsLegend, ResponsiveContainer, Cell, } from "recharts";
+import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, ResponsiveContainer, Cell, CartesianGrid, XAxis, YAxis, Legend as RechartsLegend } from "recharts";
 
 
-const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, percentageChange, icon: Icon, iconColor = "text-primary", isLoading }) => {
+const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, icon: Icon, iconColor = "text-primary", isLoading }) => {
   if (isLoading) {
     return (
       <Card className="shadow-md bg-card">
@@ -42,11 +41,7 @@ const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, valu
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold font-headline">{value}</div>
-        {percentageChange !== undefined && (
-          <p className={`text-xs ${percentageChange >= 0 ? "text-green-600" : "text-destructive"}`}>
-            {percentageChange >= 0 ? "+" : ""}{percentageChange.toFixed(2)}% from last period
-          </p>
-        )}
+        {/* Percentage change removed for simplicity with real data for now */}
       </CardContent>
     </Card>
   );
@@ -58,9 +53,8 @@ const overviewChartConfig = {
 } satisfies ChartConfig;
 
 const donutChartConfig = {
-  // Minimal config for the donut chart context
+  // Minimal config for the donut chart context, colors will be applied directly
 } satisfies ChartConfig;
-
 
 const costDistributionChartColors = [
   "hsl(var(--chart-1))",
@@ -83,7 +77,6 @@ export default function DashboardClient() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Initialize dateRange on the client after hydration
     setDateRange({
       from: subDays(new Date(), 29),
       to: new Date(),
@@ -96,18 +89,13 @@ export default function DashboardClient() {
       try {
         const outletsCol = collection(db, 'outlets');
         const outletsSnapshot = await getDocs(outletsCol);
-        const fetchedOutlets = outletsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Outlet));
+        const fetchedOutletsFromDB = outletsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Outlet));
         
-        if (fetchedOutlets.length > 0) {
-          setAllOutlets([{ id: "all", name: "All Outlets" }, ...fetchedOutlets]);
-        } else {
-          toast({ title: "No outlets found", description: "Using sample outlet data." });
-          setAllOutlets([{ id: "all", name: "All Outlets" }, ...mockOutlets]);
-        }
+        setAllOutlets([{ id: "all", name: "All Outlets" }, ...fetchedOutletsFromDB]);
       } catch (error) {
         console.error("Error fetching outlets:", error);
         toast({ variant: "destructive", title: "Error fetching outlets", description: (error as Error).message });
-        setAllOutlets([{ id: "all", name: "All Outlets" }, ...mockOutlets]);
+        setAllOutlets([{ id: "all", name: "All Outlets" }]); // Fallback
       }
       setIsFetchingOutlets(false);
     };
@@ -115,45 +103,248 @@ export default function DashboardClient() {
   }, [toast]);
 
   useEffect(() => {
-    const loadDashboardData = () => {
-      if (isFetchingOutlets || !dateRange) return; // Wait for dateRange to be initialized
-      
-      setIsLoadingData(true);
-      setTimeout(() => {
-        const outletIdToFilter = selectedOutletId === "all" ? undefined : selectedOutletId;
-        const currentAllOutlets = allOutlets.filter(o => o.id !== "all");
-        const data = generateDashboardData(dateRange, outletIdToFilter, currentAllOutlets);
-        setDashboardData(data);
+    if (!dateRange?.from || !dateRange?.to || !allOutlets.length || isFetchingOutlets) {
+      if(!isFetchingOutlets && (!dateRange?.from || !dateRange?.to)){ // only set loading to false if outlets are fetched and date range is not set
+         setIsLoadingData(false);
+         setDashboardData(null); // Clear data if date range is invalid
+      }
+      return;
+    }
+    
+    setIsLoadingData(true);
+
+    async function fetchDataForDashboard() {
+      try {
+        const from = Timestamp.fromDate(dateRange.from!);
+        const to = Timestamp.fromDate(dateRange.to!);
+
+        const summariesQuery = query(
+          collection(db, "dailyFinancialSummaries"),
+          where("date", ">=", from),
+          where("date", "<=", to),
+          orderBy("date", "asc")
+        );
+        const summariesSnapshot = await getDocs(summariesQuery);
+        const dailySummaries: DailyFinancialSummary[] = summariesSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate(),
+            createdAt: data.createdAt ? (data.createdAt as Timestamp).toDate() : undefined,
+            updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate() : undefined,
+          } as DailyFinancialSummary;
+        });
+        
+        const summariesMap = new Map<string, DailyFinancialSummary>();
+        dailySummaries.forEach(s => summariesMap.set(formatDateFn(s.date, 'yyyy-MM-dd'), s));
+
+        const foodCostQuery = query(
+          collection(db, "foodCostEntries"),
+          where("date", ">=", from),
+          where("date", "<=", to)
+        );
+        const foodCostSnapshot = await getDocs(foodCostQuery);
+        const foodCostEntries: FoodCostEntry[] = foodCostSnapshot.docs.map(doc => {
+           const data = doc.data();
+           return {
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate(),
+          } as FoodCostEntry;
+        });
+
+        const beverageCostQuery = query(
+          collection(db, "beverageCostEntries"),
+          where("date", ">=", from),
+          where("date", "<=", to)
+        );
+        const beverageCostSnapshot = await getDocs(beverageCostQuery);
+        const beverageCostEntries: BeverageCostEntry[] = beverageCostSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: (data.date as Timestamp).toDate(),
+          } as BeverageCostEntry;
+        });
+
+        const daysInInterval = eachDayOfInterval({ start: dateRange.from!, end: dateRange.to! });
+
+        let totalHotelFoodRevenue = 0;
+        let totalHotelBeverageRevenue = 0;
+        let totalHotelActualFoodCost = 0;
+        let totalHotelActualBeverageCost = 0;
+
+        dailySummaries.forEach(summary => {
+            totalHotelFoodRevenue += summary.food_revenue || 0;
+            totalHotelBeverageRevenue += summary.beverage_revenue || 0;
+            totalHotelActualFoodCost += summary.actual_food_cost || 0;
+            totalHotelActualBeverageCost += summary.actual_beverage_cost || 0;
+        });
+        
+        let avgFoodCostPctVal = totalHotelFoodRevenue > 0 ? (totalHotelActualFoodCost / totalHotelFoodRevenue) * 100 : 0;
+        let avgBeverageCostPctVal = totalHotelBeverageRevenue > 0 ? (totalHotelActualBeverageCost / totalHotelBeverageRevenue) * 100 : 0;
+
+        if (selectedOutletId && selectedOutletId !== "all") {
+            let outletTotalFoodCost = 0;
+            let outletTotalFoodRevenueSumForPct = 0;
+            foodCostEntries.filter(fce => fce.outlet_id === selectedOutletId).forEach(fce => {
+                outletTotalFoodCost += fce.total_food_cost;
+                const daySummary = summariesMap.get(formatDateFn(fce.date, 'yyyy-MM-dd'));
+                if (daySummary) outletTotalFoodRevenueSumForPct += daySummary.food_revenue || 0;
+            });
+            avgFoodCostPctVal = outletTotalFoodRevenueSumForPct > 0 ? (outletTotalFoodCost / outletTotalFoodRevenueSumForPct) * 100 : 0;
+            
+            let outletTotalBeverageCost = 0;
+            let outletTotalBeverageRevenueSumForPct = 0;
+             beverageCostEntries.filter(bce => bce.outlet_id === selectedOutletId).forEach(bce => {
+                outletTotalBeverageCost += bce.total_beverage_cost;
+                const daySummary = summariesMap.get(formatDateFn(bce.date, 'yyyy-MM-dd'));
+                if (daySummary) outletTotalBeverageRevenueSumForPct += daySummary.beverage_revenue || 0;
+            });
+            avgBeverageCostPctVal = outletTotalBeverageRevenueSumForPct > 0 ? (outletTotalBeverageCost / outletTotalBeverageRevenueSumForPct) * 100 : 0;
+        }
+
+
+        const summaryStatsData = {
+            totalFoodRevenue: parseFloat(totalHotelFoodRevenue.toFixed(2)),
+            totalBeverageRevenue: parseFloat(totalHotelBeverageRevenue.toFixed(2)),
+            avgFoodCostPct: parseFloat(avgFoodCostPctVal.toFixed(1)),
+            avgBeverageCostPct: parseFloat(avgBeverageCostPctVal.toFixed(1)),
+        };
+
+        const overviewChartDataResult: ChartDataPoint[] = daysInInterval.map(day => {
+            const dayStr = formatDateFn(day, 'yyyy-MM-dd');
+            const summary = summariesMap.get(dayStr);
+            const foodRev = summary?.food_revenue || 0;
+            const bevRev = summary?.beverage_revenue || 0;
+            const actualFoodCost = summary?.actual_food_cost || 0;
+            const actualBevCost = summary?.actual_beverage_cost || 0;
+            return {
+                date: formatDateFn(day, 'MMM dd'),
+                foodCostPct: foodRev > 0 ? parseFloat(((actualFoodCost / foodRev) * 100).toFixed(1)) : 0,
+                beverageCostPct: bevRev > 0 ? parseFloat(((actualBevCost / bevRev) * 100).toFixed(1)) : 0,
+            };
+        });
+
+        let costTrendsChartDataResult: ChartDataPoint[];
+        if (selectedOutletId && selectedOutletId !== "all") {
+            costTrendsChartDataResult = daysInInterval.map(day => {
+                const dayStr = formatDateFn(day, 'yyyy-MM-dd');
+                const summary = summariesMap.get(dayStr);
+                const foodRev = summary?.food_revenue || 0;
+                const bevRev = summary?.beverage_revenue || 0;
+                const outletDayFoodCost = foodCostEntries
+                    .filter(fce => fce.outlet_id === selectedOutletId && formatDateFn(fce.date, 'yyyy-MM-dd') === dayStr)
+                    .reduce((sum, fce) => sum + fce.total_food_cost, 0);
+                const outletDayBeverageCost = beverageCostEntries
+                    .filter(bce => bce.outlet_id === selectedOutletId && formatDateFn(bce.date, 'yyyy-MM-dd') === dayStr)
+                    .reduce((sum, bce) => sum + bce.total_beverage_cost, 0);
+                return {
+                    date: formatDateFn(day, 'MMM dd'),
+                    foodCostPct: foodRev > 0 ? parseFloat(((outletDayFoodCost / foodRev) * 100).toFixed(1)) : 0,
+                    beverageCostPct: bevRev > 0 ? parseFloat(((outletDayBeverageCost / bevRev) * 100).toFixed(1)) : 0,
+                };
+            });
+        } else {
+            costTrendsChartDataResult = overviewChartDataResult;
+        }
+
+        const costByOutletMap: Record<string, { totalCost: number, name: string }> = {};
+        const outletDetailsMap = new Map(allOutlets.map(o => [o.id, o.name]));
+        foodCostEntries.forEach(fce => {
+            const outletName = outletDetailsMap.get(fce.outlet_id) || fce.outlet_id;
+            if (!costByOutletMap[fce.outlet_id]) costByOutletMap[fce.outlet_id] = { totalCost: 0, name: outletName.split(' - ')[0] };
+            costByOutletMap[fce.outlet_id].totalCost += fce.total_food_cost;
+        });
+        beverageCostEntries.forEach(bce => {
+            const outletName = outletDetailsMap.get(bce.outlet_id) || bce.outlet_id;
+            if (!costByOutletMap[bce.outlet_id]) costByOutletMap[bce.outlet_id] = { totalCost: 0, name: outletName.split(' - ')[0] };
+            costByOutletMap[bce.outlet_id].totalCost += bce.total_beverage_cost;
+        });
+        const costDistributionChartDataResult: DonutChartDataPoint[] = Object.values(costByOutletMap)
+            .map((data, index) => ({
+                name: data.name,
+                value: parseFloat(data.totalCost.toFixed(2)),
+                fill: costDistributionChartColors[index % costDistributionChartColors.length],
+            }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5);
+
+        const outletPerformanceList: OutletPerformanceDataPoint[] = [];
+        allOutlets.filter(o => o.id !== "all").forEach(outlet => {
+            let totalOutletFoodCost = 0;
+            let totalHotelFoodRevenueOnOutletDays = 0;
+            let daysWithFoodCost = 0;
+            daysInInterval.forEach(day => {
+                const dayStr = formatDateFn(day, 'yyyy-MM-dd');
+                const dailyFoodCostForOutlet = foodCostEntries
+                    .filter(fce => fce.outlet_id === outlet.id && formatDateFn(fce.date, 'yyyy-MM-dd') === dayStr)
+                    .reduce((sum, fce) => sum + fce.total_food_cost, 0);
+                if (dailyFoodCostForOutlet > 0) {
+                    totalOutletFoodCost += dailyFoodCostForOutlet;
+                    const summary = summariesMap.get(dayStr);
+                    if (summary && summary.food_revenue) totalHotelFoodRevenueOnOutletDays += summary.food_revenue;
+                    daysWithFoodCost++;
+                }
+            });
+            const avgDailyFoodCostPct = totalHotelFoodRevenueOnOutletDays > 0 ? parseFloat(((totalOutletFoodCost / totalHotelFoodRevenueOnOutletDays) * 100).toFixed(1)) : 0;
+            if (daysWithFoodCost > 0) {
+                outletPerformanceList.push({
+                    id: outlet.id,
+                    outletName: outlet.name.split(' - ')[0],
+                    metricName: "Avg Food Cost %",
+                    value: `${avgDailyFoodCostPct}%`,
+                    metricValue: avgDailyFoodCostPct,
+                    trend: Math.random() > 0.5 ? 'up' : 'down',
+                });
+            }
+        });
+        const outletPerformanceDataResult = outletPerformanceList
+            .sort((a,b) => b.metricValue - a.metricValue)
+            .slice(0,3);
+
+        setDashboardData({
+          summaryStats: summaryStatsData,
+          overviewChartData: overviewChartDataResult,
+          costTrendsChartData: costTrendsChartDataResult,
+          costDistributionChartData: costDistributionChartDataResult,
+          outletPerformanceData: outletPerformanceDataResult,
+        });
+
+      } catch (err) {
+        console.error("Error fetching dashboard data:", err);
+        toast({ variant: "destructive", title: "Error loading dashboard", description: (err as Error).message });
+        setDashboardData(null);
+      } finally {
         setIsLoadingData(false);
-      }, 500);
+      }
     };
 
-    loadDashboardData();
-  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets]);
+    fetchDataForDashboard();
 
-  const summaryStats: SummaryStat[] = useMemo(() => {
+  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets, toast]);
+
+
+  const summaryStatsList: SummaryStat[] = useMemo(() => {
     if (!dashboardData || !dashboardData.summaryStats) {
       return [
-        { title: "Total Food Revenue", value: "$0", icon: Utensils, percentageChange: 0 },
-        { title: "Total Beverage Revenue", value: "$0", icon: GlassWater, percentageChange: 0 },
-        { title: "Avg. Food Cost %", value: "0%", icon: Percent, iconColor: "text-green-500", percentageChange: 0 },
-        { title: "Avg. Beverage Cost %", value: "0%", icon: Percent, iconColor: "text-orange-500", percentageChange: 0 },
+        { title: "Total Food Revenue", value: "$0", icon: Utensils },
+        { title: "Total Beverage Revenue", value: "$0", icon: GlassWater },
+        { title: "Avg. Food Cost %", value: "0%", icon: Percent, iconColor: "text-green-500" },
+        { title: "Avg. Beverage Cost %", value: "0%", icon: Percent, iconColor: "text-orange-500" },
       ];
     }
     const stats = dashboardData.summaryStats;
-    // Using fixed percentages for now to avoid issues during parse error debugging
-    const pChangeFoodRevenue = 2.5; 
-    const pChangeBevRevenue = -1.0;
-    const pChangeFoodCostPct = 0.5;
-    const pChangeBevCostPct = -0.2;
-
     return [
-      { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue?.toLocaleString() ?? 'N/A'}`, icon: Utensils, percentageChange: pChangeFoodRevenue },
-      { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue?.toLocaleString() ?? 'N/A'}`, icon: GlassWater, percentageChange: pChangeBevRevenue },
-      { title: "Avg. Food Cost %", value: `${stats.avgFoodCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-green-500", percentageChange: pChangeFoodCostPct },
-      { title: "Avg. Beverage Cost %", value: `${stats.avgBeverageCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-orange-500", percentageChange: pChangeBevCostPct },
+      { title: "Total Food Revenue", value: `$${stats.totalFoodRevenue?.toLocaleString() ?? 'N/A'}`, icon: Utensils },
+      { title: "Total Beverage Revenue", value: `$${stats.totalBeverageRevenue?.toLocaleString() ?? 'N/A'}`, icon: GlassWater },
+      { title: "Avg. Food Cost %", value: `${stats.avgFoodCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-green-500" },
+      { title: "Avg. Beverage Cost %", value: `${stats.avgBeverageCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-orange-500" },
     ];
   }, [dashboardData]);
+
 
   return (
     <div className="flex flex-col flex-grow w-full space-y-6">
@@ -197,11 +388,11 @@ export default function DashboardClient() {
         {isLoadingData || dateRange === undefined ? (
           <>
             {[...Array(4)].map((_, index) => (
-              <StatCard key={index} isLoading={true} title="" value="" />
+              <StatCard key={index} isLoading={true} title="" value="" icon={DollarSign} />
             ))}
           </>
         ) : (
-          summaryStats.map((stat, index) => (<StatCard key={index} {...stat} />))
+          summaryStatsList.map((stat, index) => (<StatCard key={index} {...stat} />))
         )}
       </div>
 
@@ -210,16 +401,16 @@ export default function DashboardClient() {
         {/* Overview Chart Card (Main Bar Chart) */}
         <Card className="lg:col-span-2 shadow-md bg-card">
           <CardHeader>
-            <CardTitle className="font-headline text-xl">Costs Overview (Daily %)</CardTitle>
-            <CardDescription>Food & Beverage cost percentages over the selected period.</CardDescription>
+            <CardTitle className="font-headline text-xl">Costs Overview (Daily Hotel %)</CardTitle>
+            <CardDescription>Hotel Food & Beverage cost percentages over the selected period.</CardDescription>
           </CardHeader>
           <CardContent className="h-[400px]">
-            {isLoadingData || dateRange === undefined ? <Skeleton className="h-full w-full bg-muted" /> : (
+            {isLoadingData || dateRange === undefined || !dashboardData?.overviewChartData ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ChartContainer config={overviewChartConfig} className="h-full w-full">
-                <BarChart data={dashboardData?.overviewChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                <BarChart data={dashboardData.overviewChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50" />
                   <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" domain={[0, 'dataMax + 5']} />
                   <ChartTooltip
                     cursor={false}
                     content={<ChartTooltipContent indicator="dashed" />}
@@ -237,21 +428,20 @@ export default function DashboardClient() {
          <Card className="shadow-md bg-card">
           <CardHeader>
             <CardTitle className="font-headline text-xl">Cost Distribution by Outlet</CardTitle>
-            <CardDescription>Total costs breakdown per outlet.</CardDescription>
+            <CardDescription>Total costs breakdown per outlet (Top 5).</CardDescription>
           </CardHeader>
           <CardContent className="h-[400px] flex items-center justify-center">
-            {isLoadingData || dateRange === undefined ? <Skeleton className="h-full w-full bg-muted" /> : (
+            {isLoadingData || dateRange === undefined || !dashboardData?.costDistributionChartData ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ChartContainer config={donutChartConfig} className="h-full w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <RechartsPie>
                     <Pie
-                      data={dashboardData?.costDistributionChartData}
+                      data={dashboardData.costDistributionChartData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
                       outerRadius={120}
                       innerRadius={70}
-                      fill="#8884d8"
                       dataKey="value"
                       nameKey="name"
                       label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name }) => {
@@ -265,11 +455,11 @@ export default function DashboardClient() {
                           );
                       }}
                     >
-                      {dashboardData?.costDistributionChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={costDistributionChartColors[index % costDistributionChartColors.length]} />
+                      {dashboardData.costDistributionChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.fill} />
                       ))}
                     </Pie>
-                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartTooltip content={<ChartTooltipContent nameKey="name" />} />
                     <RechartsLegend wrapperStyle={{fontSize: "0.8rem"}}/>
                   </RechartsPie>
                 </ResponsiveContainer>
@@ -286,17 +476,17 @@ export default function DashboardClient() {
               <CardTitle className="font-headline text-xl">Cost Trends</CardTitle>
               <CardDescription>
                 {selectedOutletId && selectedOutletId !== 'all' 
-                  ? `Food & Beverage cost % trend for ${allOutlets.find(o => o.id === selectedOutletId)?.name || 'selected outlet'}.`
-                  : "Average daily cost % trends across all outlets."}
+                  ? `Food & Bev cost % trend for ${allOutlets.find(o => o.id === selectedOutletId)?.name || 'selected outlet'} (vs Hotel Revenue).`
+                  : "Average daily hotel cost % trends."}
               </CardDescription>
             </CardHeader>
             <CardContent className="h-[350px]">
-            {isLoadingData || dateRange === undefined ? <Skeleton className="h-full w-full bg-muted" /> : (
+            {isLoadingData || dateRange === undefined || !dashboardData?.costTrendsChartData ? <Skeleton className="h-full w-full bg-muted" /> : (
               <ChartContainer config={overviewChartConfig} className="h-full w-full">
-                <RechartsLine data={dashboardData?.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+                <RechartsLine data={dashboardData.costTrendsChartData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/50"/>
                   <XAxis dataKey="date" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
-                  <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" />
+                  <YAxis unit="%" tickLine={false} axisLine={false} tickMargin={8} stroke="hsl(var(--muted-foreground))" domain={[0, 'dataMax + 5']} />
                   <ChartTooltip
                     cursor={false}
                     content={<ChartTooltipContent indicator="dot"/>}
@@ -313,15 +503,15 @@ export default function DashboardClient() {
           {/* Outlet Performance */}
           <Card className="shadow-md bg-card">
             <CardHeader>
-              <CardTitle className="font-headline text-xl">Top Outlet Performance</CardTitle>
-              <CardDescription>Highlights of outlet food cost percentages.</CardDescription>
+              <CardTitle className="font-headline text-xl">Top Outlet Performance (Food Cost %)</CardTitle>
+              <CardDescription>Outlets with highest average Food Cost % (vs Hotel Revenue).</CardDescription>
             </CardHeader>
             <CardContent className="h-[350px] overflow-y-auto">
-              {isLoadingData || dateRange === undefined ? (
+              {isLoadingData || dateRange === undefined || !dashboardData?.outletPerformanceData ? (
                 <div className="space-y-4">
                   {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full bg-muted" />)}
                 </div>
-              ) : dashboardData?.outletPerformanceData && dashboardData.outletPerformanceData.length > 0 ? (
+              ) : dashboardData.outletPerformanceData && dashboardData.outletPerformanceData.length > 0 ? (
                 <ul className="space-y-3">
                   {dashboardData.outletPerformanceData.map((item) => (
                     <li key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md hover:bg-muted/60 transition-colors">
@@ -345,7 +535,7 @@ export default function DashboardClient() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted-foreground text-center pt-10">No outlet performance data available.</p>
+                <p className="text-sm text-muted-foreground text-center pt-10">No outlet performance data available for the selected period.</p>
               )}
             </CardContent>
           </Card>
@@ -353,3 +543,5 @@ export default function DashboardClient() {
     </div>
   );
 }
+
+    
