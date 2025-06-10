@@ -46,16 +46,15 @@ export default function OutletListClient() {
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
   const { toast } = useToast();
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   useEffect(() => {
     setIsLoading(true);
-    // No need for q = orderBy("name") if sorting client-side after fetch.
-    // onSnapshot will provide the collection.
     
     const unsubscribe = onSnapshot(collection(db, "outlets"), (snapshot) => {
       const fetchedOutlets = snapshot.docs.map(doc => {
         const data = doc.data();
-        // Convert Timestamps to Dates for client-side usage
-        // Ensure all fields from Outlet type are explicitly mapped
         const outletData: Outlet = {
           id: doc.id,
           name: data.name,
@@ -73,9 +72,10 @@ export default function OutletListClient() {
           targetOccupancy: data.targetOccupancy,
         };
         return outletData;
-      }).sort((a, b) => a.name.localeCompare(b.name)); // Sort by name client-side
+      }).sort((a, b) => a.name.localeCompare(b.name)); 
 
       setOutlets(fetchedOutlets);
+      setCurrentPage(1); // Reset to first page on new data
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching outlets:", error);
@@ -107,7 +107,6 @@ export default function OutletListClient() {
         title: "Outlet Deleted",
         description: "The outlet has been successfully deleted.",
       });
-      // Realtime listener will update the list
     } catch (error) {
       console.error("Error deleting outlet:", error);
       toast({
@@ -120,8 +119,26 @@ export default function OutletListClient() {
 
   const onFormSuccess = () => {
     setIsFormOpen(false);
-    // Realtime listener will update the list, no manual refresh needed for outlets state
   };
+
+  // Pagination logic
+  const totalPages = Math.max(1, Math.ceil(outlets.length / itemsPerPage));
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = outlets.slice(indexOfFirstItem, indexOfLastItem);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
 
   if (isLoading) {
     return (
@@ -131,7 +148,7 @@ export default function OutletListClient() {
         </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Skeleton className="h-12 w-full bg-muted/50" /> {/* Header */}
-          {[...Array(3)].map((_, i) => (
+          {[...Array(itemsPerPage)].map((_, i) => (
             <div key={i} className="flex items-center p-4 border-b">
               <Skeleton className="h-6 flex-grow bg-muted mr-4" />
               <Skeleton className="h-6 w-24 bg-muted mr-4" />
@@ -139,6 +156,11 @@ export default function OutletListClient() {
               <Skeleton className="h-8 w-8 bg-muted" />
             </div>
           ))}
+        </div>
+         <div className="flex items-center justify-end space-x-2 py-4">
+          <Skeleton className="h-8 w-20 bg-muted" />
+          <Skeleton className="h-8 w-20 bg-muted" />
+          <Skeleton className="h-8 w-24 bg-muted" />
         </div>
       </div>
     );
@@ -153,12 +175,13 @@ export default function OutletListClient() {
       </div>
 
       {outlets.length === 0 ? (
-         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg">
-            <Building className="mx-auto h-12 w-12 mb-4" />
+         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
+            <Building className="mx-auto h-12 w-12 mb-4 text-primary" />
             <p className="text-lg font-medium">No outlets found.</p>
             <p>Click "Add New Outlet" to get started.</p>
         </div>
       ) : (
+        <>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Table>
             <TableHeader className="bg-muted/50">
@@ -169,7 +192,7 @@ export default function OutletListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {outlets.map((outlet) => (
+              {currentItems.map((outlet) => (
                 <TableRow key={outlet.id}>
                   <TableCell>{outlet.name}</TableCell>
                   <TableCell className="font-code">{outlet.id}</TableCell>
@@ -213,6 +236,30 @@ export default function OutletListClient() {
             </TableBody>
           </Table>
         </div>
+        {outlets.length > 0 && (
+            <div className="flex items-center justify-end space-x-2 py-4">
+            <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+            </span>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={prevPage}
+                disabled={currentPage === 1}
+            >
+                Previous
+            </Button>
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={nextPage}
+                disabled={currentPage === totalPages}
+            >
+                Next
+            </Button>
+            </div>
+        )}
+        </>
       )}
 
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
