@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import * as React from 'react'; 
+import * as React from 'react';
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -21,12 +21,12 @@ const navItems = [
   { href: '/dashboard/financial-summary', label: 'Daily Financial Summary', icon: DollarSign },
   { href: '/dashboard/food-cost-input', label: 'Food Cost Input', icon: ClipboardList },
   { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater },
-  { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true }, 
+  { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true },
   { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
   { href: '/dashboard/settings/categories', label: 'Manage Categories', icon: ListChecks },
-  { 
-    href: '/dashboard/settings', 
-    label: 'General Settings', 
+  {
+    href: '/dashboard/settings',
+    label: 'General Settings',
     icon: Settings,
   },
 ];
@@ -50,7 +50,8 @@ export function MainNav() {
     // Parent match: current path is a true sub-path of href
     // (e.g., href="/dashboard/settings", pathname="/dashboard/settings/categories")
     // This check ensures href is a prefix and is followed by a '/' in pathname.
-    // It excludes the root dashboard link from this type of parent matching.
+    // It also explicitly ensures that '/dashboard' itself isn't treated as a parent for other /dashboard/* routes
+    // unless it's an exact match (which is handled above).
     if (href !== '/dashboard' && pathname.startsWith(href + '/')) {
       return true;
     }
