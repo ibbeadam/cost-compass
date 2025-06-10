@@ -15,6 +15,9 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID, // Optional
 };
 
+// TEMPORARY DEBUG LOG: Remove after checking
+console.log("Firebase Config Being Used by src/lib/firebase.ts:", firebaseConfig);
+
 let appInstance;
 let dbInstance;
 let authInstance;
