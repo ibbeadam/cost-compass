@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import * as React from 'react'; // Import React for useState and useEffect
+import * as React from 'react'; 
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -28,7 +28,6 @@ const navItems = [
     href: '/dashboard/settings', 
     label: 'General Settings', 
     icon: Settings,
-    // Sub-items removed as Outlets and Categories are now top-level
   },
 ];
 
@@ -42,13 +41,19 @@ export function MainNav() {
 
   const isActive = (href: string) => {
     if (!isMounted) {
-      return false; // Default to false on server and initial client render
+      return false;
     }
     // Exact match
-    if (pathname === href) return true;
-    // For top-level sections, check if pathname starts with the href,
-    // but exclude the root dashboard to avoid highlighting it for all /dashboard/* paths.
-    if (href !== '/dashboard' && pathname.startsWith(href)) return true;
+    if (pathname === href) {
+      return true;
+    }
+    // Parent match: current path is a true sub-path of href
+    // (e.g., href="/dashboard/settings", pathname="/dashboard/settings/categories")
+    // This check ensures href is a prefix and is followed by a '/' in pathname.
+    // It excludes the root dashboard link from this type of parent matching.
+    if (href !== '/dashboard' && pathname.startsWith(href + '/')) {
+      return true;
+    }
     return false;
   };
 
@@ -56,7 +61,7 @@ export function MainNav() {
     <SidebarMenu>
       {navItems.map((item) => (
         <SidebarMenuItem key={item.href}>
-          <Link href={item.href} legacyBehavior passHref>
+          <Link href={item.href} legacyBehavior passHref suppressHydrationWarning>
             <SidebarMenuButton
               asChild
               isActive={isActive(item.href)}
@@ -76,17 +81,17 @@ export function MainNav() {
               </a>
             </SidebarMenuButton>
           </Link>
-          {/* Render sub-items if they exist - though "General Settings" no longer has them in this config */}
-          {item.subItems && item.subItems.length > 0 && (
+          {/* Sub-items rendering (if any item were to have them) */}
+          {(item as any).subItems && (item as any).subItems.length > 0 && (
              <SidebarMenuSub>
-              {item.subItems.map((subItem) => (
+              {(item as any).subItems.map((subItem: any) => (
                 <SidebarMenuSubItem key={subItem.href}>
-                   <Link href={subItem.href} legacyBehavior passHref>
+                   <Link href={subItem.href} legacyBehavior passHref suppressHydrationWarning>
                     <SidebarMenuSubButton
                       asChild
-                      isActive={pathname === subItem.href} // For sub-items, pathname directly is fine if isMounted check is at top-level isActive
+                      isActive={isMounted && pathname === subItem.href}
                        className={cn(
-                        isMounted && pathname === subItem.href // Ensure isActive for subItems also respects isMounted
+                        isMounted && pathname === subItem.href
                         ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
                         : "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                       )}
