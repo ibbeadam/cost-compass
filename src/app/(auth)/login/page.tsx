@@ -35,7 +35,6 @@ export default function LoginPage() {
       } else if (err.code === 'auth/invalid-email') {
         errorMessage = "Please enter a valid email address.";
       }
-      console.error("Login error:", err, err.code);
       setError(errorMessage);
       toast({ variant: "destructive", title: "Login Failed", description: errorMessage });
     } finally {
@@ -45,15 +44,16 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-       <div className="absolute top-8 left-8 flex items-center gap-2 text-primary">
-        <Compass size={32} />
-        <span className="text-2xl font-headline font-semibold text-foreground">
-          Cost Compass
-        </span>
-      </div>
+      {/* Moved logo and title inside the card and centered them */}
+      <div className="flex items-center gap-2 text-primary justify-center mb-6">
+          <Compass size={32} />
+          <span className="text-2xl font-headline font-semibold text-foreground">
+            Cost Compass
+          </span>
+        </div>
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-headline">Welcome Back</CardTitle>
+          <CardTitle className="text-2xl font-headline">Sign In</CardTitle>
           <CardDescription>Sign in to access your Cost Compass dashboard.</CardDescription>
         </CardHeader>
         <CardContent>

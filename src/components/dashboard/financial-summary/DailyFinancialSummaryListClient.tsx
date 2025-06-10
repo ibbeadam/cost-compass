@@ -38,7 +38,7 @@ import {
 import DailyFinancialSummaryForm from "./DailyFinancialSummaryForm";
 import DailyFinancialSummaryDetailDialog from "./DailyFinancialSummaryDetailDialog";
 import { useToast } from "@/hooks/use-toast";
-import { deleteDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
+import { deleteDailyFinancialSummaryAction, getPaginatedDailyFinancialSummariesAction } from "@/actions/dailyFinancialSummaryActions";
 import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions";
 import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,30 +66,44 @@ export default function DailyFinancialSummaryListClient() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   const { toast } = useToast();
+  const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
   useEffect(() => {
-    setIsLoading(true);
-    const q = firestoreQuery(collection(db, "dailyFinancialSummaries"), orderBy("date", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedSummaries = snapshot.docs.map(doc => {
-        const data = doc.data() as Omit<DailyFinancialSummary, 'id'>;
-        return convertTimestampsToDates({ id: doc.id, ...data });
-      });
-      setSummaries(fetchedSummaries);
-      setCurrentPage(1); // Reset to first page on new data
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Error fetching daily financial summaries:", error);
-      toast({ variant: "destructive", title: "Error Fetching Summaries", description: "Could not load daily financial summaries." });
-      setIsLoading(false);
-    });
+    const fetchInitialSummaries = async () => {
+      try {
+        setIsLoading(true);
+        const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, null);
+        setSummaries(fetchedSummaries.map(convertTimestampsToDates));
+        setLastVisibleDocId(newLastVisibleDocId);
+        setHasMore(fetchedSummaries.length === itemsPerPage);
+      } catch (error) {
+        toast({ variant: "destructive", title: "Error Fetching Summaries", description: (error as Error).message || "Could not load daily financial summaries." });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchInitialSummaries();
+  }, [itemsPerPage, toast]); 
 
-    return () => unsubscribe();
-  }, [toast]);
-
+  const fetchMoreSummaries = async () => {
+    if (!hasMore || isLoading || !lastVisibleDocId) return;
+    try {
+      setIsLoading(true);
+      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, lastVisibleDocId);
+      setSummaries(prevSummaries => [...prevSummaries, ...fetchedSummaries.map(convertTimestampsToDates)]);
+      setLastVisibleDocId(newLastVisibleDocId);
+      setHasMore(fetchedSummaries.length === itemsPerPage);
+    } catch (error) {
+        toast({ variant: "destructive", title: "Error Fetching More Summaries", description: (error as Error).message || "Could not load more summaries." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   const handleAddNew = () => {
     setEditingSummary(null);
     setIsFormOpen(true);
@@ -130,14 +144,34 @@ export default function DailyFinancialSummaryListClient() {
   const handleDelete = async (summaryId: string) => {
     try {
       await deleteDailyFinancialSummaryAction(summaryId);
+      setSummaries(prev => prev.filter(s => s.id !== summaryId)); // Optimistically update UI
       toast({ title: "Summary Deleted", description: "The daily financial summary has been deleted." });
     } catch (error) {
       toast({ variant: "destructive", title: "Error Deleting Summary", description: (error as Error).message || "Could not delete summary." });
     }
   };
 
-  const onFormSuccess = () => setIsFormOpen(false);
-  const onFormCancel = () => setIsFormOpen(false);
+  const onFormSuccess = async () => {
+    setIsFormOpen(false);
+    setEditingSummary(null);
+    // Refetch the first page to see the new/updated entry
+    try {
+        setIsLoading(true);
+        const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, null);
+        setSummaries(fetchedSummaries.map(convertTimestampsToDates));
+        setLastVisibleDocId(newLastVisibleDocId);
+        setHasMore(fetchedSummaries.length === itemsPerPage);
+        setCurrentPage(1);
+    } catch (error) {
+        toast({ variant: "destructive", title: "Error Refreshing Summaries", description: (error as Error).message });
+    } finally {
+        setIsLoading(false);
+    }
+  };
+  const onFormCancel = () => {
+    setIsFormOpen(false);
+    setEditingSummary(null);
+  };
 
   const renderPercentage = (value: number | null | undefined) => {
     if (value == null) return <span className="text-muted-foreground">-</span>;
@@ -163,26 +197,43 @@ export default function DailyFinancialSummaryListClient() {
     return "";
   };
 
-  // Pagination logic
-  const totalPages = Math.max(1, Math.ceil(summaries.length / itemsPerPage));
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = summaries.slice(indexOfFirstItem, indexOfLastItem);
-
-  const nextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
+  const nextPage = async () => {
+    if (!hasMore || isLoading) return;
+    setCurrentPage(prev => prev + 1);
+    try {
+      setIsLoading(true);
+      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, lastVisibleDocId);
+      setSummaries(fetchedSummaries.map(convertTimestampsToDates));
+      setLastVisibleDocId(newLastVisibleDocId);
+      setHasMore(fetchedSummaries.length === itemsPerPage);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error Fetching Next Page", description: (error as Error).message });
+      setCurrentPage(prev => prev - 1); // Revert page change on error
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const prevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
+  const prevPage = async () => {
+    if (currentPage === 1 || isLoading) return;
+    // This simplified prevPage will refetch the first page and set current page to 1
+    // A true previous page with cursors requires more complex logic (storing previous cursors)
+    setCurrentPage(1); 
+    setLastVisibleDocId(null); // Reset cursor to fetch from beginning
+    try {
+      setIsLoading(true);
+      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, null);
+      setSummaries(fetchedSummaries.map(convertTimestampsToDates));
+      setLastVisibleDocId(newLastVisibleDocId);
+      setHasMore(fetchedSummaries.length === itemsPerPage);
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error Fetching Previous Page", description: (error as Error).message });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-
-  if (isLoading) {
+  if (isLoading && currentPage === 1 && summaries.length === 0) { // Show full skeleton only on initial load
     return (
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
@@ -231,7 +282,7 @@ export default function DailyFinancialSummaryListClient() {
         <Button onClick={handleAddNew}> <PlusCircle className="mr-2 h-4 w-4" /> Add New Daily Summary </Button>
       </div>
 
-      {summaries.length === 0 ? (
+      {summaries.length === 0 && !isLoading ? (
         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
           <DollarSign className="mx-auto h-12 w-12 mb-4 text-primary" />
           <p className="text-lg font-medium">No daily financial summaries found.</p>
@@ -256,7 +307,7 @@ export default function DailyFinancialSummaryListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {currentItems.map((summary) => (
+              {summaries.map((summary) => (
                 <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
                   <TableCell className="font-code" onClick={() => handleViewDetails(summary)}> {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id} </TableCell>
                   <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.food_revenue)}</TableCell>
@@ -297,13 +348,13 @@ export default function DailyFinancialSummaryListClient() {
       {summaries.length > 0 && (
         <div className="flex items-center justify-end space-x-2 py-4">
           <span className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages}
+            Page {currentPage}
           </span>
           <Button
             variant="outline"
             size="sm"
             onClick={prevPage}
-            disabled={currentPage === 1}
+            disabled={currentPage === 1 || isLoading}
           >
             Previous
           </Button>
@@ -311,14 +362,14 @@ export default function DailyFinancialSummaryListClient() {
             variant="outline"
             size="sm"
             onClick={nextPage}
-            disabled={currentPage === totalPages}
+            disabled={!hasMore || isLoading}
           >
             Next
           </Button>
         </div>
       )}
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => {if (!open) { setEditingSummary(null); setIsFormOpen(false); } else { setIsFormOpen(open); }}}>
         <DialogContent className="sm:max-w-2xl md:max-w-3xl max-h-[90vh] flex flex-col bg-card">
           <DialogHeader>
             <DialogTitle className="font-headline text-xl">{editingSummary ? "Edit" : "Add New"} Daily Financial Summary</DialogTitle>

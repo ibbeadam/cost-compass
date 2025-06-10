@@ -14,7 +14,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Input } from "@/components/ui/input"; 
 import type { Outlet } from "@/types";
 import { addOutletAction, updateOutletAction } from "@/actions/outletActions";
 import { useToast } from "@/hooks/use-toast";

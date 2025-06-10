@@ -1,6 +1,6 @@
 
-import CategoryListClient from "@/components/dashboard/settings/categories/CategoryListClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import CategoryListClient from "@/components/dashboard/categories/CategoryListClient";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 

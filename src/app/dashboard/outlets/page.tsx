@@ -1,5 +1,5 @@
 
-import OutletListClient from "@/components/dashboard/settings/outlets/OutletListClient";
+import OutletListClient from "@/components/dashboard/outlets/OutletListClient";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

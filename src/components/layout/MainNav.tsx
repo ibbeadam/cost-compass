@@ -22,8 +22,8 @@ const navItems = [
   { href: '/dashboard/food-cost-input', label: 'Food Cost Input', icon: ClipboardList },
   { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater },
   { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true },
-  { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
-  { href: '/dashboard/settings/categories', label: 'Manage Categories', icon: ListChecks },
+  { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building }, // Already updated to '/dashboard/outlets'
+  { href: '/dashboard/categories', label: 'Manage Categories', icon: ListChecks },
   {
     href: '/dashboard/settings',
     label: 'General Settings',

@@ -33,7 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+} from "@/components/ui/alert-dialog";import { getPaginatedOutletsAction } from "@/actions/outletActions";
 import { OutletForm } from "./OutletForm";
 import { useToast } from "@/hooks/use-toast";
 import { deleteOutletAction } from "@/actions/outletActions";

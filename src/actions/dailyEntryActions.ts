@@ -1,7 +1,7 @@
 
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, orderBy, limit, startAfter, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { DailyHotelEntry, CostDetailCategory } from "@/types"; 
@@ -182,5 +182,58 @@ export async function deleteDailyHotelEntryAction(id: string): Promise<void> {
   } catch (error) {
     console.error("Error deleting daily hotel entry: ", error);
     throw new Error(`Failed to delete daily hotel entry: ${(error as Error).message}`);
+  }
+}
+
+export async function getPaginatedDailyEntriesAction(
+  limitAmount: number,
+  lastVisibleDocId?: string
+): Promise<{ entries: DailyHotelEntry[], lastVisibleDocId: string | null }> {
+  try {
+    let entriesQuery = query(
+      collection(db, "dailyHotelEntries"),
+      orderBy("date", "desc"), // Order by date descending for latest entries first
+      limit(limitAmount)
+    );
+
+    if (lastVisibleDocId) {
+      const lastVisibleDoc = await getDoc(doc(db, "dailyHotelEntries", lastVisibleDocId));
+      if (lastVisibleDoc.exists()) {
+        entriesQuery = query(
+          collection(db, "dailyHotelEntries"),
+          orderBy("date", "desc"),
+          startAfter(lastVisibleDoc),
+          limit(limitAmount)
+        );
+      } else {
+        // If the last visible document doesn't exist, fetch the first page
+        entriesQuery = query(
+          collection(db, "dailyHotelEntries"),
+          orderBy("date", "desc"),
+          limit(limitAmount)
+        );
+      }
+    }
+
+    const querySnapshot = await getDocs(entriesQuery);
+    const entries = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      // Convert Timestamps to JS Dates
+      date: (doc.data().date as Timestamp).toDate(),
+      createdAt: (doc.data().createdAt as Timestamp).toDate(),
+      updatedAt: (doc.data().updatedAt as Timestamp).toDate(),
+      // Ensure CostDetailCategories are initialized if they exist
+      foodCostDetails: initializeCostDetailCategory(doc.data().foodCostDetails),
+      beverageCostDetails: initializeCostDetailCategory(doc.data().beverageCostDetails),
+    })) as DailyHotelEntry[];
+
+    const newLastVisibleDocId = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
+
+    return { entries, lastVisibleDocId: newLastVisibleDocId };
+
+  } catch (error) {
+    console.error("Error fetching paginated daily entries: ", error);
+    throw new Error(`Failed to fetch paginated daily entries: ${(error as Error).message}`);
   }
 }

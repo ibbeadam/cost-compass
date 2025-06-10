@@ -1,7 +1,7 @@
 
 "use server";
 
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp, query, orderBy, limit, startAfter, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@/types";
@@ -127,5 +127,44 @@ export async function getCategoryAction(id: string): Promise<Category | null> {
   } catch (error) {
     console.error("Error fetching category: ", error);
     throw new Error(`Failed to fetch category: ${(error as Error).message}`);
+  }
+}
+
+export async function getPaginatedCategoriesAction(
+  limitValue: number,
+  lastVisibleDocId?: string
+): Promise<{ categories: Category[], lastVisibleDocId: string | null }> {
+  try {
+    let categoryQuery = query(
+      categoriesCol,
+      orderBy("createdAt", "desc"),
+      limit(limitValue)
+    );
+
+    if (lastVisibleDocId) {
+      const lastVisibleDoc = await getDoc(doc(db, "categories", lastVisibleDocId));
+      if (lastVisibleDoc.exists()) {
+        categoryQuery = query(categoryQuery, startAfter(lastVisibleDoc));
+      } else {
+        // If lastVisibleDocId is provided but doesn't exist, treat as no previous page
+        console.warn(`Last visible document with ID ${lastVisibleDocId} not found. Starting from the beginning.`);
+      }
+    }
+
+    const querySnapshot = await getDocs(categoryQuery);
+    const categories: Category[] = querySnapshot.docs.map(doc => {
+      const data = doc.data() as Omit<Category, 'id'>;
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as any),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as any),
+      } as Category;
+    });
+    const lastVisibleDocIdResult = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
+    return { categories, lastVisibleDocId: lastVisibleDocIdResult };
+  } catch (error) {
+    console.error("Error fetching paginated categories: ", error);
+    throw new Error(`Failed to fetch paginated categories: ${(error as Error).message}`);
   }
 }

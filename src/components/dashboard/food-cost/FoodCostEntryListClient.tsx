@@ -1,10 +1,10 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { collection, onSnapshot, orderBy, Timestamp, query } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle, FileText, Apple } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 
 import { db } from "@/lib/firebase";
 import type { DailyHotelEntry } from "@/types";
@@ -25,7 +25,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
+  AlertDialog, ChevronLeft, ChevronRight,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import FoodCostEntryForm from "./FoodCostEntryForm";
 import { useToast } from "@/hooks/use-toast";
-import { deleteDailyHotelEntryAction } from "@/actions/dailyEntryActions";
+import { deleteDailyHotelEntryAction, getPaginatedDailyEntriesAction } from "@/actions/dailyEntryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Helper to convert Firestore Timestamps in an entry to JS Dates
@@ -53,13 +53,39 @@ const convertTimestampsToDates = (entry: DailyHotelEntry): DailyHotelEntry => {
 
 export default function FoodCostEntryListClient() {
   const [entries, setEntries] = useState<DailyHotelEntry[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DailyHotelEntry | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
+  const fetchEntries = async (page: number, perPage: number, lastId?: string | null): Promise<number> => {
     setIsLoading(true);
+    try {
+      const result = await getPaginatedDailyEntriesAction(perPage, lastId);
+      setEntries(result.entries);
+      setLastVisibleDocId(result.lastVisibleDocId);
+      setHasMore(result.entries.length === perPage);
+      setCurrentPage(page);
+    } catch (error) {
+      console.error("Error fetching daily entries:", error);
+      toast({
+        variant: "destructive",
+        title: "Error Fetching Entries",
+        description: "Could not load food cost entries from the database.",
+      });
+    } finally {
+      setIsLoading(false);
+      return entries.length; // Return the number of entries fetched for summary
+    }
+  };
+
+  useEffect(() => {
+    fetchEntries(1, itemsPerPage, null);
+    /* This was the old onSnapshot listener. We are replacing it with fetchEntries.
     const q = query(collection(db, "dailyHotelEntries"), orderBy("date", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedEntries = snapshot.docs.map(doc => {
@@ -79,7 +105,34 @@ export default function FoodCostEntryListClient() {
     });
 
     return () => unsubscribe();
-  }, [toast]);
+    */
+    fetchEntries(1, itemsPerPage, null); // Fetch initial page
+  }, [itemsPerPage, toast]); // Depend on itemsPerPage and toast
+
+  const goToNextPage = async () => {
+    if (!hasMore || isLoading) return;
+    const nextPage = currentPage + 1;
+    await fetchEntries(nextPage, itemsPerPage, lastVisibleDocId);
+  };
+
+  const goToPreviousPage = async () => {
+    if (currentPage === 1 || isLoading) return;
+
+    // For previous page, we need to refetch from the beginning up to the start of the previous page
+    const previousPage = currentPage - 1;
+    const itemsToFetch = previousPage * itemsPerPage;
+
+    setIsLoading(true);
+    try {
+      // Fetch more items than the previous page requires to find the new lastVisibleDocId
+      const result = await getPaginatedDailyEntriesAction(itemsToFetch, null);
+      const previousPageEntries = result.entries.slice(-itemsPerPage); // Get the last 'itemsPerPage' from the result
+      setEntries(previousPageEntries);
+      setLastVisibleDocId(previousPageEntries.length > 0 ? previousPageEntries[previousPageEntries.length - 1].id : null);
+      setHasMore(result.entries.length === itemsToFetch); // Check if we fetched exactly the number expected for previous pages
+      setCurrentPage(previousPage);
+    } finally { setIsLoading(false); }
+  };
 
   const handleAddNew = () => {
     setEditingEntry(null);
@@ -107,6 +160,13 @@ export default function FoodCostEntryListClient() {
       });
     }
   };
+  
+    // Calculate the range of items being displayed
+    const startIndex = useMemo(() => (currentPage - 1) * itemsPerPage, [currentPage, itemsPerPage]);
+    const endIndex = useMemo(() => startIndex + entries.length, [startIndex, entries.length]);
+    // Note: This total count is not accurate with cursor-based pagination without fetching all data.
+    // A better approach for total would require a separate aggregate query or maintaining a counter.
+    // For now, we'll show the range of *currently* displayed items.
 
   const onFormSuccess = () => {
     setIsFormOpen(false);
@@ -211,6 +271,19 @@ export default function FoodCostEntryListClient() {
               ))}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {entries.length > 0 && (
+        <div className="flex justify-between items-center mt-4 px-2">
+            <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {endIndex} results
+            </div>
+            <div className="flex justify-end space-x-2">
+                <Button onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading} variant="outline" size="icon"><ChevronLeft className="h-4 w-4" /><span className="sr-only">Previous Page</span></Button>
+                <Button onClick={goToNextPage} disabled={!hasMore || isLoading} variant="outline" size="icon"><ChevronRight className="h-4 w-4" /><span className="sr-only">Next Page</span></Button>
+            </div>
         </div>
       )}
 

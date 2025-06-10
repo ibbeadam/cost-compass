@@ -31,25 +31,6 @@ export default function RootLayout({
     setIsMounted(true);
   }, []);
 
-  // Basic structure for initial render to minimize layout shifts or hydration issues
-  // if full conditional rendering based on pathname is too complex for initial render.
-  // Here, we ensure AuthProvider and Toaster are always present.
-  const baseStructure = (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
-      </head>
-      <body className="font-body antialiased bg-background text-foreground">
-        <AuthProvider>
-          {/* Content will be filled conditionally below */}
-        </AuthProvider>
-      </body>
-    </html>
-  );
-
   if (!isMounted) {
     // Render a minimal version or null during the very first client render before hydration
     // to ensure server and client match for the conditional part.
@@ -66,7 +47,6 @@ export default function RootLayout({
         <body className="font-body antialiased bg-background text-foreground">
           <AuthProvider>
             <div className="flex min-h-screen w-full items-center justify-center">
-              {/* Minimal loading state or just children for auth pages */}
               {children}
             </div>
             <Toaster />

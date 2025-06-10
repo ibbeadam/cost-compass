@@ -1,7 +1,7 @@
 
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs, limit as firestoreLimit, orderBy, startAfter, DocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { DailyFinancialSummary, FoodCostEntry, BeverageCostEntry } from "@/types"; 
@@ -243,5 +243,44 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
     throw new Error(`Failed to delete daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+export async function getPaginatedDailyFinancialSummariesAction(
+  limit: number,
+  lastVisibleDocId?: string
+): Promise<{ summaries: DailyFinancialSummary[]; lastVisibleDocId: string | null }> {
+  try {
+    let q = query(
+      collection(db, collectionName),
+      orderBy("date", "desc"),
+      firestoreLimit(limit + 1) // Fetch one extra document to check if there's a next page
+    );
 
-    
+    if (lastVisibleDocId) {
+      // Fetch the document snapshot for the last visible document
+      const lastDocSnap = await getDoc(doc(db, collectionName, lastVisibleDocId));
+      if (lastDocSnap.exists()) {
+        q = query(q, startAfter(lastDocSnap));
+      } else {
+        // If the lastVisibleDocId doesn't exist, just fetch the first page
+        console.warn(`[getPaginatedDailyFinancialSummariesAction] lastVisibleDocId ${lastVisibleDocId} not found. Fetching first page.`);
+      }
+    }
+
+    const querySnapshot = await getDocs(q);
+    const fetchedSummaries: DailyFinancialSummary[] = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data() as Omit<DailyFinancialSummary, 'id'>,
+      date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date as any),
+      createdAt: doc.data().createdAt && doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : (doc.data().createdAt ? new Date(doc.data().createdAt as any) : undefined),
+      updatedAt: doc.data().updatedAt && doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : (doc.data().updatedAt ? new Date(doc.data().updatedAt as any) : undefined),
+    }));
+
+    const hasMore = fetchedSummaries.length > limit;
+    const summaries = hasMore ? fetchedSummaries.slice(0, limit) : fetchedSummaries;
+    const newLastVisibleDocId = summaries.length > 0 ? summaries[summaries.length - 1].id : null;
+
+    return { summaries, lastVisibleDocId: newLastVisibleDocId };
+  } catch (error) {
+    console.error("Error fetching paginated daily financial summaries: ", error);
+    throw new Error(`Failed to fetch paginated daily financial summaries: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}

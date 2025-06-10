@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { collection, onSnapshot, orderBy, Timestamp, query } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { db } from "@/lib/firebase";
 import type { Category } from "@/types";
@@ -32,10 +32,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { CategoryForm } from "./CategoryForm";
-import { useToast } from "@/hooks/use-toast";
+import { getPaginatedCategoriesAction } from "@/actions/categoryActions"; // Import the new action
+import { useToast } from "@/hooks/use-toast"; // Assuming this hook exists and provides toast functionality
 import { deleteCategoryAction } from "@/actions/categoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -51,33 +52,40 @@ const convertTimestampsToDates = (category: Category): Category => {
 
 export default function CategoryListClient() {
   const [categories, setCategories] = useState<Category[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true); // Assume there's more until proven otherwise
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const { toast } = useToast();
-
-  useEffect(() => {
+  
+  const fetchCategories = useCallback(async (perPage: number, lastId?: string | null) => {
     setIsLoading(true);
-    const q = query(collection(db, "categories"), orderBy("name", "asc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedCategories = snapshot.docs.map(doc => {
-        const data = doc.data() as Omit<Category, 'id'>;
-        return convertTimestampsToDates({ id: doc.id, ...data });
-      });
-      setCategories(fetchedCategories);
-      setIsLoading(false);
-    }, (error) => {
+    try {
+      // Assuming getPaginatedCategoriesAction is imported and works as described earlier
+      const { categories: fetchedCategories, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedCategoriesAction(perPage, lastId);
+
+      setCategories(fetchedCategories.map(convertTimestampsToDates)); // Convert timestamps
+      setLastVisibleDocId(newLastVisibleDocId);
+      setHasMore(fetchedCategories.length === perPage); // If we got exactly limit items, there might be more
+
+    } catch (error) {
       console.error("Error fetching categories:", error);
       toast({
         variant: "destructive",
         title: "Error Fetching Categories",
         description: "Could not load categories from the database.",
       });
+    } finally {
       setIsLoading(false);
-    });
+    }
+  }, [itemsPerPage, toast]); // Add itemsPerPage and toast to dependencies
 
-    return () => unsubscribe();
-  }, [toast]);
+  useEffect(() => {
+    fetchCategories(itemsPerPage, null); // Fetch the first page on mount
+  }, [fetchCategories, itemsPerPage]); // Add fetchCategories and itemsPerPage to dependencies
 
   const handleAddNew = () => {
     setEditingCategory(null);
@@ -106,6 +114,34 @@ export default function CategoryListClient() {
     }
   };
 
+  // To go back, we need to re-fetch the data up to the beginning of the *current* page's items.
+  // This means fetching (currentPage - 1) * itemsPerPage from the start.
+  const goToPreviousPage = async () => {
+    if (currentPage === 1 || isLoading) return;
+
+    setIsLoading(true);
+    const prevPageNumber = currentPage - 1;
+    const itemsToFetchFromStart = (prevPageNumber - 1) * itemsPerPage;
+    const limit = itemsToFetchFromStart + itemsPerPage;
+
+ try {
+      const { categories: fetchedCategories, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedCategoriesAction(limit, null);
+
+      // Get the last `itemsPerPage` which are the items for the previous page
+      const previousPageItems = fetchedCategories.slice(-itemsPerPage);
+
+      setCategories(previousPageItems.map(convertTimestampsToDates));
+      // The last visible doc ID for the next page (which was the current page) would be the last ID of the refetched set
+ setLastVisibleDocId(fetchedCategories.length > 0 ? fetchedCategories[fetchedCategories.length - 1].id : null);
+      setCurrentPage(prev => prev - 1);
+    } catch (error) {
+      console.error("Error fetching previous page:", error);
+      toast({ variant: "destructive", title: "Error", description: "Failed to load previous page." });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingCategory(null);
@@ -113,7 +149,15 @@ export default function CategoryListClient() {
   
   const onFormCancel = () => {
     setIsFormOpen(false);
-    setEditingCategory(null);
+ setEditingCategory(null);
+  };
+
+  const goToNextPage = async () => {
+    if (!hasMore || isLoading) return;
+    if (lastVisibleDocId) { // Ensure we have a cursor to fetch from
+      setCurrentPage(prev => prev + 1);
+      await fetchCategories(itemsPerPage, lastVisibleDocId);
+    } // If lastVisibleDocId is null but hasMore is true, it implies an issue in fetching logic.
   };
 
   if (isLoading) {
@@ -219,6 +263,16 @@ export default function CategoryListClient() {
         </div>
       )}
 
+      <div className="flex justify-end mt-4 space-x-4">
+        <Button onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading}>
+          {/* Using Lucide Icons for Previous button */}
+ <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <Button onClick={goToNextPage} disabled={!hasMore || isLoading}>
+          {/* Using Lucide Icons for Next button */}
+ <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-lg bg-card">
           <DialogHeader>
