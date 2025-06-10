@@ -133,7 +133,7 @@ export async function getCategoryAction(id: string): Promise<Category | null> {
 export async function getPaginatedCategoriesAction(
   limitValue: number,
   lastVisibleDocId?: string
-): Promise<{ categories: Category[], lastVisibleDocId: string | null }> {
+): Promise<{ categories: Category[], lastVisibleDocId: string | null, hasMore: boolean, totalCount: number }> {
   try {
     let categoryQuery = query(
       categoriesCol,
@@ -151,6 +151,11 @@ export async function getPaginatedCategoriesAction(
       }
     }
 
+    // Get total count (separate query)
+    const totalCountQuery = query(categoriesCol);
+    const totalSnapshot = await getDocs(totalCountQuery);
+    const totalCount = totalSnapshot.size;
+
     const querySnapshot = await getDocs(categoryQuery);
     const categories: Category[] = querySnapshot.docs.map(doc => {
       const data = doc.data() as Omit<Category, 'id'>;
@@ -162,7 +167,13 @@ export async function getPaginatedCategoriesAction(
       } as Category;
     });
     const lastVisibleDocIdResult = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
-    return { categories, lastVisibleDocId: lastVisibleDocIdResult };
+    return {
+      categories,
+      hasMore: querySnapshot.docs.length === limitValue, // Check if the number of documents returned is equal to the limit
+      lastVisibleDocId: lastVisibleDocIdResult,
+      totalCount: totalCount,
+
+    };
   } catch (error) {
     console.error("Error fetching paginated categories: ", error);
     throw new Error(`Failed to fetch paginated categories: ${(error as Error).message}`);

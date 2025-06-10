@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { collection, onSnapshot, orderBy, Timestamp, query } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater, ChevronLeft, ChevronRight } from "lucide-react";
 
-import { db } from "@/lib/firebase";
+// import { db } from "@/lib/firebase";
 import type { Category } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +56,7 @@ export default function CategoryListClient() {
   const [itemsPerPage] = useState(10);
   const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true); // Assume there's more until proven otherwise
+  const [totalResults, setTotalResults] = useState(0); // Add state for total results
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -63,13 +64,19 @@ export default function CategoryListClient() {
   
   const fetchCategories = useCallback(async (perPage: number, lastId?: string | null) => {
     setIsLoading(true);
+    // Total count is not strictly necessary for this type of pagination, as we only need to know if there's a next page.
     try {
-      // Assuming getPaginatedCategoriesAction is imported and works as described earlier
-      const { categories: fetchedCategories, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedCategoriesAction(perPage, lastId);
-
-      setCategories(fetchedCategories.map(convertTimestampsToDates)); // Convert timestamps
+      const {
+        categories: fetchedCategories,
+        lastVisibleDocId: newLastVisibleDocId,
+        totalCount,
+        hasMore: newHasMore, // Also destructure hasMore from the action
+      } = await getPaginatedCategoriesAction(perPage, lastId);
+      
+      setCategories(fetchedCategories.map(convertTimestampsToDates));
       setLastVisibleDocId(newLastVisibleDocId);
       setHasMore(fetchedCategories.length === perPage); // If we got exactly limit items, there might be more
+
 
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -119,7 +126,8 @@ export default function CategoryListClient() {
   const goToPreviousPage = async () => {
     if (currentPage === 1 || isLoading) return;
 
-    setIsLoading(true);
+    setIsLoading(true); // Start loading indicator
+
     const prevPageNumber = currentPage - 1;
     const itemsToFetchFromStart = (prevPageNumber - 1) * itemsPerPage;
     const limit = itemsToFetchFromStart + itemsPerPage;
@@ -131,7 +139,7 @@ export default function CategoryListClient() {
       const previousPageItems = fetchedCategories.slice(-itemsPerPage);
 
       setCategories(previousPageItems.map(convertTimestampsToDates));
-      // The last visible doc ID for the next page (which was the current page) would be the last ID of the refetched set
+      // The last visible doc ID for the current page would be the last ID of the refetched set
  setLastVisibleDocId(fetchedCategories.length > 0 ? fetchedCategories[fetchedCategories.length - 1].id : null);
       setCurrentPage(prev => prev - 1);
     } catch (error) {
@@ -263,15 +271,30 @@ export default function CategoryListClient() {
         </div>
       )}
 
-      <div className="flex justify-end mt-4 space-x-4">
-        <Button onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading}>
+      <div className="flex justify-between items-center mt-4">
+        {/* Pagination Info */}
+        <div className="text-sm text-muted-foreground">
+          Showing {Math.min((currentPage - 1) * itemsPerPage + 1, totalResults)} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} results
+        </div>
+
+        {/* Pagination Controls */}
+        <div className="flex items-center space-x-4">
+          <Button variant="outline" onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading}>
           {/* Using Lucide Icons for Previous button */}
- <ChevronLeft className="h-4 w-4" />
+ <ChevronLeft className="mr-2 h-4 w-4" /> Previous
         </Button>
-        <Button onClick={goToNextPage} disabled={!hasMore || isLoading}>
+        {/* Current Page Number with bold style */}
+        <div className="text-sm font-bold">{currentPage}</div>
+          <Button
+            variant="outline"
+            onClick={goToNextPage}
+            disabled={!hasMore || isLoading}
+            className={!hasMore || isLoading ? "" : "bg-gray-100 hover:bg-gray-200"} // Apply light grey background when enabled
+          >
           {/* Using Lucide Icons for Next button */}
- <ChevronRight className="h-4 w-4" />
+ Next <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
+        </div>
       </div>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-lg bg-card">
