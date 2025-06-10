@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import * as React from 'react'; // Import React for useState and useEffect
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -32,9 +33,17 @@ const navItems = [
 ];
 
 export function MainNav() {
+  const [isMounted, setIsMounted] = React.useState(false);
   const pathname = usePathname();
 
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const isActive = (href: string) => {
+    if (!isMounted) {
+      return false; // Default to false on server and initial client render
+    }
     // Exact match
     if (pathname === href) return true;
     // For top-level sections, check if pathname starts with the href,
@@ -75,9 +84,9 @@ export function MainNav() {
                    <Link href={subItem.href} legacyBehavior passHref>
                     <SidebarMenuSubButton
                       asChild
-                      isActive={pathname === subItem.href}
+                      isActive={pathname === subItem.href} // For sub-items, pathname directly is fine if isMounted check is at top-level isActive
                        className={cn(
-                        pathname === subItem.href
+                        isMounted && pathname === subItem.href // Ensure isActive for subItems also respects isMounted
                         ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
                         : "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                       )}
@@ -97,4 +106,3 @@ export function MainNav() {
     </SidebarMenu>
   );
 }
-
