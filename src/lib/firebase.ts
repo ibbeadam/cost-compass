@@ -16,7 +16,7 @@ const firebaseConfig = {
 };
 
 // TEMPORARY DEBUG LOG: Remove after checking
-console.log("Firebase Config Being Used by src/lib/firebase.ts:", firebaseConfig);
+// console.log("Firebase Config Being Used by src/lib/firebase.ts:", firebaseConfig);
 
 let appInstance;
 let dbInstance;
