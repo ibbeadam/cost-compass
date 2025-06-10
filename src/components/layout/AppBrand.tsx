@@ -1,3 +1,5 @@
+"use client";
+
 // src/components/layout/AppBrand.tsx
 import Link from 'next/link';
 import { Compass } from 'lucide-react';
