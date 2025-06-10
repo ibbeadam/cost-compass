@@ -1,5 +1,5 @@
 
-"use client"; // Added to use usePathname
+"use client"; // Added to use Pathname
 
 // import type { Metadata } from 'next'; // Metadata cannot be exported from Client Components
 import './globals.css';
@@ -56,9 +56,8 @@ export default function RootLayout({
     // Or, structure it so the part that depends on pathname is only rendered when isMounted.
     return (
       <html lang="en" suppressHydrationWarning>
-        <head>
-          <title>Cost Compass</title> {/* Default title */}
-          <meta name="description" content="Daily Food and Beverage Cost Monitoring" /> {/* Default description */}
+        <head><title>Cost Compass</title>{/* Default title */}
+          <meta name="description" content="Daily Food and Beverage Cost Monitoring" />{/* Default description */}
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -81,8 +80,7 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <title>Cost Compass</title> {/* Default title, pages can override */}
+      <head><title>Cost Compass</title>{/* Default title, pages can override */}
         <meta name="description" content="Daily Food and Beverage Cost Monitoring" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
