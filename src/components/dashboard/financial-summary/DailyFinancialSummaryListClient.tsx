@@ -239,8 +239,7 @@ export default function DailyFinancialSummaryListClient() {
         </div>
  ) : (
         <div className="rounded-lg border shadow-md bg-card w-full">
-          <Table> {/* Table component handles its own scrolling via internal div w-full overflow-auto */}
-            <TableHeader className="bg-muted/50">
+          <Table><TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead className="font-headline min-w-[150px] cursor-pointer hover:text-primary" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>Date</TableHead>
                 <TableHead className="font-headline text-right min-w-[120px]">Food Rev.</TableHead>
