@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import Link from "next/link";
 import { Compass } from "lucide-react"; 
 
 export default function LoginPage() {
@@ -91,10 +90,7 @@ export default function LoginPage() {
         </CardContent>
         <CardFooter className="flex-col items-center justify-center text-sm">
            <p className="text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-primary hover:underline">
-              Sign up
-            </Link>
+            To obtain login credentials, please contact your administrator.
           </p>
         </CardFooter>
       </Card>
