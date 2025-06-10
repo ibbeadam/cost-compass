@@ -8,6 +8,7 @@ import {
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { AppFooter } from '@/components/layout/AppFooter';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 export const metadata: Metadata = {
   title: 'Cost Compass',
@@ -28,19 +29,21 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased bg-background text-foreground">
-        <SidebarProvider>
-          <div className="flex min-h-screen w-full">
-            <AppSidebar />
-            <div className="flex flex-1 flex-col"> {/* Removed w-full here */}
-              <AppHeader />
-              <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full">
-                {children}
-              </main>
-              <AppFooter />
+        <AuthProvider>
+          <SidebarProvider>
+            <div className="flex min-h-screen w-full">
+              <AppSidebar />
+              <div className="flex flex-1 flex-col"> 
+                <AppHeader />
+                <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full">
+                  {children}
+                </main>
+                <AppFooter />
+              </div>
             </div>
-          </div>
-        </SidebarProvider>
-        <Toaster />
+          </SidebarProvider>
+          <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );
