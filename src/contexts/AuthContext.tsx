@@ -6,7 +6,7 @@ import { auth } from "@/lib/firebase";
 import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton"; 
 
 interface AuthContextType {
@@ -17,30 +17,83 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const signOut = useCallback(async () => {
+    try {
+      await firebaseSignOut(auth);
+      // User state will be updated by onAuthStateChanged
+      // router.push will be handled by useEffect below or PrivateRoute
+    } catch (error) {
+      console.error("Error signing out: ", error);
+    }
+  }, []);
+
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    if (user) { // Only set a new timer if a user is logged in
+      inactivityTimerRef.current = setTimeout(() => {
+        // console.log("User inactive, signing out."); // Optional: for debugging
+        signOut();
+      }, INACTIVITY_TIMEOUT);
+    }
+  }, [user, signOut]);
+
+  useEffect(() => {
+    const activityEvents: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'];
+    
+    const handleActivity = () => {
+      resetInactivityTimer();
+    };
+
+    if (user) {
+      activityEvents.forEach(event => window.addEventListener(event, handleActivity));
+      resetInactivityTimer(); // Start timer when user logs in or becomes active
+    } else {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      activityEvents.forEach(event => window.removeEventListener(event, handleActivity));
+    }
+
+    return () => {
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      activityEvents.forEach(event => window.removeEventListener(event, handleActivity));
+    };
+  }, [user, resetInactivityTimer]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setLoading(false);
+      if (currentUser) {
+        resetInactivityTimer(); // Reset timer if user state changes to logged in
+      } else {
+        // User is signed out or session expired server-side
+        if (inactivityTimerRef.current) {
+          clearTimeout(inactivityTimerRef.current);
+        }
+        // Redirect to login if not already on an auth page and not loading
+        // This handles cases like token revocation or remote sign-out
+        if (!loading && !pathname.startsWith('/login') && !pathname.startsWith('/signup') && pathname !== '/') {
+          router.push("/login");
+        }
+      }
     });
     return () => unsubscribe();
-  }, []);
+  }, [loading, pathname, router, resetInactivityTimer]);
 
-  const signOut = async () => {
-    try {
-      await firebaseSignOut(auth);
-      if (!pathname.startsWith('/login')) { 
-        router.push("/login");
-      }
-    } catch (error) {
-      console.error("Error signing out: ", error);
-    }
-  };
 
   if (loading && !pathname.startsWith('/login') && !pathname.startsWith('/signup') && pathname !== '/') {
     return (
