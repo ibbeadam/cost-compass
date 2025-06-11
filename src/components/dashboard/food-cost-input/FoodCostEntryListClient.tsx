@@ -42,22 +42,15 @@ export default function FoodCostEntryListClient() {
 
   const [editingEntry, setEditingEntry] = useState<(FoodCostEntry & { details: FoodCostDetail[] }) | null>(null);
   
-  const [dateForNewEntry, setDateForNewEntry] = useState<Date>(new Date());
-  const [outletIdForNewEntry, setOutletIdForNewEntry] = useState<string | undefined>(undefined);
+  // State for date/outlet selection within the dialog
+  const [dialogDate, setDialogDate] = useState<Date>(new Date());
+  const [dialogOutletId, setDialogOutletId] = useState<string | undefined>(undefined);
 
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  useEffect(() => {
-    if (isClient) {
-      // This log helps verify state changes for dateForNewEntry
-      console.log("[FoodCostEntryListClient] dateForNewEntry changed to:", dateForNewEntry);
-    }
-  }, [dateForNewEntry, isClient]);
-
 
   useEffect(() => {
     if (!isClient) return;
@@ -129,8 +122,8 @@ export default function FoodCostEntryListClient() {
         getFoodCategoriesAction()
       ]);
       setOutlets(outletsData);
-      if (outletsData.length > 0 && !outletIdForNewEntry) {
-        setOutletIdForNewEntry(outletsData[0].id);
+      if (outletsData.length > 0 && !dialogOutletId) { // Initialize dialogOutletId if not set
+        setDialogOutletId(outletsData[0].id);
       }
       setFoodCategories(categoriesData);    
     } catch (err) {
@@ -145,7 +138,7 @@ export default function FoodCostEntryListClient() {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, outletIdForNewEntry]); 
+  }, [toast, dialogOutletId]); 
 
   useEffect(() => {
     if (isClient) {
@@ -155,14 +148,9 @@ export default function FoodCostEntryListClient() {
 
   const handleAddNew = () => {
     setEditingEntry(null); 
-    setDateForNewEntry(new Date()); 
-    if (outlets.length > 0 && !outletIdForNewEntry) { 
-        setOutletIdForNewEntry(outlets[0].id);
-    } else if (outlets.length > 0 && outletIdForNewEntry) {
-        // keep current outletIdForNewEntry if already selected
-    } else {
-        setOutletIdForNewEntry(undefined); // No outlets
-    }
+    setDialogDate(new Date()); 
+    const initialOutletId = outlets.length > 0 ? outlets[0].id : undefined;
+    setDialogOutletId(initialOutletId);
     setIsFormOpen(true);
   };
 
@@ -180,6 +168,8 @@ export default function FoodCostEntryListClient() {
       const fullEntryWithDetails = await getFoodCostEntryWithDetailsAction(listEntry.date, listEntry.outlet_id);
       if (fullEntryWithDetails) {
         setEditingEntry(fullEntryWithDetails);
+        setDialogDate(fullEntryWithDetails.date); // Initialize dialog date from existing entry
+        setDialogOutletId(fullEntryWithDetails.outlet_id); // Initialize dialog outlet from existing entry
         setIsFormOpen(true);
       } else {
         toast({
@@ -319,7 +309,7 @@ export default function FoodCostEntryListClient() {
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Food Cost Entry" : "Add New Food Cost Entry"}</DialogTitle>
             <DialogDescription>
               {editingEntry 
-                ? `Update details for outlet: ${outlets.find(o => o.id === editingEntry.outlet_id)?.name || 'Unknown'} on ${editingEntry.date && isValid(editingEntry.date) ? format(editingEntry.date, "PPP") : "selected date"}` 
+                ? `Update details for outlet: ${outlets.find(o => o.id === dialogOutletId)?.name || 'Unknown'} on ${dialogDate && isValid(dialogDate) ? format(dialogDate, "PPP") : "selected date"}` 
                 : "Enter the details for a new food cost entry."}
             </DialogDescription>
           </DialogHeader>
@@ -328,27 +318,24 @@ export default function FoodCostEntryListClient() {
             {isClient && (outlets.length > 0 || isLoadingOutlets) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
                 <div>
-                  <Label htmlFor="entry-date" className="mb-1 block text-sm font-medium">Date</Label>
+                  <Label htmlFor="dialog-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
                   <DatePicker 
-                    date={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry} 
-                    setDate={editingEntry ? () => {} : setDateForNewEntry}
-                    id="entry-date"
+                    date={dialogDate && isValid(dialogDate) ? dialogDate : undefined} 
+                    setDate={(newDate) => newDate && isValid(newDate) && setDialogDate(newDate)}
+                    id="dialog-entry-date"
                     className="w-full"
-                    disabled={!!editingEntry}
                   />
-                  {!!editingEntry && <p className="text-xs text-muted-foreground mt-1">Date cannot be changed for existing entries.</p>}
                 </div>
                 <div>
-                  <Label htmlFor="entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
+                  <Label htmlFor="dialog-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
                   {isLoadingOutlets ? (
                     <Skeleton className="h-10 w-full bg-muted" />
                   ) : (
                     <Select 
-                      value={editingEntry ? editingEntry.outlet_id : outletIdForNewEntry} 
-                      onValueChange={editingEntry ? () => {} : (id) => setOutletIdForNewEntry(id)}
-                      disabled={!!editingEntry}
+                      value={dialogOutletId} 
+                      onValueChange={setDialogOutletId}
                     >
-                      <SelectTrigger id="entry-outlet" className="w-full">
+                      <SelectTrigger id="dialog-entry-outlet" className="w-full">
                         <SelectValue placeholder="Select an outlet" />
                       </SelectTrigger>
                       <SelectContent>
@@ -360,13 +347,12 @@ export default function FoodCostEntryListClient() {
                       </SelectContent>
                     </Select>
                   )}
-                  {!!editingEntry && <p className="text-xs text-muted-foreground mt-1">Outlet cannot be changed for existing entries.</p>}
                 </div>
               </div>
             )}
 
             <div className="p-6">
-              {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry ? ( // Only show this loading/prompt for new entries if selections not ready
+              {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry ? ( 
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
                     {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet above to start."}
@@ -376,12 +362,11 @@ export default function FoodCostEntryListClient() {
                 <FoodCostInputForm
                     key={
                         editingEntry
-                        ? `${editingEntry.id}-${editingEntry.date instanceof Date && isValid(editingEntry.date) ? editingEntry.date.toISOString() : 'invalid-edit-date'}`
-                        : `new-${dateForNewEntry instanceof Date && isValid(dateForNewEntry) ? dateForNewEntry.toISOString() : 'invalid-new-date'}-${outletIdForNewEntry || 'no-outlet'}`
+                        ? `${editingEntry.id}-${dialogDate instanceof Date && isValid(dialogDate) ? dialogDate.toISOString() : 'invalid-edit-date'}-${dialogOutletId || 'no-dialog-outlet'}`
+                        : `new-${dialogDate instanceof Date && isValid(dialogDate) ? dialogDate.toISOString() : 'invalid-new-date'}-${dialogOutletId || 'no-dialog-outlet'}`
                     }
-                    // Pass the date for the form to use in submission, ensuring it's the correct one for edit or new
-                    selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
-                    selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
+                    selectedDate={dialogDate}
+                    selectedOutletId={dialogOutletId || (outlets.length > 0 ? outlets[0].id : "")}
                     foodCategories={foodCategories}
                     existingEntry={editingEntry} 
                     onSuccess={onFormSuccess}
@@ -394,5 +379,6 @@ export default function FoodCostEntryListClient() {
     </>
  );
 }
+    
 
     
