@@ -325,27 +325,30 @@ export default function FoodCostEntryListClient() {
           </DialogHeader>
           
           <div className="flex-grow min-h-0 overflow-y-auto">
-            {!editingEntry && isClient && (outlets.length > 0 || isLoadingOutlets) && (
+            {isClient && (outlets.length > 0 || isLoadingOutlets) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
                 <div>
-                  <Label htmlFor="new-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
+                  <Label htmlFor="entry-date" className="mb-1 block text-sm font-medium">Date</Label>
                   <DatePicker 
-                    date={dateForNewEntry} 
-                    setDate={setDateForNewEntry}
-                    id="new-entry-date"
+                    date={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry} 
+                    setDate={editingEntry ? () => {} : setDateForNewEntry}
+                    id="entry-date"
                     className="w-full"
+                    disabled={!!editingEntry}
                   />
+                  {!!editingEntry && <p className="text-xs text-muted-foreground mt-1">Date cannot be changed for existing entries.</p>}
                 </div>
                 <div>
-                  <Label htmlFor="new-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
+                  <Label htmlFor="entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
                   {isLoadingOutlets ? (
                     <Skeleton className="h-10 w-full bg-muted" />
                   ) : (
                     <Select 
-                      value={outletIdForNewEntry} 
-                      onValueChange={(id) => setOutletIdForNewEntry(id)}
+                      value={editingEntry ? editingEntry.outlet_id : outletIdForNewEntry} 
+                      onValueChange={editingEntry ? () => {} : (id) => setOutletIdForNewEntry(id)}
+                      disabled={!!editingEntry}
                     >
-                      <SelectTrigger id="new-entry-outlet" className="w-full">
+                      <SelectTrigger id="entry-outlet" className="w-full">
                         <SelectValue placeholder="Select an outlet" />
                       </SelectTrigger>
                       <SelectContent>
@@ -357,15 +360,16 @@ export default function FoodCostEntryListClient() {
                       </SelectContent>
                     </Select>
                   )}
+                  {!!editingEntry && <p className="text-xs text-muted-foreground mt-1">Outlet cannot be changed for existing entries.</p>}
                 </div>
               </div>
             )}
 
             <div className="p-6">
-              {isClient && (isLoadingOutlets || isLoadingCategories) ? (
+              {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry ? ( // Only show this loading/prompt for new entries if selections not ready
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
-                    {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet."}
+                    {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet above to start."}
                   </p>
                 </div>
               ) : (
@@ -375,6 +379,7 @@ export default function FoodCostEntryListClient() {
                         ? `${editingEntry.id}-${editingEntry.date instanceof Date && isValid(editingEntry.date) ? editingEntry.date.toISOString() : 'invalid-edit-date'}`
                         : `new-${dateForNewEntry instanceof Date && isValid(dateForNewEntry) ? dateForNewEntry.toISOString() : 'invalid-new-date'}-${outletIdForNewEntry || 'no-outlet'}`
                     }
+                    // Pass the date for the form to use in submission, ensuring it's the correct one for edit or new
                     selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
                     selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
                     foodCategories={foodCategories}
@@ -390,3 +395,4 @@ export default function FoodCostEntryListClient() {
  );
 }
 
+    

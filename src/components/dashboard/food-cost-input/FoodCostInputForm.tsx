@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,21 +11,22 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage as ShadcnFormMessage, // Renamed to avoid conflict
+  FormMessage as ShadcnFormMessage, 
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// DatePicker is no longer imported or used here, it's managed in FoodCostEntryListClient.tsx
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import type { Category, FoodCostEntry, FoodCostDetail } from "@/types";
 import { saveFoodCostEntryAction } from "@/actions/foodCostActions";
-// ScrollArea import is removed
+
 
 const foodCostItemSchema = z.object({
-  id: z.string().optional(), // For existing details
+  id: z.string().optional(), 
   categoryId: z.string().min(1, "Category is required."),
-  categoryName: z.string().optional(), // For display, not saved directly if not needed
+  categoryName: z.string().optional(), 
   cost: z.coerce.number().min(0.01, "Cost must be greater than 0."),
   description: z.string().optional(),
 });
@@ -37,7 +39,7 @@ type FoodCostItemFormValues = z.infer<typeof foodCostItemSchema>;
 type FoodCostInputFormValues = z.infer<typeof foodCostInputFormSchema>;
 
 interface FoodCostInputFormProps {
-  selectedDate: Date;
+  selectedDate: Date; // Date is now a prop, not state managed here
   selectedOutletId: string;
   foodCategories: Category[];
   existingEntry: (FoodCostEntry & { details: FoodCostDetail[] }) | null;
@@ -45,13 +47,14 @@ interface FoodCostInputFormProps {
 }
 
 export default function FoodCostInputForm({
-  selectedDate,
+  selectedDate, // Receive selectedDate as a prop
   selectedOutletId,
   foodCategories,
   existingEntry,
   onSuccess,
 }: FoodCostInputFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Removed entryDate state, as selectedDate prop will be used directly
   const { toast } = useToast();
 
   const form = useForm<FoodCostInputFormValues>({
@@ -68,6 +71,28 @@ export default function FoodCostInputForm({
     mode: "onChange",
   });
 
+  // Re-initialize form if existingEntry or its date changes (relevant for edits)
+  useEffect(() => {
+    if (existingEntry) {
+      form.reset({
+        items: existingEntry.details.map(d => ({
+          id: d.id,
+          categoryId: d.category_id,
+          categoryName: d.categoryName || d.category_id,
+          cost: d.cost,
+          description: d.description || "",
+        }))
+      });
+    } else {
+      // For new entries, if selectedDate or selectedOutletId change (e.g. user changes selection before adding items)
+      // we might want to reset items, or ensure the key prop on this component in parent handles re-mount
+      form.reset({
+        items: [{ categoryId: "", cost: 0, description: "" }]
+      });
+    }
+  }, [existingEntry, form, selectedDate, selectedOutletId]);
+
+
   const { fields, append, remove, update } = useFieldArray({
     control: form.control,
     name: "items",
@@ -76,10 +101,19 @@ export default function FoodCostInputForm({
   const totalCost = form.watch("items").reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
 
   async function onSubmit(data: FoodCostInputFormValues) {
+    if (!selectedDate) {
+        toast({ variant: "destructive", title: "Date Missing", description: "Please ensure a date is selected."});
+        return;
+    }
+    if (!selectedOutletId) {
+        toast({ variant: "destructive", title: "Outlet Missing", description: "Please ensure an outlet is selected."});
+        return;
+    }
+
     setIsSubmitting(true);
     try {
       const itemsToSave = data.items.map(item => ({
-        id: item.id, // Pass existing detail ID if present
+        id: item.id, 
         categoryId: item.categoryId,
         cost: item.cost,
         description: item.description,
@@ -87,7 +121,7 @@ export default function FoodCostInputForm({
 
       await saveFoodCostEntryAction(selectedDate, selectedOutletId, itemsToSave, existingEntry?.id);
       toast({ title: "Food Cost Entry Saved", description: "Successfully saved." });
-      onSuccess(); // Callback to refresh data or close modal
+      onSuccess(); 
     } catch (error) {
       toast({
         variant: "destructive",
@@ -102,8 +136,9 @@ export default function FoodCostInputForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
+        {/* DatePicker removed from here, it's managed by the parent FoodCostEntryListClient */}
         <div className="flex-grow min-h-0 overflow-y-auto pr-3">
-          <div className="space-y-4 pb-4"> {/* Added pb-4 for padding at the end of scroll */}
+          <div className="space-y-4 pb-4"> 
             {fields.map((field, index) => (
               <div key={field.id} className="flex items-end gap-3 p-4 border rounded-md shadow-sm bg-card/80 relative">
                 <FormField
@@ -198,3 +233,4 @@ export default function FoodCostInputForm({
   );
 }
 
+    

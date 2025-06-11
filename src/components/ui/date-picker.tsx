@@ -23,8 +23,10 @@ interface DatePickerProps {
 }
 
 export function DatePicker({ date, setDate, className, id, disabled }: DatePickerProps) {
+  const [open, setOpen] = React.useState(false);
+
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -47,10 +49,15 @@ export function DatePicker({ date, setDate, className, id, disabled }: DatePicke
         <Calendar
           mode="single"
           selected={date}
-          onSelect={setDate}
-          initialFocus
-          disabled={disabled || (date => date < new Date("1900-01-01"))} // Also disable calendar interaction if button is disabled
-        />
+          onSelect={(selectedDate) => {
+            setDate(selectedDate);
+            setOpen(false);
+          }}
+          disabled={(date) => {
+            if (disabled) return true;
+            return date < new Date("1900-01-01");
+           }}
+      />
       </PopoverContent>
     </Popover>
   );

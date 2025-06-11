@@ -173,13 +173,10 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     date={field.value} 
                     setDate={field.onChange} 
                     className="w-full md:w-1/2"
-                    disabled={!!initialData} // Explicitly pass disabled state
+                    // disabled={!!initialData} // Explicitly pass disabled state
                   />
-                  {initialData ? (
-                     <FormDescription className="text-xs">Date cannot be changed for existing entries.</FormDescription>
-                  ) : (
+                  <FormDescription className="text-xs">Make sure to update the date carefully when editing existing entries.</FormDescription>
                     <FormMessage />
-                  )}
                 </FormItem>
               )}
             />
