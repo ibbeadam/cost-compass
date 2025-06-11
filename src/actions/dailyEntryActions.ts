@@ -1,13 +1,12 @@
 
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, orderBy, limit, startAfter, getDocs } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, orderBy, limit as firestoreLimit, startAfter, getDocs, QueryConstraint } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { DailyHotelEntry, CostDetailCategory } from "@/types"; 
 import { format } from "date-fns";
 
-// Helper to ensure CostDetailCategory has all its arrays initialized
 function initializeCostDetailCategory(details?: Partial<CostDetailCategory>): CostDetailCategory {
   return {
     transferIns: details?.transferIns || [],
@@ -19,8 +18,6 @@ function initializeCostDetailCategory(details?: Partial<CostDetailCategory>): Co
 }
 
 export async function saveDailyHotelEntryAction(
-  // updatePayload contains only the fields the specific form wants to change.
-  // 'date' is mandatory to identify/create the document.
   updatePayload: Partial<Omit<DailyHotelEntry, 'id' | 'createdAt' | 'updatedAt' | 'date'>> & { date: Date }
 ): Promise<void> {
   const entryId = format(updatePayload.date, "yyyy-MM-dd");
@@ -33,26 +30,17 @@ export async function saveDailyHotelEntryAction(
     const entryDocRef = doc(db, "dailyHotelEntries", entryId);
     const existingDocSnap = await getDoc(entryDocRef);
 
-    // Base structure for data to be written, always including date and updatedAt
     let dataForFirestore: Partial<DailyHotelEntry> & { date: Timestamp; updatedAt: Timestamp } = {
-      date: Timestamp.fromDate(updatePayload.date), // Ensure date is always a Timestamp
+      date: Timestamp.fromDate(updatePayload.date), 
       updatedAt: serverTimestamp() as Timestamp,
     };
 
-    // Merge updatePayload into dataForFirestore, effectively adding/overwriting fields from the form
-    // We delete id, createdAt, updatedAt from updatePayload before spreading to avoid issues if they were passed
     const { id, createdAt, updatedAt, date, ...restOfPayload } = updatePayload;
     dataForFirestore = {
         ...dataForFirestore,
         ...restOfPayload,
     };
 
-
-    // Explicitly handle foodCostDetails and beverageCostDetails
-    // If they are part of the submission (e.g. from Food Cost Form), initialize/update them.
-    // If not provided in updatePayload (e.g. from Hotel Daily Entry Form), this logic won't add them to dataForFirestore,
-    // so for an update, merge:true will preserve existing values in Firestore.
-    // For a new document, they will be initialized later.
     if ('foodCostDetails' in updatePayload && updatePayload.foodCostDetails !== undefined) {
       dataForFirestore.foodCostDetails = initializeCostDetailCategory(updatePayload.foodCostDetails);
     }
@@ -60,7 +48,6 @@ export async function saveDailyHotelEntryAction(
       dataForFirestore.beverageCostDetails = initializeCostDetailCategory(updatePayload.beverageCostDetails);
     }
     
-    // Preserve or initialize calculated fields
     const existingData = existingDocSnap.data();
     const defaultCalcFields = {
       calculatedNetFoodCost: 0,
@@ -80,27 +67,24 @@ export async function saveDailyHotelEntryAction(
 
 
     if (existingDocSnap.exists()) {
-      // Updating existing document: merge the payload.
       await setDoc(entryDocRef, dataForFirestore, { merge: true });
     } else {
-      // Creating new document: construct the full new document data.
       const newDocumentData: Omit<DailyHotelEntry, 'id'> = {
         date: Timestamp.fromDate(updatePayload.date),
-        hotelNetSales: 0, // Default
-        budgetHotelFoodCostPct: 0, // Default
-        budgetHotelBeverageCostPct: 0, // Default
-        foodCostDetails: initializeCostDetailCategory(), // Default
-        beverageCostDetails: initializeCostDetailCategory(), // Default
-        hotelNetFoodSales: 0, // Default
-        entFood: 0, // Default
-        ocFood: 0, // Default
-        otherFoodCredit: 0, // Default
-        hotelNetBeverageSales: 0, // Default
-        entBeverage: 0, // Default
-        ocBeverage: 0, // Default
-        otherBeverageCredit: 0, // Default
-        notes: '', // Default
-        // Calculated fields defaults
+        hotelNetSales: 0, 
+        budgetHotelFoodCostPct: 0, 
+        budgetHotelBeverageCostPct: 0, 
+        foodCostDetails: initializeCostDetailCategory(), 
+        beverageCostDetails: initializeCostDetailCategory(), 
+        hotelNetFoodSales: 0, 
+        entFood: 0, 
+        ocFood: 0, 
+        otherFoodCredit: 0, 
+        hotelNetBeverageSales: 0, 
+        entBeverage: 0, 
+        ocBeverage: 0, 
+        otherBeverageCredit: 0, 
+        notes: '', 
         calculatedNetFoodCost: defaultCalcFields.calculatedNetFoodCost,
         calculatedActualFoodCostPct: defaultCalcFields.calculatedActualFoodCostPct,
         calculatedFoodCostVariancePct: defaultCalcFields.calculatedFoodCostVariancePct,
@@ -108,25 +92,20 @@ export async function saveDailyHotelEntryAction(
         calculatedActualBeverageCostPct: defaultCalcFields.calculatedActualBeverageCostPct,
         calculatedBeverageCostVariancePct: defaultCalcFields.calculatedBeverageCostVariancePct,
         
-        // Spread the actual payload from the form, which might override some defaults
         ...restOfPayload, 
 
-        // Ensure critical fields are correctly typed and set for new doc
         updatedAt: serverTimestamp() as Timestamp,
         createdAt: serverTimestamp() as Timestamp,
       };
 
-      // If form provided details, use them instead of default initialized ones (already handled by spread if present in restOfPayload)
        if ('foodCostDetails' in updatePayload && updatePayload.foodCostDetails !== undefined) {
         newDocumentData.foodCostDetails = initializeCostDetailCategory(updatePayload.foodCostDetails);
       }
       if ('beverageCostDetails' in updatePayload && updatePayload.beverageCostDetails !== undefined) {
         newDocumentData.beverageCostDetails = initializeCostDetailCategory(updatePayload.beverageCostDetails);
       }
-      // Override defaults with calculated fields if they were somehow in updatePayload
       newDocumentData.calculatedNetFoodCost = updatePayload.calculatedNetFoodCost ?? newDocumentData.calculatedNetFoodCost;
       newDocumentData.calculatedActualFoodCostPct = updatePayload.calculatedActualFoodCostPct ?? newDocumentData.calculatedActualFoodCostPct;
-      // ... and so on for other calculated fields in updatePayload
 
       await setDoc(entryDocRef, newDocumentData);
     }
@@ -150,7 +129,6 @@ export async function getDailyHotelEntryAction(id: string): Promise<DailyHotelEn
 
     if (docSnap.exists()) {
       const data = docSnap.data() as Omit<DailyHotelEntry, 'id'>;
-      // Convert Timestamps to JS Dates for client components
       return { 
         id: docSnap.id, 
         ...data,
@@ -186,51 +164,66 @@ export async function deleteDailyHotelEntryAction(id: string): Promise<void> {
 }
 
 export async function getPaginatedDailyEntriesAction(
-  limitAmount: number,
-  lastVisibleDocId?: string
-): Promise<{ entries: DailyHotelEntry[], lastVisibleDocId: string | null }> {
+  limitValue?: number,
+  lastVisibleDocId?: string,
+  fetchAll: boolean = false
+): Promise<{ entries: DailyHotelEntry[]; lastVisibleDocId: string | null; totalCount: number; hasMore: boolean }> {
   try {
-    let entriesQuery = query(
-      collection(db, "dailyHotelEntries"),
-      orderBy("date", "desc"), // Order by date descending for latest entries first
-      limit(limitAmount)
-    );
+    const entriesCol = collection(db, "dailyHotelEntries");
+    let entriesQuery;
 
-    if (lastVisibleDocId) {
-      const lastVisibleDoc = await getDoc(doc(db, "dailyHotelEntries", lastVisibleDocId));
-      if (lastVisibleDoc.exists()) {
-        entriesQuery = query(
-          collection(db, "dailyHotelEntries"),
-          orderBy("date", "desc"),
-          startAfter(lastVisibleDoc),
-          limit(limitAmount)
-        );
-      } else {
-        // If the last visible document doesn't exist, fetch the first page
-        entriesQuery = query(
-          collection(db, "dailyHotelEntries"),
-          orderBy("date", "desc"),
-          limit(limitAmount)
-        );
+    const totalCountQuery = query(entriesCol);
+    const totalSnapshot = await getDocs(totalCountQuery);
+    const totalCount = totalSnapshot.size;
+
+    if (fetchAll) {
+      entriesQuery = query(entriesCol, orderBy("date", "desc"));
+    } else if (limitValue && limitValue > 0) {
+      const queryConstraints: QueryConstraint[] = [orderBy("date", "desc"), firestoreLimit(limitValue)];
+      if (lastVisibleDocId) {
+        const lastVisibleDoc = await getDoc(doc(entriesCol, lastVisibleDocId));
+        if (lastVisibleDoc.exists()) {
+          queryConstraints.push(startAfter(lastVisibleDoc));
+        }
       }
+      entriesQuery = query(entriesCol, ...queryConstraints);
+    } else {
+      // Default if no limit and not fetching all
+      entriesQuery = query(entriesCol, orderBy("date", "desc"), firestoreLimit(10)); // Default limit
     }
 
     const querySnapshot = await getDocs(entriesQuery);
-    const entries = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      // Convert Timestamps to JS Dates
-      date: (doc.data().date as Timestamp).toDate(),
-      createdAt: (doc.data().createdAt as Timestamp).toDate(),
-      updatedAt: (doc.data().updatedAt as Timestamp).toDate(),
-      // Ensure CostDetailCategories are initialized if they exist
-      foodCostDetails: initializeCostDetailCategory(doc.data().foodCostDetails),
-      beverageCostDetails: initializeCostDetailCategory(doc.data().beverageCostDetails),
-    })) as DailyHotelEntry[];
+    const entries = querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date),
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt),
+        foodCostDetails: initializeCostDetailCategory(data.foodCostDetails),
+        beverageCostDetails: initializeCostDetailCategory(data.beverageCostDetails),
+      } as DailyHotelEntry;
+    });
 
-    const newLastVisibleDocId = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
+    let newLastVisibleDocId: string | null = null;
+    let hasMoreResult = false;
 
-    return { entries, lastVisibleDocId: newLastVisibleDocId };
+    if (!fetchAll && limitValue && limitValue > 0) {
+      newLastVisibleDocId = entries.length > 0 ? entries[entries.length - 1].id : null;
+      if (entries.length === limitValue) {
+        const nextQuery = query(entriesCol, orderBy("date", "desc"), startAfter(querySnapshot.docs[querySnapshot.docs.length -1]), firestoreLimit(1));
+        const nextSnapshot = await getDocs(nextQuery);
+        hasMoreResult = !nextSnapshot.empty;
+      } else {
+        hasMoreResult = false;
+      }
+    } else if (fetchAll) {
+      newLastVisibleDocId = null;
+      hasMoreResult = false;
+    }
+    
+    return { entries, lastVisibleDocId: newLastVisibleDocId, totalCount, hasMore: hasMoreResult };
 
   } catch (error) {
     console.error("Error fetching paginated daily entries: ", error);

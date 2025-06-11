@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Timestamp } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle, Apple, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
@@ -52,31 +52,21 @@ const convertTimestampsToDates = (entry: DailyHotelEntry): DailyHotelEntry => {
 
 
 export default function FoodCostEntryListClient() {
-  const [entries, setEntries] = useState<DailyHotelEntry[]>([]);
+  const [allEntries, setAllEntries] = useState<DailyHotelEntry[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
-  const [pageCursors, setPageCursors] = useState<(string | null)[]>([null]); // Store cursor for the start of each page
-  const [hasMore, setHasMore] = useState(true);
+  const [totalEntries, setTotalEntries] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DailyHotelEntry | null>(null);
   const { toast } = useToast();
 
-  const fetchEntries = async (page: number, cursor: string | null) => {
+  const fetchAllEntries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getPaginatedDailyEntriesAction(ITEMS_PER_PAGE, cursor);
-      setEntries(result.entries.map(convertTimestampsToDates));
-      setLastVisibleDocId(result.lastVisibleDocId);
-      setHasMore(result.entries.length === ITEMS_PER_PAGE);
-      setCurrentPage(page);
-
-      const newCursors = [...pageCursors];
-      if (page >= newCursors.length) {
-         newCursors[page] = result.lastVisibleDocId; 
-      }
-      setPageCursors(newCursors);
-
+      const result = await getPaginatedDailyEntriesAction(undefined, undefined, true);
+      setAllEntries(result.entries.map(convertTimestampsToDates));
+      setTotalEntries(result.totalCount);
+      setCurrentPage(1); 
     } catch (error) {
       console.error("Error fetching daily entries:", error);
       toast({
@@ -87,22 +77,11 @@ export default function FoodCostEntryListClient() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
-    fetchEntries(1, null); // Fetch initial page
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const goToNextPage = () => {
-    if (!hasMore || isLoading) return;
-    fetchEntries(currentPage + 1, lastVisibleDocId);
-  };
-
-  const goToPreviousPage = () => {
-    if (currentPage === 1 || isLoading) return;
-    const prevPageCursor = currentPage > 1 ? pageCursors[currentPage - 2] : null;
-    fetchEntries(currentPage - 1, prevPageCursor);
-  };
+    fetchAllEntries();
+  }, [fetchAllEntries]);
 
   const handleAddNew = () => {
     setEditingEntry(null);
@@ -121,7 +100,7 @@ export default function FoodCostEntryListClient() {
         title: "Entry Deleted",
         description: "The financial entry has been successfully deleted.",
       });
-      fetchEntries(currentPage, currentPage > 1 ? pageCursors[currentPage - 1] : null); // Refetch current page
+      fetchAllEntries(); 
     } catch (error) {
       console.error("Error deleting entry:", error);
       toast({
@@ -135,7 +114,7 @@ export default function FoodCostEntryListClient() {
   const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingEntry(null);
-    fetchEntries(currentPage, currentPage > 1 ? pageCursors[currentPage - 1] : null); // Refetch current page
+    fetchAllEntries(); 
   };
   
   const onFormCancel = () => {
@@ -143,11 +122,55 @@ export default function FoodCostEntryListClient() {
     setEditingEntry(null);
   };
 
-  const startIndexText = entries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
-  const endIndexText = entries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + entries.length : 0;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / ITEMS_PER_PAGE));
+  const currentItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return allEntries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [allEntries, currentPage]);
+
+  const startIndexDisplay = totalEntries > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay = totalEntries > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalEntries) : 0;
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    let startPage, endPage;
+
+    if (totalPages <= maxPagesToShow) {
+      startPage = 1;
+      endPage = totalPages;
+    } else {
+      if (currentPage <= Math.ceil(maxPagesToShow / 2)) {
+        startPage = 1;
+        endPage = maxPagesToShow;
+      } else if (currentPage + Math.floor(maxPagesToShow / 2) >= totalPages) {
+        startPage = totalPages - maxPagesToShow + 1;
+        endPage = totalPages;
+      } else {
+        startPage = currentPage - Math.floor(maxPagesToShow / 2);
+        endPage = currentPage + Math.floor(maxPagesToShow / 2);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <Button
+          key={i}
+          variant={currentPage === i ? "default" : "outline"}
+          size="icon"
+          className="h-9 w-9"
+          onClick={() => setCurrentPage(i)}
+          disabled={isLoading}
+        >
+          {i}
+        </Button>
+      );
+    }
+    return pageNumbers;
+  };
 
 
-  if (isLoading && entries.length === 0) {
+  if (isLoading && allEntries.length === 0) {
     return (
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-40 bg-muted" /> </div>
@@ -167,6 +190,7 @@ export default function FoodCostEntryListClient() {
           <Skeleton className="h-6 w-1/4 bg-muted" />
           <div className="flex items-center space-x-1">
             <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+             {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />)}
             <Skeleton className="h-9 w-9 bg-muted rounded-md" />
           </div>
         </div>
@@ -182,7 +206,7 @@ export default function FoodCostEntryListClient() {
         </Button>
       </div>
 
-      {entries.length === 0 && !isLoading ? (
+      {currentItems.length === 0 && !isLoading ? (
          <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
             <Apple className="mx-auto h-12 w-12 mb-4 text-primary" />
             <p className="text-lg font-medium">No food cost entries found.</p>
@@ -200,7 +224,7 @@ export default function FoodCostEntryListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => (
+              {currentItems.map((entry) => (
                 <TableRow key={entry.id}>
                   <TableCell className="font-code">
                     {entry.date instanceof Date ? format(entry.date, "PPP") : entry.id}
@@ -249,15 +273,15 @@ export default function FoodCostEntryListClient() {
         </div>
       )}
 
-      {entries.length > 0 && (
+      {totalPages > 1 && (
         <div className="flex justify-between items-center mt-4 px-2">
             <div className="text-sm text-muted-foreground">
-                Showing {startIndexText} to {endIndexText} results {hasMore ? "(more available)" : ""}
+                Showing {startIndexDisplay} to {endIndexDisplay} of {totalEntries} results
             </div>
             <div className="flex items-center space-x-1">
-                <Button onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading} variant="outline" size="icon" className="h-9 w-9"><ChevronLeft className="h-4 w-4" /><span className="sr-only">Previous Page</span></Button>
-                <span className="text-sm font-medium p-2">Page {currentPage}</span>
-                <Button onClick={goToNextPage} disabled={!hasMore || isLoading} variant="outline" size="icon" className="h-9 w-9"><ChevronRight className="h-4 w-4" /><span className="sr-only">Next Page</span></Button>
+                <Button onClick={() => setCurrentPage(currentPage-1)} disabled={currentPage === 1 || isLoading} variant="outline" size="icon" className="h-9 w-9"><ChevronLeft className="h-4 w-4" /><span className="sr-only">Previous Page</span></Button>
+                {renderPageNumbers()}
+                <Button onClick={() => setCurrentPage(currentPage+1)} disabled={currentPage === totalPages || isLoading} variant="outline" size="icon" className="h-9 w-9"><ChevronRight className="h-4 w-4" /><span className="sr-only">Next Page</span></Button>
             </div>
         </div>
       )}

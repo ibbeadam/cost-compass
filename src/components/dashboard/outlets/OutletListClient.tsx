@@ -38,7 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { deleteOutletAction } from "@/actions/outletActions";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const ITEMS_PER_PAGE = 5; // Define how many items per page
+const ITEMS_PER_PAGE = 5; 
 
 export default function OutletListClient() {
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
@@ -47,6 +47,7 @@ export default function OutletListClient() {
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
   const { toast } = useToast();
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalOutlets, setTotalOutlets] = useState(0);
 
   useEffect(() => {
     setIsLoading(true);
@@ -58,7 +59,6 @@ export default function OutletListClient() {
           name: data.name,
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
           updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-          // Add other Outlet fields if they exist in your Firestore documents
           isActive: data.isActive ?? true,
           address: data.address ?? '',
           phoneNumber: data.phoneNumber ?? '',
@@ -73,7 +73,8 @@ export default function OutletListClient() {
       }).sort((a, b) => a.name.localeCompare(b.name));
 
       setAllOutlets(fetchedOutlets);
-      setCurrentPage(1); // Reset to first page on new data
+      setTotalOutlets(fetchedOutlets.length);
+      setCurrentPage(1); 
       setIsLoading(false);
     }, (error) => {
       console.error("Error fetching outlets:", error);
@@ -105,7 +106,6 @@ export default function OutletListClient() {
         title: "Outlet Deleted",
         description: "The outlet has been successfully deleted.",
       });
-      // The onSnapshot listener will update the list automatically
     } catch (error) {
       console.error("Error deleting outlet:", error);
       toast({
@@ -118,17 +118,16 @@ export default function OutletListClient() {
 
   const onFormSuccess = () => {
     setIsFormOpen(false);
-    // The onSnapshot listener will update the list automatically
   };
 
-  const totalPages = Math.max(1, Math.ceil(allOutlets.length / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalOutlets / ITEMS_PER_PAGE));
   const currentItems = useMemo(() => {
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     return allOutlets.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [allOutlets, currentPage]);
 
-  const startIndexDisplay = allOutlets.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
-  const endIndexDisplay = allOutlets.length > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, allOutlets.length) : 0;
+  const startIndexDisplay = totalOutlets > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay = totalOutlets > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalOutlets) : 0;
 
 
   const renderPageNumbers = () => {
@@ -270,7 +269,7 @@ export default function OutletListClient() {
         {totalPages > 1 && (
           <div className="flex justify-between items-center mt-4 px-2">
             <div className="text-sm text-muted-foreground">
-              Showing {startIndexDisplay} to {endIndexDisplay} of {allOutlets.length} results
+              Showing {startIndexDisplay} to {endIndexDisplay} of {totalOutlets} results
             </div>
             <div className="flex items-center space-x-1">
               <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1 || isLoading}>

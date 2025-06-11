@@ -23,13 +23,6 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
 
   if (!summarySnap.exists()) {
     console.log(`[recalculateAndSaveFS] No DailyFinancialSummary found for ${summaryId}. Updating calculated fields to null/0 where appropriate.`);
-    // If the summary was deleted (e.g., date changed), we might still want to ensure
-    // that any dependent calculations reflect this absence, though typically this function
-    // is called *after* a summary save.
-    // For now, if it doesn't exist, we can't update it.
-    // If a summary was *moved*, the old one is deleted, and this would be called for the old date.
-    // It will correctly find no summary and do nothing, which is fine.
-    // The call for the *new* date will then operate on the newly created/moved summary.
     return;
   }
 
@@ -110,23 +103,21 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
 
 export async function saveDailyFinancialSummaryAction(
   summaryData: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date },
-  originalIdIfEditing?: string // YYYY-MM-DD string of the document being edited, if applicable
+  originalIdIfEditing?: string 
 ): Promise<void> {
   const newNormalizedDate = new Date(Date.UTC(summaryData.date.getFullYear(), summaryData.date.getMonth(), summaryData.date.getDate()));
   const newEntryId = format(newNormalizedDate, "yyyy-MM-dd");
   
-  if (!newEntryId) { // Should not happen if date is valid
+  if (!newEntryId) { 
     throw new Error("Date is required to create or update an entry ID.");
   }
 
   try {
-    // Prepare the data to be saved, excluding calculated fields initially
     const dataToSave: Partial<DailyFinancialSummary> & { date: Timestamp; updatedAt: Timestamp; createdAt?: Timestamp } = {
       ...summaryData, 
       date: Timestamp.fromDate(newNormalizedDate),
       updatedAt: serverTimestamp() as Timestamp,
     };
-    // These fields will be set by recalculateAndSaveFinancialSummary
     delete (dataToSave as any).actual_food_cost;
     delete (dataToSave as any).actual_food_cost_pct;
     delete (dataToSave as any).food_variance_pct;
@@ -143,40 +134,33 @@ export async function saveDailyFinancialSummaryAction(
     };
     
     if (originalIdIfEditing && originalIdIfEditing !== newEntryId) {
-      // Date has changed during an edit. Delete the old document.
       const oldDocRef = doc(db, collectionName, originalIdIfEditing);
       await deleteDoc(oldDocRef);
       console.log(`[saveDFSAction] Deleted old summary ${originalIdIfEditing} as date changed to ${newEntryId}.`);
 
-      // Create the new document with the new ID (new date)
-      dataToSave.createdAt = serverTimestamp() as Timestamp; // Treat as new creation
+      dataToSave.createdAt = serverTimestamp() as Timestamp; 
       await setDoc(doc(db, collectionName, newEntryId), { ...defaultsForNewEntry, ...dataToSave });
       console.log(`[saveDFSAction] Created new summary ${newEntryId} after date change.`);
       
-      // Recalculate for both old and new dates
       const [year, month, day] = originalIdIfEditing.split('-').map(Number);
       const oldDateForRecalc = new Date(Date.UTC(year, month - 1, day));
-      await recalculateAndSaveFinancialSummary(oldDateForRecalc); // For the old date (will find no summary, that's fine)
-      await recalculateAndSaveFinancialSummary(newNormalizedDate); // For the new date
+      await recalculateAndSaveFinancialSummary(oldDateForRecalc); 
+      await recalculateAndSaveFinancialSummary(newNormalizedDate); 
 
     } else {
-      // This is either a brand new entry, or an edit where the date did NOT change.
       const entryDocRef = doc(db, collectionName, newEntryId);
       const existingDocSnap = await getDoc(entryDocRef);
 
       if (existingDocSnap.exists()) {
-        // Editing an existing entry (date hasn't changed), or creating a new entry for a date that coincidentally already has one.
         await setDoc(entryDocRef, dataToSave, { merge: true });
         console.log(`[saveDFSAction] Updated/merged summary for ${newEntryId}.`);
       } else {
-        // Creating a truly new entry for a date that doesn't have one yet.
         dataToSave.createdAt = serverTimestamp() as Timestamp;
         await setDoc(entryDocRef, { ...defaultsForNewEntry, ...dataToSave });
         console.log(`[saveDFSAction] Created new summary for ${newEntryId}.`);
       }
       await recalculateAndSaveFinancialSummary(newNormalizedDate);
     }
-    // Revalidation is handled by recalculateAndSaveFinancialSummary.
 
   } catch (error) {
     console.error("Error saving daily financial summary: ", error);
@@ -229,9 +213,6 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
 
     await deleteDoc(entryDocRef);
     
-    // After deleting, recalculate for that date to ensure costs are updated (likely to zero for this specific summary)
-    // This might be redundant if the summary is the only source for its own values,
-    // but important if other calculations depend on its presence.
     if (entryDate) {
         await recalculateAndSaveFinancialSummary(entryDate);
     }
@@ -243,30 +224,38 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
     throw new Error(`Failed to delete daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
 export async function getPaginatedDailyFinancialSummariesAction(
-  limit: number,
-  lastVisibleDocId?: string
-): Promise<{ summaries: DailyFinancialSummary[]; lastVisibleDocId: string | null }> {
+  limitValue?: number, // Make limitValue optional
+  lastVisibleDocId?: string,
+  fetchAll: boolean = false // New parameter
+): Promise<{ summaries: DailyFinancialSummary[]; lastVisibleDocId: string | null; totalCount: number; hasMore: boolean }> {
   try {
-    let q = query(
-      collection(db, collectionName),
-      orderBy("date", "desc"),
-      firestoreLimit(limit + 1) // Fetch one extra document to check if there's a next page
-    );
+    const baseQuery = collection(db, collectionName);
+    let summariesQuery;
 
-    if (lastVisibleDocId) {
-      // Fetch the document snapshot for the last visible document
-      const lastDocSnap = await getDoc(doc(db, collectionName, lastVisibleDocId));
-      if (lastDocSnap.exists()) {
-        q = query(q, startAfter(lastDocSnap));
-      } else {
-        // If the lastVisibleDocId doesn't exist, just fetch the first page
-        console.warn(`[getPaginatedDailyFinancialSummariesAction] lastVisibleDocId ${lastVisibleDocId} not found. Fetching first page.`);
+    const totalCountQuery = query(baseQuery);
+    const totalSnapshot = await getDocs(totalCountQuery);
+    const totalCount = totalSnapshot.size;
+
+    if (fetchAll) {
+      summariesQuery = query(baseQuery, orderBy("date", "desc"));
+    } else if (limitValue && limitValue > 0) {
+      let q = query(baseQuery, orderBy("date", "desc"), firestoreLimit(limitValue));
+      if (lastVisibleDocId) {
+        const lastDocSnap = await getDoc(doc(db, collectionName, lastVisibleDocId));
+        if (lastDocSnap.exists()) {
+          q = query(q, startAfter(lastDocSnap));
+        }
       }
+      summariesQuery = q;
+    } else {
+      // Default case if no limit specified and not fetching all (though UI should ensure limitValue if not fetchAll)
+      summariesQuery = query(baseQuery, orderBy("date", "desc"), firestoreLimit(10)); // Default limit
     }
-
-    const querySnapshot = await getDocs(q);
-    const fetchedSummaries: DailyFinancialSummary[] = querySnapshot.docs.map(doc => ({
+    
+    const querySnapshot = await getDocs(summariesQuery);
+    const summaries: DailyFinancialSummary[] = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data() as Omit<DailyFinancialSummary, 'id'>,
       date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date as any),
@@ -274,11 +263,27 @@ export async function getPaginatedDailyFinancialSummariesAction(
       updatedAt: doc.data().updatedAt && doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : (doc.data().updatedAt ? new Date(doc.data().updatedAt as any) : undefined),
     }));
 
-    const hasMore = fetchedSummaries.length > limit;
-    const summaries = hasMore ? fetchedSummaries.slice(0, limit) : fetchedSummaries;
-    const newLastVisibleDocId = summaries.length > 0 ? summaries[summaries.length - 1].id : null;
+    let newLastVisibleDocId: string | null = null;
+    let hasMoreResult = false;
 
-    return { summaries, lastVisibleDocId: newLastVisibleDocId };
+    if (!fetchAll && limitValue && limitValue > 0) {
+      newLastVisibleDocId = summaries.length > 0 ? summaries[summaries.length - 1].id : null;
+      // A more robust check for hasMore: fetch limit + 1, then slice.
+      // For now, assuming if fetched items = limit, there might be more.
+      if (summaries.length === limitValue) {
+         // Check if there's at least one more document after the current set
+        const nextQuery = query(baseQuery, orderBy("date", "desc"), startAfter(querySnapshot.docs[querySnapshot.docs.length -1]), firestoreLimit(1));
+        const nextSnapshot = await getDocs(nextQuery);
+        hasMoreResult = !nextSnapshot.empty;
+      } else {
+        hasMoreResult = false;
+      }
+    } else if (fetchAll) {
+      newLastVisibleDocId = null;
+      hasMoreResult = false;
+    }
+
+    return { summaries, lastVisibleDocId: newLastVisibleDocId, totalCount, hasMore: hasMoreResult };
   } catch (error) {
     console.error("Error fetching paginated daily financial summaries: ", error);
     throw new Error(`Failed to fetch paginated daily financial summaries: ${error instanceof Error ? error.message : String(error)}`);

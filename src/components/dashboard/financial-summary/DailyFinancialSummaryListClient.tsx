@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Timestamp } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, Utensils, GlassWater, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 
 import type { DailyFinancialSummary, FoodCostEntry, FoodCostDetail, BeverageCostEntry, BeverageCostDetail } from "@/types";
@@ -55,7 +55,7 @@ const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialS
 };
 
 export default function DailyFinancialSummaryListClient() {
-  const [summaries, setSummaries] = useState<DailyFinancialSummary[]>([]);
+  const [allSummaries, setAllSummaries] = useState<DailyFinancialSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSummary, setEditingSummary] = useState<DailyFinancialSummary | null>(null);
@@ -67,52 +67,27 @@ export default function DailyFinancialSummaryListClient() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
   const { toast } = useToast();
-  const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageCursors, setPageCursors] = useState<(string | null)[]>([null]); // Store cursor for the start of each page
+  const [totalSummaries, setTotalSummaries] = useState(0);
 
-  const fetchSummaries = async (page: number, cursor: string | null) => {
+
+  const fetchAllSummaries = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(ITEMS_PER_PAGE, cursor);
-      setSummaries(fetchedSummaries.map(convertTimestampsToDates));
-      setLastVisibleDocId(newLastVisibleDocId);
-      setHasMore(fetchedSummaries.length === ITEMS_PER_PAGE);
-      setCurrentPage(page);
-      
-      // Update cursors
-      const newCursors = [...pageCursors];
-      if (page >= newCursors.length) { // If moving forward to a new page
-        newCursors[page] = newLastVisibleDocId; // Store cursor for *next* page start
-      }
-      setPageCursors(newCursors);
-
+      const { summaries: fetchedSummaries, totalCount } = await getPaginatedDailyFinancialSummariesAction(undefined, undefined, true);
+      setAllSummaries(fetchedSummaries.map(convertTimestampsToDates));
+      setTotalSummaries(totalCount);
+      setCurrentPage(1); 
     } catch (error) {
       toast({ variant: "destructive", title: "Error Fetching Summaries", description: (error as Error).message || "Could not load daily financial summaries." });
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
   
   useEffect(() => {
-    fetchSummaries(1, null); // Fetch initial page
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  // Removed itemsPerPage and toast from deps as fetchSummaries has them implicitly or they don't change fetch logic here.
-
-  const nextPage = () => {
-    if (!hasMore || isLoading) return;
-    fetchSummaries(currentPage + 1, lastVisibleDocId);
-  };
-
-  const prevPage = () => {
-    if (currentPage === 1 || isLoading) return;
-    // pageCursors[0] is for page 1 (null cursor)
-    // pageCursors[1] is cursor for start of page 2
-    // So, for page N, we need cursor for page N-1, which is pageCursors[N-2]
-    const prevPageCursor = currentPage > 1 ? pageCursors[currentPage - 2] : null;
-    fetchSummaries(currentPage - 1, prevPageCursor);
-  };
+    fetchAllSummaries();
+  }, [fetchAllSummaries]);
   
   const handleAddNew = () => {
     setEditingSummary(null);
@@ -153,8 +128,7 @@ export default function DailyFinancialSummaryListClient() {
   const handleDelete = async (summaryId: string) => {
     try {
       await deleteDailyFinancialSummaryAction(summaryId);
-      // Refetch current page data after deletion
-      fetchSummaries(currentPage, currentPage > 1 ? pageCursors[currentPage-1] : null);
+      fetchAllSummaries();
       toast({ title: "Summary Deleted", description: "The daily financial summary has been deleted." });
     } catch (error) {
       toast({ variant: "destructive", title: "Error Deleting Summary", description: (error as Error).message || "Could not delete summary." });
@@ -164,8 +138,7 @@ export default function DailyFinancialSummaryListClient() {
   const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingSummary(null);
-    // Refetch current page to see the new/updated entry
-    fetchSummaries(currentPage, currentPage > 1 ? pageCursors[currentPage-1] : null);
+    fetchAllSummaries();
   };
 
   const onFormCancel = () => {
@@ -197,11 +170,54 @@ export default function DailyFinancialSummaryListClient() {
     return "";
   };
 
-   const startIndexText = summaries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
-   const endIndexText = summaries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + summaries.length : 0;
-   // Total results is unknown with cursor pagination without an extra query. So we can't show "of Z".
+  const totalPages = Math.max(1, Math.ceil(totalSummaries / ITEMS_PER_PAGE));
+  const currentItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return allSummaries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [allSummaries, currentPage]);
 
-  if (isLoading && summaries.length === 0) { // Show full skeleton only on initial load
+  const startIndexDisplay = totalSummaries > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay = totalSummaries > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalSummaries) : 0;
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    let startPage, endPage;
+
+    if (totalPages <= maxPagesToShow) {
+      startPage = 1;
+      endPage = totalPages;
+    } else {
+      if (currentPage <= Math.ceil(maxPagesToShow / 2)) {
+        startPage = 1;
+        endPage = maxPagesToShow;
+      } else if (currentPage + Math.floor(maxPagesToShow / 2) >= totalPages) {
+        startPage = totalPages - maxPagesToShow + 1;
+        endPage = totalPages;
+      } else {
+        startPage = currentPage - Math.floor(maxPagesToShow / 2);
+        endPage = currentPage + Math.floor(maxPagesToShow / 2);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <Button
+          key={i}
+          variant={currentPage === i ? "default" : "outline"}
+          size="icon"
+          className="h-9 w-9"
+          onClick={() => setCurrentPage(i)}
+          disabled={isLoading}
+        >
+          {i}
+        </Button>
+      );
+    }
+    return pageNumbers;
+  };
+
+  if (isLoading && allSummaries.length === 0) { 
     return (
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
@@ -226,8 +242,8 @@ export default function DailyFinancialSummaryListClient() {
                     ))}
                     <td className="p-4 align-middle">
                       <div className="flex justify-end gap-1">
-                        <Skeleton className="h-8 w-8 bg-muted rounded-md" /> {/* Edit */}
-                        <Skeleton className="h-8 w-8 bg-muted rounded-md" /> {/* Delete */}
+                        <Skeleton className="h-8 w-8 bg-muted rounded-md" /> 
+                        <Skeleton className="h-8 w-8 bg-muted rounded-md" /> 
                       </div>
                     </td>
                   </tr>
@@ -239,6 +255,7 @@ export default function DailyFinancialSummaryListClient() {
           <Skeleton className="h-6 w-1/4 bg-muted" />
           <div className="flex items-center space-x-1">
             <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />)}
             <Skeleton className="h-9 w-9 bg-muted rounded-md" />
           </div>
         </div>
@@ -252,7 +269,7 @@ export default function DailyFinancialSummaryListClient() {
         <Button onClick={handleAddNew}> <PlusCircle className="mr-2 h-4 w-4" /> Add New Daily Summary </Button>
       </div>
 
-      {summaries.length === 0 && !isLoading ? (
+      {currentItems.length === 0 && !isLoading ? (
         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
           <DollarSign className="mx-auto h-12 w-12 mb-4 text-primary" />
           <p className="text-lg font-medium">No daily financial summaries found.</p>
@@ -277,7 +294,7 @@ export default function DailyFinancialSummaryListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {summaries.map((summary) => (
+              {currentItems.map((summary) => (
                 <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
                   <TableCell className="font-code" onClick={() => handleViewDetails(summary)}> {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id} </TableCell>
                   <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.food_revenue)}</TableCell>
@@ -315,29 +332,29 @@ export default function DailyFinancialSummaryListClient() {
         </div>
       )}
 
-      {summaries.length > 0 && (
+      {totalPages > 1 && (
         <div className="flex justify-between items-center mt-4 px-2">
           <div className="text-sm text-muted-foreground">
-            Showing {startIndexText} to {endIndexText} results {hasMore ? "(more available)" : ""}
+            Showing {startIndexDisplay} to {endIndexDisplay} of {totalSummaries} results
           </div>
           <div className="flex items-center space-x-1">
             <Button
               variant="outline"
               size="icon"
               className="h-9 w-9"
-              onClick={prevPage}
+              onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1 || isLoading}
             >
               <ChevronLeft className="h-4 w-4" />
               <span className="sr-only">Previous Page</span>
             </Button>
-            <span className="text-sm font-medium p-2">Page {currentPage}</span>
+            {renderPageNumbers()}
             <Button
               variant="outline"
               size="icon"
               className="h-9 w-9"
-              onClick={nextPage}
-              disabled={!hasMore || isLoading}
+              onClick={() => setCurrentPage(currentPage + 1)}
+              disabled={currentPage === totalPages || isLoading}
             >
               <ChevronRight className="h-4 w-4" />
               <span className="sr-only">Next Page</span>
