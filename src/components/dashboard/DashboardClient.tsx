@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart as LucideLineChart, PieChartIcon, ListChecks } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, ShoppingCart, Users, Utensils, GlassWater, Percent, BarChart2, LineChart as LucideLineChart, PieChartIcon, ListChecks, Apple, Martini } from "lucide-react";
 import { subDays, format as formatDateFn, eachDayOfInterval, differenceInDays, isValid as isValidDate } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { collection, getDocs, query, where, orderBy, Timestamp } from "firebase/firestore";
@@ -12,13 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { db } from "@/lib/firebase";
-import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint, DailyFinancialSummary, FoodCostEntry, BeverageCostEntry } from "@/types";
+import type { Outlet, DashboardReportData, SummaryStat, ChartDataPoint, DonutChartDataPoint, OutletPerformanceDataPoint, DailyFinancialSummary, FoodCostEntry, BeverageCostEntry, TopCategoryDataPoint, FoodCostDetail, BeverageCostDetail, Category } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
 import { Bar, BarChart, Line, LineChart as RechartsLine, Pie, PieChart as RechartsPie, ResponsiveContainer, Cell, CartesianGrid, XAxis, YAxis, Legend as RechartsLegend } from "recharts";
 
 import { analyzeDashboardData, type DashboardAdvisorInput, type DashboardAdvisorOutput } from "@/ai/flows/dashboard-cost-advisor-flow";
 import { AIInsightsCard } from "./AIInsightsCard";
+import { getFoodCategoriesAction } from "@/actions/foodCostActions";
+import { getBeverageCategoriesAction } from "@/actions/beverageCostActions";
 
 
 const StatCard: React.FC<SummaryStat & { isLoading?: boolean }> = ({ title, value, icon: Icon, iconColor = "text-primary", isLoading }) => {
@@ -77,13 +79,12 @@ export default function DashboardClient() {
   const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [aiInsights, setAiInsights] = useState<DashboardAdvisorOutput | null>(null);
-  const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false); // Start as false, set true when AI call begins
+  const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false); 
   const [aiError, setAiError] = useState<string | null>(null);
 
   const { toast } = useToast();
 
   useEffect(() => {
-    // Initialize dateRange on client-side to prevent hydration mismatch
     setDateRange({
       from: subDays(new Date(), 29),
       to: new Date(),
@@ -102,7 +103,7 @@ export default function DashboardClient() {
       } catch (error) {
         console.error("Error fetching outlets:", error);
         toast({ variant: "destructive", title: "Error fetching outlets", description: (error as Error).message });
-        setAllOutlets([{ id: "all", name: "All Outlets" }]); // Fallback
+        setAllOutlets([{ id: "all", name: "All Outlets" }]); 
       }
       setIsFetchingOutlets(false);
     };
@@ -120,12 +121,12 @@ export default function DashboardClient() {
     }
     
     setIsLoadingData(true);
-    setDashboardData(null); // Clear previous data while loading new data
-    setAiInsights(null); // Clear previous AI insights
-    setAiError(null);   // Clear previous AI errors
+    setDashboardData(null); 
+    setAiInsights(null); 
+    setAiError(null);   
 
     async function fetchDataForDashboard() {
-      setIsLoadingAIInsights(true); // Set AI loading to true before starting any async operations for it
+      setIsLoadingAIInsights(true); 
       try {
         const from = Timestamp.fromDate(dateRange.from!);
         const to = Timestamp.fromDate(dateRange.to!);
@@ -331,17 +332,94 @@ export default function DashboardClient() {
             .sort((a,b) => b.metricValue - a.metricValue)
             .slice(0,3);
 
+        // --- Fetch and Process Top Categories ---
+        async function fetchDetailsInBatches<T extends FoodCostDetail | BeverageCostDetail>(
+          entryIds: string[], 
+          collectionName: "foodCostDetails" | "beverageCostDetails",
+          idFieldName: "food_cost_entry_id" | "beverage_cost_entry_id"
+        ): Promise<T[]> {
+          const details: T[] = [];
+          const BATCH_SIZE = 25; 
+          for (let i = 0; i < entryIds.length; i += BATCH_SIZE) {
+            const batchIds = entryIds.slice(i, i + BATCH_SIZE);
+            if (batchIds.length > 0) {
+              const detailsQuery = query(collection(db, collectionName), where(idFieldName, "in", batchIds));
+              const snapshot = await getDocs(detailsQuery);
+              snapshot.docs.forEach(doc => {
+                const data = doc.data();
+                details.push({ 
+                    id: doc.id, 
+                    ...data,
+                    // Ensure category_id exists, provide a fallback if necessary for typing
+                    category_id: data.category_id || 'unknown_category',
+                } as T);
+              });
+            }
+          }
+          return details;
+        }
+
+        const relevantFoodEntries = selectedOutletId && selectedOutletId !== "all" 
+            ? foodCostEntries.filter(e => e.outlet_id === selectedOutletId) 
+            : foodCostEntries;
+        const foodEntryIds = relevantFoodEntries.map(e => e.id);
+        
+        const relevantBeverageEntries = selectedOutletId && selectedOutletId !== "all"
+            ? beverageCostEntries.filter(e => e.outlet_id === selectedOutletId)
+            : beverageCostEntries;
+        const beverageEntryIds = relevantBeverageEntries.map(e => e.id);
+
+        const [
+            allFoodCategories, 
+            allBeverageCategories, 
+            allFoodDetailsData, 
+            allBeverageDetailsData
+        ] = await Promise.all([
+            getFoodCategoriesAction(),
+            getBeverageCategoriesAction(),
+            foodEntryIds.length > 0 ? fetchDetailsInBatches<FoodCostDetail>(foodEntryIds, "foodCostDetails", "food_cost_entry_id") : Promise.resolve([]),
+            beverageEntryIds.length > 0 ? fetchDetailsInBatches<BeverageCostDetail>(beverageEntryIds, "beverageCostDetails", "beverage_cost_entry_id") : Promise.resolve([])
+        ]);
+        
+        const foodCategoryMap = new Map(allFoodCategories.map(c => [c.id, c.name]));
+        const foodCategoryCosts: Record<string, number> = {};
+        allFoodDetailsData.forEach(detail => {
+            foodCategoryCosts[detail.category_id] = (foodCategoryCosts[detail.category_id] || 0) + detail.cost;
+        });
+        const topFoodCategoriesData: TopCategoryDataPoint[] = Object.entries(foodCategoryCosts)
+            .map(([categoryId, totalCost]) => ({
+                name: foodCategoryMap.get(categoryId) || "Unknown Category",
+                value: parseFloat(totalCost.toFixed(2)),
+            }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 3);
+
+        const beverageCategoryMap = new Map(allBeverageCategories.map(c => [c.id, c.name]));
+        const beverageCategoryCosts: Record<string, number> = {};
+        allBeverageDetailsData.forEach(detail => {
+            beverageCategoryCosts[detail.category_id] = (beverageCategoryCosts[detail.category_id] || 0) + detail.cost;
+        });
+        const topBeverageCategoriesData: TopCategoryDataPoint[] = Object.entries(beverageCategoryCosts)
+            .map(([categoryId, totalCost]) => ({
+                name: beverageCategoryMap.get(categoryId) || "Unknown Category",
+                value: parseFloat(totalCost.toFixed(2)),
+            }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 3);
+        // --- End Top Categories Processing ---
+
         const currentDashboardData = {
           summaryStats: summaryStatsData,
           overviewChartData: overviewChartDataResult,
           costTrendsChartData: costTrendsChartDataResult,
           costDistributionChartData: costDistributionChartDataResult,
           outletPerformanceData: outletPerformanceDataResult,
+          topFoodCategories: topFoodCategoriesData,
+          topBeverageCategories: topBeverageCategoriesData,
         };
         setDashboardData(currentDashboardData);
-        setIsLoadingData(false); // Set loading for main data to false HERE
+        setIsLoadingData(false); 
 
-        // Prepare input for AI analysis
         if (numberOfDaysInPeriod > 0 && currentDashboardData.summaryStats.totalFoodRevenue > 0 && currentDashboardData.summaryStats.totalBeverageRevenue > 0) {
           const aiInput: DashboardAdvisorInput = {
             numberOfDays: numberOfDaysInPeriod,
@@ -359,21 +437,21 @@ export default function DashboardClient() {
             console.error("Error fetching AI insights:", aiErr);
             setAiError((aiErr as Error).message || "Failed to load AI analysis.");
             toast({ variant: "destructive", title: "AI Analysis Error", description: (aiErr as Error).message });
-            setAiInsights(null); // Clear AI insights on specific AI error
+            setAiInsights(null); 
           }
         } else {
-            setAiInsights(null); // Not enough data for AI
+            setAiInsights(null); 
         }
 
-      } catch (err) { // This catch is for errors during main data fetching/processing
+      } catch (err) { 
         console.error("Error fetching dashboard data:", err);
         toast({ variant: "destructive", title: "Error loading dashboard", description: (err as Error).message });
         setDashboardData(null);
-        setAiInsights(null); // Also clear AI if main data fails
+        setAiInsights(null); 
         setAiError((err as Error).message || "Failed to load dashboard data.");
-        setIsLoadingData(false); // Ensure main loading is false if an error occurs here
+        setIsLoadingData(false); 
       } finally {
-        setIsLoadingAIInsights(false); // AI loading completes here, regardless of success/failure
+        setIsLoadingAIInsights(false); 
       }
     };
 
@@ -399,6 +477,55 @@ export default function DashboardClient() {
       { title: "Avg. Beverage Cost %", value: `${stats.avgBeverageCostPct?.toFixed(1) ?? 'N/A'}%`, icon: Percent, iconColor: "text-orange-500" },
     ];
   }, [dashboardData]);
+
+  const TopCategoryList: React.FC<{
+    title: string;
+    icon: React.ElementType;
+    data: TopCategoryDataPoint[] | undefined;
+    isLoading: boolean;
+    itemType: "Food" | "Beverage";
+  }> = ({ title, icon: Icon, data, isLoading, itemType }) => {
+    if (isLoading || dateRange === undefined) {
+      return (
+        <Card className="shadow-md bg-card">
+          <CardHeader>
+            <CardTitle className="font-headline text-lg flex items-center"><Icon className="mr-2 h-5 w-5 text-primary/70" /><Skeleton className="h-6 w-3/4 bg-muted" /></CardTitle>
+            <CardDescription><Skeleton className="h-4 w-full bg-muted" /></CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 pt-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="flex justify-between">
+                <Skeleton className="h-5 w-2/3 bg-muted" />
+                <Skeleton className="h-5 w-1/4 bg-muted" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <Card className="shadow-md bg-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="font-headline text-lg flex items-center"><Icon className="mr-2 h-5 w-5 text-primary/80" />{title}</CardTitle>
+          <CardDescription>By total cost in the selected period{selectedOutletId && selectedOutletId !== "all" ? ` for ${allOutlets.find(o=>o.id === selectedOutletId)?.name.split(' - ')[0]}` : ''}.</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          {data && data.length > 0 ? (
+            <ul className="space-y-2.5">
+              {data.map((cat) => (
+                <li key={cat.name} className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground truncate pr-2">{cat.name}</span>
+                  <span className="font-medium font-code text-foreground">${cat.value.toFixed(2)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No {itemType.toLowerCase()} category data available for this selection.</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
 
 
   return (
@@ -450,6 +577,12 @@ export default function DashboardClient() {
           summaryStatsList.map((stat, index) => (<StatCard key={index} {...stat} />))
         )}
       </div>
+      
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+        <TopCategoryList title="Top Food Categories" icon={Apple} data={dashboardData?.topFoodCategories} isLoading={isLoadingData} itemType="Food" />
+        <TopCategoryList title="Top Beverage Categories" icon={Martini} data={dashboardData?.topBeverageCategories} isLoading={isLoadingData} itemType="Beverage" />
+      </div>
+
 
       {/* AI Insights Card */}
       <AIInsightsCard 

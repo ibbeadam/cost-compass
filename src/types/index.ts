@@ -246,17 +246,24 @@ export interface OutletPerformanceDataPoint {
   trend?: "up" | "down" | "neutral";
 }
 
+export interface TopCategoryDataPoint {
+  name: string;
+  value: number; // Total cost
+}
+
 export interface DashboardReportData {
   summaryStats: {
     totalFoodRevenue: number;
     totalBeverageRevenue: number;
     avgFoodCostPct: number;
     avgBeverageCostPct: number;
-    totalOrders: number; // Example from Borex, adapt as needed
-    totalCustomers: number; // Example from Borex, adapt as needed
+    totalOrders: number;
+    totalCustomers: number;
   };
   overviewChartData: ChartDataPoint[];
   costTrendsChartData: ChartDataPoint[];
   costDistributionChartData: DonutChartDataPoint[];
   outletPerformanceData: OutletPerformanceDataPoint[];
+  topFoodCategories?: TopCategoryDataPoint[];
+  topBeverageCategories?: TopCategoryDataPoint[];
 }
