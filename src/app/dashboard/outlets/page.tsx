@@ -2,7 +2,7 @@
 import OutletListClient from "@/components/dashboard/outlets/OutletListClient";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 
 export const metadata = {
@@ -14,6 +14,9 @@ export default function ManageOutletsPage() {
     <Card className="shadow-lg bg-card">
       <CardHeader>
         <CardTitle className="font-headline text-xl">Manage Outlets</CardTitle>
+        <CardDescription>
+            Define and manage outlets for food and beverage cost. These outlets will be used for cost tracking.
+          </CardDescription>
       </CardHeader>
       <CardContent>
         <Suspense fallback={<OutletListSkeleton />}>

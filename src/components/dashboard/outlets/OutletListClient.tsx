@@ -106,6 +106,7 @@ export default function OutletListClient() {
         title: "Outlet Deleted",
         description: "The outlet has been successfully deleted.",
       });
+      // The onSnapshot listener will automatically update the list
     } catch (error) {
       console.error("Error deleting outlet:", error);
       toast({
@@ -118,6 +119,12 @@ export default function OutletListClient() {
 
   const onFormSuccess = () => {
     setIsFormOpen(false);
+    // The onSnapshot listener will automatically update the list
+  };
+  
+  const onFormCancel = () => {
+    setIsFormOpen(false);
+    setEditingOutlet(null);
   };
 
   const totalPages = Math.max(1, Math.ceil(totalOutlets / ITEMS_PER_PAGE));
@@ -287,7 +294,7 @@ export default function OutletListClient() {
         </>
       )}
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => {if (!open) { setEditingOutlet(null); } setIsFormOpen(open);}}>
         <DialogContent className="sm:max-w-[425px] bg-card">
           <DialogHeader>
             <DialogTitle className="font-headline">{editingOutlet ? "Edit Outlet" : "Add New Outlet"}</DialogTitle>
@@ -299,10 +306,12 @@ export default function OutletListClient() {
             key={editingOutlet ? editingOutlet.id : 'new-outlet'}
             outlet={editingOutlet}
             onSuccess={onFormSuccess}
-            onCancel={() => setIsFormOpen(false)}
+            onCancel={onFormCancel}
           />
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
+    
