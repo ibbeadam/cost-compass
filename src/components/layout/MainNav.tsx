@@ -13,27 +13,35 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
-import { LayoutDashboard, Settings, FileText, Building, ListChecks, DollarSign, ClipboardList, GlassWater } from 'lucide-react';
+import { LayoutDashboard, Settings, FileText, Building, ListChecks, DollarSign, ClipboardList, GlassWater, Users } from 'lucide-react'; // Added Users icon
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
 
-const navItems = [
+const navItemsBase = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/financial-summary', label: 'Daily Financial Summary', icon: DollarSign },
   { href: '/dashboard/food-cost-input', label: 'Food Cost Input', icon: ClipboardList },
   { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater },
   { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true },
-  { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building }, // Already updated to '/dashboard/outlets'
+  { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
   { href: '/dashboard/categories', label: 'Manage Categories', icon: ListChecks },
-  {
-    href: '/dashboard/settings',
-    label: 'General Settings',
-    icon: Settings,
-  },
 ];
+
+const adminNavItems = [
+  { href: '/dashboard/users', label: 'Manage Users', icon: Users },
+];
+
+const settingsNavItem = {
+  href: '/dashboard/settings',
+  label: 'General Settings',
+  icon: Settings,
+};
+
 
 export function MainNav() {
   const [isMounted, setIsMounted] = React.useState(false);
   const pathname = usePathname();
+  const { isAdmin, loading: authLoading } = useAuth(); // Get isAdmin and authLoading
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -43,20 +51,37 @@ export function MainNav() {
     if (!isMounted) {
       return false;
     }
-    // Exact match
     if (pathname === href) {
       return true;
     }
-    // Parent match: current path is a true sub-path of href
-    // (e.g., href="/dashboard/settings", pathname="/dashboard/settings/categories")
-    // This check ensures href is a prefix and is followed by a '/' in pathname.
-    // It also explicitly ensures that '/dashboard' itself isn't treated as a parent for other /dashboard/* routes
-    // unless it's an exact match (which is handled above).
     if (href !== '/dashboard' && pathname.startsWith(href + '/')) {
       return true;
     }
     return false;
   };
+
+  const navItems = React.useMemo(() => {
+    let items = [...navItemsBase];
+    if (isAdmin) {
+      items = [...items, ...adminNavItems];
+    }
+    items.push(settingsNavItem); // Settings always last for regular users
+    return items;
+  }, [isAdmin]);
+
+
+  if (authLoading && !isMounted) { // Show skeletons if auth is loading and not yet mounted
+    return (
+      <SidebarMenu>
+        {[...Array(7)].map((_, i) => (
+          <SidebarMenuItem key={i}>
+            <SidebarMenuSkeleton showIcon />
+          </SidebarMenuItem>
+        ))}
+      </SidebarMenu>
+    );
+  }
+
 
   return (
     <SidebarMenu>
@@ -82,7 +107,6 @@ export function MainNav() {
               </a>
             </SidebarMenuButton>
           </Link>
-          {/* Sub-items rendering (if any item were to have them) */}
           {(item as any).subItems && (item as any).subItems.length > 0 && (
              <SidebarMenuSub>
               {(item as any).subItems.map((subItem: any) => (

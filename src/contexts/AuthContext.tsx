@@ -9,9 +9,13 @@ import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton"; 
 
+// Define the admin email here. In a real app, use environment variables.
+const ADMIN_EMAIL = "admin@example.com";
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isAdmin: boolean; // New property
   signOut: () => Promise<void>;
 }
 
@@ -22,6 +26,7 @@ const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false); // New state for admin status
   const router = useRouter();
   const pathname = usePathname();
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -76,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setIsAdmin(currentUser?.email === ADMIN_EMAIL); // Set admin status
       setLoading(false);
       if (currentUser) {
         resetInactivityTimer(); // Reset timer if user state changes to logged in
@@ -108,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, signOut }}>
       {children}
     </AuthContext.Provider>
   );

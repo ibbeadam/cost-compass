@@ -267,3 +267,14 @@ export interface DashboardReportData {
   topFoodCategories?: TopCategoryDataPoint[];
   topBeverageCategories?: TopCategoryDataPoint[];
 }
+
+// Type for Managed User (placeholder)
+export interface ManagedUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  role?: 'admin' | 'user'; // Simplified roles for now
+  disabled?: boolean;
+  creationTime?: string; // Or Date
+  lastSignInTime?: string; // Or Date
+}
