@@ -2,11 +2,10 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, onSnapshot, orderBy, Timestamp, query } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, FileText, Apple } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { Timestamp } from "firebase/firestore";
+import { PlusCircle, Edit, Trash2, AlertTriangle, Apple, ChevronLeft, ChevronRight } from "lucide-react";
+import { format } from "date-fns";
 
-import { db } from "@/lib/firebase";
 import type { DailyHotelEntry } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +24,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog, ChevronLeft, ChevronRight,
+  AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
@@ -40,7 +39,8 @@ import { useToast } from "@/hooks/use-toast";
 import { deleteDailyHotelEntryAction, getPaginatedDailyEntriesAction } from "@/actions/dailyEntryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Helper to convert Firestore Timestamps in an entry to JS Dates
+const ITEMS_PER_PAGE = 10;
+
 const convertTimestampsToDates = (entry: DailyHotelEntry): DailyHotelEntry => {
   return {
     ...entry,
@@ -54,22 +54,29 @@ const convertTimestampsToDates = (entry: DailyHotelEntry): DailyHotelEntry => {
 export default function FoodCostEntryListClient() {
   const [entries, setEntries] = useState<DailyHotelEntry[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
   const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
+  const [pageCursors, setPageCursors] = useState<(string | null)[]>([null]); // Store cursor for the start of each page
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<DailyHotelEntry | null>(null);
   const { toast } = useToast();
 
-  const fetchEntries = async (page: number, perPage: number, lastId?: string | null): Promise<number> => {
+  const fetchEntries = async (page: number, cursor: string | null) => {
     setIsLoading(true);
     try {
-      const result = await getPaginatedDailyEntriesAction(perPage, lastId);
-      setEntries(result.entries);
+      const result = await getPaginatedDailyEntriesAction(ITEMS_PER_PAGE, cursor);
+      setEntries(result.entries.map(convertTimestampsToDates));
       setLastVisibleDocId(result.lastVisibleDocId);
-      setHasMore(result.entries.length === perPage);
+      setHasMore(result.entries.length === ITEMS_PER_PAGE);
       setCurrentPage(page);
+
+      const newCursors = [...pageCursors];
+      if (page >= newCursors.length) {
+         newCursors[page] = result.lastVisibleDocId; 
+      }
+      setPageCursors(newCursors);
+
     } catch (error) {
       console.error("Error fetching daily entries:", error);
       toast({
@@ -79,59 +86,22 @@ export default function FoodCostEntryListClient() {
       });
     } finally {
       setIsLoading(false);
-      return entries.length; // Return the number of entries fetched for summary
     }
   };
 
   useEffect(() => {
-    fetchEntries(1, itemsPerPage, null);
-    /* This was the old onSnapshot listener. We are replacing it with fetchEntries.
-    const q = query(collection(db, "dailyHotelEntries"), orderBy("date", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedEntries = snapshot.docs.map(doc => {
-        const data = doc.data() as Omit<DailyHotelEntry, 'id'>;
-        return convertTimestampsToDates({ id: doc.id, ...data } as DailyHotelEntry);
-      });
-      setEntries(fetchedEntries);
-      setIsLoading(false);
-    }, (error) => {
-      console.error("Error fetching daily entries:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Fetching Entries",
-        description: "Could not load food cost entries from the database.",
-      });
-      setIsLoading(false);
-    });
+    fetchEntries(1, null); // Fetch initial page
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => unsubscribe();
-    */
-    fetchEntries(1, itemsPerPage, null); // Fetch initial page
-  }, [itemsPerPage, toast]); // Depend on itemsPerPage and toast
-
-  const goToNextPage = async () => {
+  const goToNextPage = () => {
     if (!hasMore || isLoading) return;
-    const nextPage = currentPage + 1;
-    await fetchEntries(nextPage, itemsPerPage, lastVisibleDocId);
+    fetchEntries(currentPage + 1, lastVisibleDocId);
   };
 
-  const goToPreviousPage = async () => {
+  const goToPreviousPage = () => {
     if (currentPage === 1 || isLoading) return;
-
-    // For previous page, we need to refetch from the beginning up to the start of the previous page
-    const previousPage = currentPage - 1;
-    const itemsToFetch = previousPage * itemsPerPage;
-
-    setIsLoading(true);
-    try {
-      // Fetch more items than the previous page requires to find the new lastVisibleDocId
-      const result = await getPaginatedDailyEntriesAction(itemsToFetch, null);
-      const previousPageEntries = result.entries.slice(-itemsPerPage); // Get the last 'itemsPerPage' from the result
-      setEntries(previousPageEntries);
-      setLastVisibleDocId(previousPageEntries.length > 0 ? previousPageEntries[previousPageEntries.length - 1].id : null);
-      setHasMore(result.entries.length === itemsToFetch); // Check if we fetched exactly the number expected for previous pages
-      setCurrentPage(previousPage);
-    } finally { setIsLoading(false); }
+    const prevPageCursor = currentPage > 1 ? pageCursors[currentPage - 2] : null;
+    fetchEntries(currentPage - 1, prevPageCursor);
   };
 
   const handleAddNew = () => {
@@ -151,6 +121,7 @@ export default function FoodCostEntryListClient() {
         title: "Entry Deleted",
         description: "The financial entry has been successfully deleted.",
       });
+      fetchEntries(currentPage, currentPage > 1 ? pageCursors[currentPage - 1] : null); // Refetch current page
     } catch (error) {
       console.error("Error deleting entry:", error);
       toast({
@@ -161,38 +132,43 @@ export default function FoodCostEntryListClient() {
     }
   };
   
-    // Calculate the range of items being displayed
-    const startIndex = useMemo(() => (currentPage - 1) * itemsPerPage, [currentPage, itemsPerPage]);
-    const endIndex = useMemo(() => startIndex + entries.length, [startIndex, entries.length]);
-    // Note: This total count is not accurate with cursor-based pagination without fetching all data.
-    // A better approach for total would require a separate aggregate query or maintaining a counter.
-    // For now, we'll show the range of *currently* displayed items.
-
   const onFormSuccess = () => {
     setIsFormOpen(false);
+    setEditingEntry(null);
+    fetchEntries(currentPage, currentPage > 1 ? pageCursors[currentPage - 1] : null); // Refetch current page
   };
   
   const onFormCancel = () => {
     setIsFormOpen(false);
+    setEditingEntry(null);
   };
 
-  if (isLoading) {
+  const startIndexText = entries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexText = entries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + entries.length : 0;
+
+
+  if (isLoading && entries.length === 0) {
     return (
       <div>
-        <div className="flex justify-end mb-4">
-          <Skeleton className="h-10 w-40 bg-muted" />
-        </div>
+        <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-40 bg-muted" /> </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Skeleton className="h-12 w-full bg-muted/50" />
-          {[...Array(3)].map((_, i) => (
+          {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
             <div key={i} className="flex items-center p-4 border-b">
               <Skeleton className="h-6 w-1/3 bg-muted mr-4" />
               <Skeleton className="h-6 w-1/3 bg-muted mr-4" />
               <Skeleton className="h-6 w-1/4 bg-muted mr-4" />
-              <Skeleton className="h-8 w-8 bg-muted mr-2" />
-              <Skeleton className="h-8 w-8 bg-muted" />
+              <Skeleton className="h-8 w-8 bg-muted rounded-md mr-2" />
+              <Skeleton className="h-8 w-8 bg-muted rounded-md" />
             </div>
           ))}
+        </div>
+        <div className="flex items-center justify-between mt-4 px-2">
+          <Skeleton className="h-6 w-1/4 bg-muted" />
+          <div className="flex items-center space-x-1">
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+          </div>
         </div>
       </div>
     );
@@ -206,7 +182,7 @@ export default function FoodCostEntryListClient() {
         </Button>
       </div>
 
-      {entries.length === 0 ? (
+      {entries.length === 0 && !isLoading ? (
          <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
             <Apple className="mx-auto h-12 w-12 mb-4 text-primary" />
             <p className="text-lg font-medium">No food cost entries found.</p>
@@ -220,7 +196,6 @@ export default function FoodCostEntryListClient() {
                 <TableHead className="font-headline">Date</TableHead>
                 <TableHead className="font-headline text-right">Hotel Net Sales</TableHead>
                 <TableHead className="font-headline text-right">Budget Food Cost %</TableHead>
-                {/* Add more food-specific calculated fields if needed, e.g., Actual Food Cost % */}
                 <TableHead className="font-headline w-[120px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -233,13 +208,13 @@ export default function FoodCostEntryListClient() {
                   <TableCell className="text-right font-code">${entry.hotelNetSales?.toFixed(2) ?? '0.00'}</TableCell>
                   <TableCell className="text-right font-code">{entry.budgetHotelFoodCostPct?.toFixed(2) ?? '0.00'}%</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(entry)} className="mr-2 hover:text-primary">
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(entry)} className="mr-2 hover:text-primary h-9 w-9">
                       <Edit className="h-4 w-4" />
                       <span className="sr-only">Edit Food Entry</span>
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="hover:text-destructive">
+                        <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9">
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Delete Food Entry</span>
                         </Button>
@@ -274,15 +249,15 @@ export default function FoodCostEntryListClient() {
         </div>
       )}
 
-      {/* Pagination Controls */}
       {entries.length > 0 && (
         <div className="flex justify-between items-center mt-4 px-2">
             <div className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to {endIndex} results
+                Showing {startIndexText} to {endIndexText} results {hasMore ? "(more available)" : ""}
             </div>
-            <div className="flex justify-end space-x-2">
-                <Button onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading} variant="outline" size="icon"><ChevronLeft className="h-4 w-4" /><span className="sr-only">Previous Page</span></Button>
-                <Button onClick={goToNextPage} disabled={!hasMore || isLoading} variant="outline" size="icon"><ChevronRight className="h-4 w-4" /><span className="sr-only">Next Page</span></Button>
+            <div className="flex items-center space-x-1">
+                <Button onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading} variant="outline" size="icon" className="h-9 w-9"><ChevronLeft className="h-4 w-4" /><span className="sr-only">Previous Page</span></Button>
+                <span className="text-sm font-medium p-2">Page {currentPage}</span>
+                <Button onClick={goToNextPage} disabled={!hasMore || isLoading} variant="outline" size="icon" className="h-9 w-9"><ChevronRight className="h-4 w-4" /><span className="sr-only">Next Page</span></Button>
             </div>
         </div>
       )}
@@ -300,6 +275,7 @@ export default function FoodCostEntryListClient() {
           </DialogHeader>
           <div className="flex-grow overflow-y-auto pr-2 pl-1 py-2">
              <FoodCostEntryForm
+                key={editingEntry ? editingEntry.id : 'new-entry-food-cost'}
                 initialData={editingEntry}
                 onSuccess={onFormSuccess}
                 onCancel={onFormCancel}

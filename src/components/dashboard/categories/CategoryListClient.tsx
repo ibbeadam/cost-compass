@@ -1,11 +1,10 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { collection, onSnapshot, orderBy, Timestamp, query } from "firebase/firestore";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Timestamp } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater, ChevronLeft, ChevronRight } from "lucide-react";
 
-// import { db } from "@/lib/firebase";
 import type { Category } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,13 +34,14 @@ import {
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { CategoryForm } from "./CategoryForm";
-import { getPaginatedCategoriesAction } from "@/actions/categoryActions"; // Import the new action
-import { useToast } from "@/hooks/use-toast"; // Assuming this hook exists and provides toast functionality
+import { getPaginatedCategoriesAction } from "@/actions/categoryActions";
+import { useToast } from "@/hooks/use-toast";
 import { deleteCategoryAction } from "@/actions/categoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 
-// Helper to convert Firestore Timestamps in a category to JS Dates
+const ITEMS_PER_PAGE = 5;
+
 const convertTimestampsToDates = (category: Category): Category => {
   return {
     ...category,
@@ -51,35 +51,24 @@ const convertTimestampsToDates = (category: Category): Category => {
 };
 
 export default function CategoryListClient() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true); // Assume there's more until proven otherwise
-  const [totalResults, setTotalResults] = useState(0); // Add state for total results
+  const [totalCategories, setTotalCategories] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const { toast } = useToast();
   
-  const fetchCategories = useCallback(async (perPage: number, lastId?: string | null) => {
+  const fetchAllCategories = useCallback(async () => {
     setIsLoading(true);
-    // Total count is not strictly necessary for this type of pagination, as we only need to know if there's a next page.
     try {
-      const {
-        categories: fetchedCategories,
-        lastVisibleDocId: newLastVisibleDocId,
-        totalCount,
-        hasMore: newHasMore, // Also destructure hasMore from the action
-      } = await getPaginatedCategoriesAction(perPage, lastId);
-      
-      setCategories(fetchedCategories.map(convertTimestampsToDates));
-      setLastVisibleDocId(newLastVisibleDocId);
-      setHasMore(fetchedCategories.length === perPage); // If we got exactly limit items, there might be more
-
-
+      // Pass fetchAll = true to get all categories
+      const { categories: fetchedCategories, totalCount } = await getPaginatedCategoriesAction(undefined, undefined, true);
+      setAllCategories(fetchedCategories.map(convertTimestampsToDates));
+      setTotalCategories(totalCount);
+      setCurrentPage(1); // Reset to first page
     } catch (error) {
-      console.error("Error fetching categories:", error);
+      console.error("Error fetching all categories:", error);
       toast({
         variant: "destructive",
         title: "Error Fetching Categories",
@@ -88,11 +77,11 @@ export default function CategoryListClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [itemsPerPage, toast]); // Add itemsPerPage and toast to dependencies
+  }, [toast]);
 
   useEffect(() => {
-    fetchCategories(itemsPerPage, null); // Fetch the first page on mount
-  }, [fetchCategories, itemsPerPage]); // Add fetchCategories and itemsPerPage to dependencies
+    fetchAllCategories();
+  }, [fetchAllCategories]);
 
   const handleAddNew = () => {
     setEditingCategory(null);
@@ -111,6 +100,7 @@ export default function CategoryListClient() {
         title: "Category Deleted",
         description: "The category has been successfully deleted.",
       });
+      fetchAllCategories(); // Re-fetch all categories to update the list
     } catch (error) {
       console.error("Error deleting category:", error);
       toast({
@@ -121,70 +111,88 @@ export default function CategoryListClient() {
     }
   };
 
-  // To go back, we need to re-fetch the data up to the beginning of the *current* page's items.
-  // This means fetching (currentPage - 1) * itemsPerPage from the start.
-  const goToPreviousPage = async () => {
-    if (currentPage === 1 || isLoading) return;
-
-    setIsLoading(true); // Start loading indicator
-
-    const prevPageNumber = currentPage - 1;
-    const itemsToFetchFromStart = (prevPageNumber - 1) * itemsPerPage;
-    const limit = itemsToFetchFromStart + itemsPerPage;
-
- try {
-      const { categories: fetchedCategories, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedCategoriesAction(limit, null);
-
-      // Get the last `itemsPerPage` which are the items for the previous page
-      const previousPageItems = fetchedCategories.slice(-itemsPerPage);
-
-      setCategories(previousPageItems.map(convertTimestampsToDates));
-      // The last visible doc ID for the current page would be the last ID of the refetched set
- setLastVisibleDocId(fetchedCategories.length > 0 ? fetchedCategories[fetchedCategories.length - 1].id : null);
-      setCurrentPage(prev => prev - 1);
-    } catch (error) {
-      console.error("Error fetching previous page:", error);
-      toast({ variant: "destructive", title: "Error", description: "Failed to load previous page." });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingCategory(null);
+    fetchAllCategories(); // Re-fetch all categories after success
   };
   
   const onFormCancel = () => {
     setIsFormOpen(false);
- setEditingCategory(null);
+    setEditingCategory(null);
   };
 
-  const goToNextPage = async () => {
-    if (!hasMore || isLoading) return;
-    if (lastVisibleDocId) { // Ensure we have a cursor to fetch from
-      setCurrentPage(prev => prev + 1);
-      await fetchCategories(itemsPerPage, lastVisibleDocId);
-    } // If lastVisibleDocId is null but hasMore is true, it implies an issue in fetching logic.
+  const totalPages = Math.max(1, Math.ceil(totalCategories / ITEMS_PER_PAGE));
+  const currentItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return allCategories.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [allCategories, currentPage]);
+
+  const startIndexDisplay = totalCategories > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay = totalCategories > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalCategories) : 0;
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    let startPage, endPage;
+
+    if (totalPages <= maxPagesToShow) {
+      startPage = 1;
+      endPage = totalPages;
+    } else {
+      if (currentPage <= Math.ceil(maxPagesToShow / 2)) {
+        startPage = 1;
+        endPage = maxPagesToShow;
+      } else if (currentPage + Math.floor(maxPagesToShow / 2) >= totalPages) {
+        startPage = totalPages - maxPagesToShow + 1;
+        endPage = totalPages;
+      } else {
+        startPage = currentPage - Math.floor(maxPagesToShow / 2);
+        endPage = currentPage + Math.floor(maxPagesToShow / 2);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <Button
+          key={i}
+          variant={currentPage === i ? "default" : "outline"}
+          size="icon"
+          className="h-9 w-9"
+          onClick={() => setCurrentPage(i)}
+          disabled={isLoading}
+        >
+          {i}
+        </Button>
+      );
+    }
+    return pageNumbers;
   };
+
 
   if (isLoading) {
     return (
       <div>
-        <div className="flex justify-end mb-4">
-          <Skeleton className="h-10 w-40 bg-muted" />
-        </div>
+        <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-40 bg-muted" /> </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Skeleton className="h-12 w-full bg-muted/50" />
-          {[...Array(3)].map((_, i) => (
+          {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
             <div key={i} className="flex items-center p-4 border-b">
-              <Skeleton className="h-6 w-1/3 bg-muted mr-4" /> {/* Name */}
-              <Skeleton className="h-6 w-1/4 bg-muted mr-4" /> {/* Type */}
-              <Skeleton className="h-6 w-1/3 bg-muted mr-4" /> {/* Description */}
-              <Skeleton className="h-8 w-8 bg-muted mr-2" /> {/* Edit */}
-              <Skeleton className="h-8 w-8 bg-muted" /> {/* Delete */}
+              <Skeleton className="h-6 w-1/3 bg-muted mr-4" />
+              <Skeleton className="h-6 w-1/4 bg-muted mr-4" />
+              <Skeleton className="h-6 w-1/3 bg-muted mr-4" />
+              <Skeleton className="h-8 w-8 bg-muted mr-2" />
+              <Skeleton className="h-8 w-8 bg-muted" />
             </div>
           ))}
+        </div>
+        <div className="flex items-center justify-between mt-4 px-2">
+          <Skeleton className="h-6 w-1/3 bg-muted" />
+          <div className="flex items-center space-x-1">
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />)}
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+          </div>
         </div>
       </div>
     );
@@ -198,13 +206,14 @@ export default function CategoryListClient() {
         </Button>
       </div>
 
-      {categories.length === 0 ? (
-         <div className="text-center py-10 text-muted-foreground bg-card border rounded-lg">
+      {allCategories.length === 0 ? (
+         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
             <ListChecks className="mx-auto h-12 w-12 mb-4 text-primary" />
             <p className="text-lg font-medium">No categories found.</p>
             <p>Click "Add New Category" to get started.</p>
         </div>
       ) : (
+        <>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Table>
             <TableHeader className="bg-muted/50">
@@ -216,11 +225,11 @@ export default function CategoryListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {categories.map((category) => (
+              {currentItems.map((category) => (
                 <TableRow key={category.id}>
                   <TableCell className="font-medium">{category.name}</TableCell>
                   <TableCell>
-                    <Badge variant={category.type === 'Food' ? 'default' : 'secondary'} className="capitalize">
+                    <Badge variant={category.type === 'Food' ? 'default' : 'secondary'} className="capitalize bg-primary/10 text-primary border-primary/20">
                       {category.type === 'Food' ? 
                         <Utensils className="mr-1.5 h-3.5 w-3.5" /> : 
                         <GlassWater className="mr-1.5 h-3.5 w-3.5" />
@@ -269,33 +278,26 @@ export default function CategoryListClient() {
             </TableBody>
           </Table>
         </div>
+         {totalPages > 1 && (
+            <div className="flex justify-between items-center mt-4 px-2">
+                <div className="text-sm text-muted-foreground">
+                Showing {startIndexDisplay} to {endIndexDisplay} of {totalCategories} results
+                </div>
+                <div className="flex items-center space-x-1">
+                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1 || isLoading}>
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="sr-only">Previous Page</span>
+                </Button>
+                {renderPageNumbers()}
+                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages || isLoading}>
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="sr-only">Next Page</span>
+                </Button>
+                </div>
+            </div>
+        )}
+        </>
       )}
-
-      <div className="flex justify-between items-center mt-4">
-        {/* Pagination Info */}
-        <div className="text-sm text-muted-foreground">
-          Showing {Math.min((currentPage - 1) * itemsPerPage + 1, totalResults)} to {Math.min(currentPage * itemsPerPage, totalResults)} of {totalResults} results
-        </div>
-
-        {/* Pagination Controls */}
-        <div className="flex items-center space-x-4">
-          <Button variant="outline" onClick={goToPreviousPage} disabled={currentPage === 1 || isLoading}>
-          {/* Using Lucide Icons for Previous button */}
- <ChevronLeft className="mr-2 h-4 w-4" /> Previous
-        </Button>
-        {/* Current Page Number with bold style */}
-        <div className="text-sm font-bold">{currentPage}</div>
-          <Button
-            variant="outline"
-            onClick={goToNextPage}
-            disabled={!hasMore || isLoading}
-            className={!hasMore || isLoading ? "" : "bg-gray-100 hover:bg-gray-200"} // Apply light grey background when enabled
-          >
-          {/* Using Lucide Icons for Next button */}
- Next <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
-        </div>
-      </div>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="sm:max-w-lg bg-card">
           <DialogHeader>

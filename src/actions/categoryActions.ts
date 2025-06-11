@@ -1,7 +1,7 @@
 
 "use server";
 
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp, query, orderBy, limit, startAfter, getDocs } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp, query, orderBy, limit, startAfter, getDocs, QueryConstraint } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@/types";
@@ -33,7 +33,9 @@ export async function addCategoryAction(
     };
 
     const docRef = await addDoc(categoriesCol, categoryData);
-    revalidatePath("/dashboard/settings/categories");
+    revalidatePath("/dashboard/settings/categories"); // Keep old path for now, or update if component moves
+    revalidatePath("/dashboard/categories");
+
 
     const newDocSnap = await getDoc(docRef);
     if (!newDocSnap.exists()) {
@@ -83,7 +85,8 @@ export async function updateCategoryAction(
       type,
       updatedAt: serverTimestamp(),
     });
-    revalidatePath("/dashboard/settings/categories");
+    revalidatePath("/dashboard/settings/categories"); // Keep old path for now
+    revalidatePath("/dashboard/categories");
   } catch (error) {
     console.error("Error updating category: ", error);
     throw new Error(`Failed to update category: ${error instanceof Error ? error.message : String(error)}`);
@@ -97,14 +100,14 @@ export async function deleteCategoryAction(id: string): Promise<void> {
   try {
     const categoryDoc = doc(db, "categories", id);
     await deleteDoc(categoryDoc);
-    revalidatePath("/dashboard/settings/categories");
+    revalidatePath("/dashboard/settings/categories"); // Keep old path for now
+    revalidatePath("/dashboard/categories");
   } catch (error) {
     console.error("Error deleting category: ", error);
     throw new Error(`Failed to delete category: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-// Optional: Action to get a single category if needed elsewhere, not strictly required for the list/form client.
 export async function getCategoryAction(id: string): Promise<Category | null> {
   if (!id) {
     throw new Error("Category ID is required to fetch data.");
@@ -131,27 +134,28 @@ export async function getCategoryAction(id: string): Promise<Category | null> {
 }
 
 export async function getPaginatedCategoriesAction(
-  limitValue: number,
-  lastVisibleDocId?: string
+  limitValue?: number, // Make limitValue optional
+  lastVisibleDocId?: string,
+  fetchAll: boolean = false // New parameter
 ): Promise<{ categories: Category[], lastVisibleDocId: string | null, hasMore: boolean, totalCount: number }> {
   try {
-    let categoryQuery = query(
-      categoriesCol,
-      orderBy("createdAt", "desc"),
-      limit(limitValue)
-    );
+    const queryConstraints: QueryConstraint[] = [orderBy("createdAt", "desc")];
 
-    if (lastVisibleDocId) {
-      const lastVisibleDoc = await getDoc(doc(db, "categories", lastVisibleDocId));
-      if (lastVisibleDoc.exists()) {
-        categoryQuery = query(categoryQuery, startAfter(lastVisibleDoc));
-      } else {
-        // If lastVisibleDocId is provided but doesn't exist, treat as no previous page
-        console.warn(`Last visible document with ID ${lastVisibleDocId} not found. Starting from the beginning.`);
+    if (!fetchAll && limitValue && limitValue > 0) {
+      queryConstraints.push(limit(limitValue));
+      if (lastVisibleDocId) {
+        const lastVisibleDoc = await getDoc(doc(db, "categories", lastVisibleDocId));
+        if (lastVisibleDoc.exists()) {
+          queryConstraints.push(startAfter(lastVisibleDoc));
+        } else {
+          console.warn(`Last visible document with ID ${lastVisibleDocId} not found. Starting from the beginning.`);
+        }
       }
     }
+    // If fetchAll is true, no limit or startAfter is applied, fetching all documents.
 
-    // Get total count (separate query)
+    const categoryQuery = query(categoriesCol, ...queryConstraints);
+    
     const totalCountQuery = query(categoriesCol);
     const totalSnapshot = await getDocs(totalCountQuery);
     const totalCount = totalSnapshot.size;
@@ -166,13 +170,28 @@ export async function getPaginatedCategoriesAction(
         updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as any),
       } as Category;
     });
-    const lastVisibleDocIdResult = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
+
+    let lastVisibleDocIdResult: string | null = null;
+    let hasMoreResult = false;
+
+    if (!fetchAll && limitValue && limitValue > 0) {
+      lastVisibleDocIdResult = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
+      // If fetchAll is false, 'hasMore' is true if the number of documents returned equals the limitValue,
+      // implying there might be more. This logic might need adjustment if limitValue isn't strictly adhered to for the last page.
+      // A more robust way for cursor pagination is to fetch limitValue + 1 items.
+      hasMoreResult = querySnapshot.docs.length === limitValue;
+    } else if (fetchAll) {
+      // If fetching all, there are no more pages, and lastVisibleDocId is not relevant in the same way.
+      lastVisibleDocIdResult = null;
+      hasMoreResult = false;
+    }
+
+
     return {
       categories,
-      hasMore: querySnapshot.docs.length === limitValue, // Check if the number of documents returned is equal to the limit
+      hasMore: hasMoreResult,
       lastVisibleDocId: lastVisibleDocIdResult,
       totalCount: totalCount,
-
     };
   } catch (error) {
     console.error("Error fetching paginated categories: ", error);

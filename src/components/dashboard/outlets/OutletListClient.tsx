@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { collection, getDocs, orderBy, onSnapshot, Unsubscribe, Timestamp } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, Building } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { collection, onSnapshot, Unsubscribe, Timestamp } from "firebase/firestore";
+import { PlusCircle, Edit, Trash2, AlertTriangle, Building, ChevronLeft, ChevronRight } from "lucide-react";
 import { db } from "@/lib/firebase";
 import type { Outlet } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -33,48 +32,47 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";import { getPaginatedOutletsAction } from "@/actions/outletActions";
+} from "@/components/ui/alert-dialog";
 import { OutletForm } from "./OutletForm";
 import { useToast } from "@/hooks/use-toast";
 import { deleteOutletAction } from "@/actions/outletActions";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const ITEMS_PER_PAGE = 5; // Define how many items per page
+
 export default function OutletListClient() {
-  const [outlets, setOutlets] = useState<Outlet[]>([]);
+  const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
   const { toast } = useToast();
-
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
   useEffect(() => {
     setIsLoading(true);
-    
-    const unsubscribe = onSnapshot(collection(db, "outlets"), (snapshot) => {
+    const unsubscribe: Unsubscribe = onSnapshot(collection(db, "outlets"), (snapshot) => {
       const fetchedOutlets = snapshot.docs.map(doc => {
         const data = doc.data();
-        const outletData: Outlet = {
+        return {
           id: doc.id,
           name: data.name,
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
           updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-          isActive: data.isActive,
-          address: data.address,
-          phoneNumber: data.phoneNumber,
-          email: data.email,
-          type: data.type,
-          currency: data.currency,
-          timezone: data.timezone,
-          defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct,
-          defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct,
-          targetOccupancy: data.targetOccupancy,
-        };
-        return outletData;
-      }).sort((a, b) => a.name.localeCompare(b.name)); 
+          // Add other Outlet fields if they exist in your Firestore documents
+          isActive: data.isActive ?? true,
+          address: data.address ?? '',
+          phoneNumber: data.phoneNumber ?? '',
+          email: data.email ?? '',
+          type: data.type ?? 'Restaurant',
+          currency: data.currency ?? 'USD',
+          timezone: data.timezone ?? 'UTC',
+          defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct ?? 0,
+          defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct ?? 0,
+          targetOccupancy: data.targetOccupancy ?? 0,
+        } as Outlet;
+      }).sort((a, b) => a.name.localeCompare(b.name));
 
-      setOutlets(fetchedOutlets);
+      setAllOutlets(fetchedOutlets);
       setCurrentPage(1); // Reset to first page on new data
       setIsLoading(false);
     }, (error) => {
@@ -107,6 +105,7 @@ export default function OutletListClient() {
         title: "Outlet Deleted",
         description: "The outlet has been successfully deleted.",
       });
+      // The onSnapshot listener will update the list automatically
     } catch (error) {
       console.error("Error deleting outlet:", error);
       toast({
@@ -119,36 +118,65 @@ export default function OutletListClient() {
 
   const onFormSuccess = () => {
     setIsFormOpen(false);
+    // The onSnapshot listener will update the list automatically
   };
 
-  // Pagination logic
-  const totalPages = Math.max(1, Math.ceil(outlets.length / itemsPerPage));
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = outlets.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.max(1, Math.ceil(allOutlets.length / ITEMS_PER_PAGE));
+  const currentItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return allOutlets.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [allOutlets, currentPage]);
 
-  const nextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
-  };
+  const startIndexDisplay = allOutlets.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay = allOutlets.length > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, allOutlets.length) : 0;
 
-  const prevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    let startPage, endPage;
+
+    if (totalPages <= maxPagesToShow) {
+      startPage = 1;
+      endPage = totalPages;
+    } else {
+      if (currentPage <= Math.ceil(maxPagesToShow / 2)) {
+        startPage = 1;
+        endPage = maxPagesToShow;
+      } else if (currentPage + Math.floor(maxPagesToShow / 2) >= totalPages) {
+        startPage = totalPages - maxPagesToShow + 1;
+        endPage = totalPages;
+      } else {
+        startPage = currentPage - Math.floor(maxPagesToShow / 2);
+        endPage = currentPage + Math.floor(maxPagesToShow / 2);
+      }
     }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <Button
+          key={i}
+          variant={currentPage === i ? "default" : "outline"}
+          size="icon"
+          className="h-9 w-9"
+          onClick={() => setCurrentPage(i)}
+          disabled={isLoading}
+        >
+          {i}
+        </Button>
+      );
+    }
+    return pageNumbers;
   };
 
 
   if (isLoading) {
     return (
       <div>
-        <div className="flex justify-end mb-4">
-          <Skeleton className="h-10 w-32 bg-muted" />
-        </div>
+        <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-32 bg-muted" /> </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
-          <Skeleton className="h-12 w-full bg-muted/50" /> {/* Header */}
-          {[...Array(itemsPerPage)].map((_, i) => (
+          <Skeleton className="h-12 w-full bg-muted/50" />
+          {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
             <div key={i} className="flex items-center p-4 border-b">
               <Skeleton className="h-6 flex-grow bg-muted mr-4" />
               <Skeleton className="h-6 w-24 bg-muted mr-4" />
@@ -157,10 +185,13 @@ export default function OutletListClient() {
             </div>
           ))}
         </div>
-         <div className="flex items-center justify-end space-x-2 py-4">
-          <Skeleton className="h-8 w-20 bg-muted" />
-          <Skeleton className="h-8 w-20 bg-muted" />
-          <Skeleton className="h-8 w-24 bg-muted" />
+        <div className="flex items-center justify-between mt-4 px-2">
+          <Skeleton className="h-6 w-1/3 bg-muted" />
+          <div className="flex items-center space-x-1">
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />)}
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+          </div>
         </div>
       </div>
     );
@@ -174,7 +205,7 @@ export default function OutletListClient() {
         </Button>
       </div>
 
-      {outlets.length === 0 ? (
+      {allOutlets.length === 0 ? (
          <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
             <Building className="mx-auto h-12 w-12 mb-4 text-primary" />
             <p className="text-lg font-medium">No outlets found.</p>
@@ -236,28 +267,23 @@ export default function OutletListClient() {
             </TableBody>
           </Table>
         </div>
-        {outlets.length > 0 && (
-            <div className="flex items-center justify-end space-x-2 py-4">
-            <span className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-            </span>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={prevPage}
-                disabled={currentPage === 1}
-            >
-                Previous
-            </Button>
-            <Button
-                variant="outline"
-                size="sm"
-                onClick={nextPage}
-                disabled={currentPage === totalPages}
-            >
-                Next
-            </Button>
+        {totalPages > 1 && (
+          <div className="flex justify-between items-center mt-4 px-2">
+            <div className="text-sm text-muted-foreground">
+              Showing {startIndexDisplay} to {endIndexDisplay} of {allOutlets.length} results
             </div>
+            <div className="flex items-center space-x-1">
+              <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1 || isLoading}>
+                <ChevronLeft className="h-4 w-4" />
+                <span className="sr-only">Previous Page</span>
+              </Button>
+              {renderPageNumbers()}
+              <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages || isLoading}>
+                <ChevronRight className="h-4 w-4" />
+                <span className="sr-only">Next Page</span>
+              </Button>
+            </div>
+          </div>
         )}
         </>
       )}
@@ -271,6 +297,7 @@ export default function OutletListClient() {
             </DialogDescription>
           </DialogHeader>
           <OutletForm
+            key={editingOutlet ? editingOutlet.id : 'new-outlet'}
             outlet={editingOutlet}
             onSuccess={onFormSuccess}
             onCancel={() => setIsFormOpen(false)}

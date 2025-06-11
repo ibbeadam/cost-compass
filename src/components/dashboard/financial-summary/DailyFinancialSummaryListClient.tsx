@@ -1,12 +1,11 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
-import { collection, onSnapshot, orderBy, Timestamp, query as firestoreQuery } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, Utensils, GlassWater } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { Timestamp } from "firebase/firestore";
+import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, Utensils, GlassWater, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 
-import { db } from "@/lib/firebase";
 import type { DailyFinancialSummary, FoodCostEntry, FoodCostDetail, BeverageCostEntry, BeverageCostDetail } from "@/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +43,8 @@ import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActio
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
+const ITEMS_PER_PAGE = 10;
+
 const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialSummary => {
   return {
     ...entry,
@@ -68,40 +69,49 @@ export default function DailyFinancialSummaryListClient() {
   const { toast } = useToast();
   const [lastVisibleDocId, setLastVisibleDocId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
-
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [pageCursors, setPageCursors] = useState<(string | null)[]>([null]); // Store cursor for the start of each page
 
-  useEffect(() => {
-    const fetchInitialSummaries = async () => {
-      try {
-        setIsLoading(true);
-        const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, null);
-        setSummaries(fetchedSummaries.map(convertTimestampsToDates));
-        setLastVisibleDocId(newLastVisibleDocId);
-        setHasMore(fetchedSummaries.length === itemsPerPage);
-      } catch (error) {
-        toast({ variant: "destructive", title: "Error Fetching Summaries", description: (error as Error).message || "Could not load daily financial summaries." });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchInitialSummaries();
-  }, [itemsPerPage, toast]); 
-
-  const fetchMoreSummaries = async () => {
-    if (!hasMore || isLoading || !lastVisibleDocId) return;
+  const fetchSummaries = async (page: number, cursor: string | null) => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, lastVisibleDocId);
-      setSummaries(prevSummaries => [...prevSummaries, ...fetchedSummaries.map(convertTimestampsToDates)]);
+      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(ITEMS_PER_PAGE, cursor);
+      setSummaries(fetchedSummaries.map(convertTimestampsToDates));
       setLastVisibleDocId(newLastVisibleDocId);
-      setHasMore(fetchedSummaries.length === itemsPerPage);
+      setHasMore(fetchedSummaries.length === ITEMS_PER_PAGE);
+      setCurrentPage(page);
+      
+      // Update cursors
+      const newCursors = [...pageCursors];
+      if (page >= newCursors.length) { // If moving forward to a new page
+        newCursors[page] = newLastVisibleDocId; // Store cursor for *next* page start
+      }
+      setPageCursors(newCursors);
+
     } catch (error) {
-        toast({ variant: "destructive", title: "Error Fetching More Summaries", description: (error as Error).message || "Could not load more summaries." });
+      toast({ variant: "destructive", title: "Error Fetching Summaries", description: (error as Error).message || "Could not load daily financial summaries." });
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  useEffect(() => {
+    fetchSummaries(1, null); // Fetch initial page
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Removed itemsPerPage and toast from deps as fetchSummaries has them implicitly or they don't change fetch logic here.
+
+  const nextPage = () => {
+    if (!hasMore || isLoading) return;
+    fetchSummaries(currentPage + 1, lastVisibleDocId);
+  };
+
+  const prevPage = () => {
+    if (currentPage === 1 || isLoading) return;
+    // pageCursors[0] is for page 1 (null cursor)
+    // pageCursors[1] is cursor for start of page 2
+    // So, for page N, we need cursor for page N-1, which is pageCursors[N-2]
+    const prevPageCursor = currentPage > 1 ? pageCursors[currentPage - 2] : null;
+    fetchSummaries(currentPage - 1, prevPageCursor);
   };
   
   const handleAddNew = () => {
@@ -140,34 +150,24 @@ export default function DailyFinancialSummaryListClient() {
     }
   };
 
-
   const handleDelete = async (summaryId: string) => {
     try {
       await deleteDailyFinancialSummaryAction(summaryId);
-      setSummaries(prev => prev.filter(s => s.id !== summaryId)); // Optimistically update UI
+      // Refetch current page data after deletion
+      fetchSummaries(currentPage, currentPage > 1 ? pageCursors[currentPage-1] : null);
       toast({ title: "Summary Deleted", description: "The daily financial summary has been deleted." });
     } catch (error) {
       toast({ variant: "destructive", title: "Error Deleting Summary", description: (error as Error).message || "Could not delete summary." });
     }
   };
 
-  const onFormSuccess = async () => {
+  const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingSummary(null);
-    // Refetch the first page to see the new/updated entry
-    try {
-        setIsLoading(true);
-        const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, null);
-        setSummaries(fetchedSummaries.map(convertTimestampsToDates));
-        setLastVisibleDocId(newLastVisibleDocId);
-        setHasMore(fetchedSummaries.length === itemsPerPage);
-        setCurrentPage(1);
-    } catch (error) {
-        toast({ variant: "destructive", title: "Error Refreshing Summaries", description: (error as Error).message });
-    } finally {
-        setIsLoading(false);
-    }
+    // Refetch current page to see the new/updated entry
+    fetchSummaries(currentPage, currentPage > 1 ? pageCursors[currentPage-1] : null);
   };
+
   const onFormCancel = () => {
     setIsFormOpen(false);
     setEditingSummary(null);
@@ -197,59 +197,27 @@ export default function DailyFinancialSummaryListClient() {
     return "";
   };
 
-  const nextPage = async () => {
-    if (!hasMore || isLoading) return;
-    setCurrentPage(prev => prev + 1);
-    try {
-      setIsLoading(true);
-      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, lastVisibleDocId);
-      setSummaries(fetchedSummaries.map(convertTimestampsToDates));
-      setLastVisibleDocId(newLastVisibleDocId);
-      setHasMore(fetchedSummaries.length === itemsPerPage);
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error Fetching Next Page", description: (error as Error).message });
-      setCurrentPage(prev => prev - 1); // Revert page change on error
-    } finally {
-      setIsLoading(false);
-    }
-  };
+   const startIndexText = summaries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+   const endIndexText = summaries.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + summaries.length : 0;
+   // Total results is unknown with cursor pagination without an extra query. So we can't show "of Z".
 
-  const prevPage = async () => {
-    if (currentPage === 1 || isLoading) return;
-    // This simplified prevPage will refetch the first page and set current page to 1
-    // A true previous page with cursors requires more complex logic (storing previous cursors)
-    setCurrentPage(1); 
-    setLastVisibleDocId(null); // Reset cursor to fetch from beginning
-    try {
-      setIsLoading(true);
-      const { summaries: fetchedSummaries, lastVisibleDocId: newLastVisibleDocId } = await getPaginatedDailyFinancialSummariesAction(itemsPerPage, null);
-      setSummaries(fetchedSummaries.map(convertTimestampsToDates));
-      setLastVisibleDocId(newLastVisibleDocId);
-      setHasMore(fetchedSummaries.length === itemsPerPage);
-    } catch (error) {
-      toast({ variant: "destructive", title: "Error Fetching Previous Page", description: (error as Error).message });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading && currentPage === 1 && summaries.length === 0) { // Show full skeleton only on initial load
+  if (isLoading && summaries.length === 0) { // Show full skeleton only on initial load
     return (
       <div>
         <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
-        <div className="rounded-lg border shadow-md bg-card">
-            <table className="w-full caption-bottom text-sm">
+        <div className="rounded-lg border shadow-md bg-card overflow-x-auto">
+            <table className="w-full caption-bottom text-sm min-w-[1200px]">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                   {[...Array(12)].map((_, i) => (
                     <th key={i} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                      <Skeleton className="h-6 w-full bg-muted/50 min-w-[100px]" />
+                      <Skeleton className="h-6 w-full bg-muted/50" />
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {[...Array(itemsPerPage)].map((_, i) => (
+                {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
                   <tr key={i} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                     {[...Array(11)].map((_, j) => (
                       <td key={j} className="p-4 align-middle">
@@ -258,8 +226,8 @@ export default function DailyFinancialSummaryListClient() {
                     ))}
                     <td className="p-4 align-middle">
                       <div className="flex justify-end gap-1">
-                        <Skeleton className="h-8 w-8 bg-muted" /> {/* Edit */}
-                        <Skeleton className="h-8 w-8 bg-muted" /> {/* Delete */}
+                        <Skeleton className="h-8 w-8 bg-muted rounded-md" /> {/* Edit */}
+                        <Skeleton className="h-8 w-8 bg-muted rounded-md" /> {/* Delete */}
                       </div>
                     </td>
                   </tr>
@@ -267,10 +235,12 @@ export default function DailyFinancialSummaryListClient() {
               </tbody>
             </table>
         </div>
-        <div className="flex items-center justify-end space-x-2 py-4">
-          <Skeleton className="h-8 w-20 bg-muted" />
-          <Skeleton className="h-8 w-20 bg-muted" />
-          <Skeleton className="h-8 w-24 bg-muted" />
+        <div className="flex items-center justify-between mt-4 px-2">
+          <Skeleton className="h-6 w-1/4 bg-muted" />
+          <div className="flex items-center space-x-1">
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+            <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+          </div>
         </div>
       </div>
     );
@@ -289,21 +259,21 @@ export default function DailyFinancialSummaryListClient() {
           <p>Click "Add New Daily Summary" to get started.</p>
         </div>
  ) : (
-        <div className="rounded-lg border shadow-md bg-card w-full">
-          <Table><TableHeader className="bg-muted/50">
+        <div className="rounded-lg border shadow-md bg-card overflow-x-auto w-full">
+          <Table className="min-w-[1200px]"><TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="font-headline min-w-[150px] cursor-pointer hover:text-primary" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>Date</TableHead>
-                <TableHead className="font-headline text-right min-w-[120px]">Food Rev.</TableHead>
-                <TableHead className="font-headline text-right min-w-[120px]">Bud. Food %</TableHead>
-                <TableHead className="font-headline text-right min-w-[130px]">Act. Food Cost</TableHead>
-                <TableHead className="font-headline text-right min-w-[120px]">Act. Food %</TableHead>
-                <TableHead className="font-headline text-right min-w-[130px]">Food Var. %</TableHead>
-                <TableHead className="font-headline text-right min-w-[120px]">Bev Rev.</TableHead>
-                <TableHead className="font-headline text-right min-w-[120px]">Bud. Bev %</TableHead>
-                <TableHead className="font-headline text-right min-w-[130px]">Act. Bev Cost</TableHead>
-                <TableHead className="font-headline text-right min-w-[120px]">Act. Bev %</TableHead>
-                <TableHead className="font-headline text-right min-w-[130px]">Bev Var. %</TableHead>
-                <TableHead className="font-headline w-[100px] text-right min-w-[100px]">Actions</TableHead>
+                <TableHead className="font-headline cursor-pointer hover:text-primary" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>Date</TableHead>
+                <TableHead className="font-headline text-right">Food Rev.</TableHead>
+                <TableHead className="font-headline text-right">Bud. Food %</TableHead>
+                <TableHead className="font-headline text-right">Act. Food Cost</TableHead>
+                <TableHead className="font-headline text-right">Act. Food %</TableHead>
+                <TableHead className="font-headline text-right">Food Var. %</TableHead>
+                <TableHead className="font-headline text-right">Bev Rev.</TableHead>
+                <TableHead className="font-headline text-right">Bud. Bev %</TableHead>
+                <TableHead className="font-headline text-right">Act. Bev Cost</TableHead>
+                <TableHead className="font-headline text-right">Act. Bev %</TableHead>
+                <TableHead className="font-headline text-right">Bev Var. %</TableHead>
+                <TableHead className="font-headline w-[100px] text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -327,10 +297,10 @@ export default function DailyFinancialSummaryListClient() {
                     {renderPercentage(summary.beverage_variance_pct)}
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary"> <Edit className="h-4 w-4" /><span className="sr-only">Edit</span> </Button>
+                    <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9"> <Edit className="h-4 w-4" /><span className="sr-only">Edit</span> </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="hover:text-destructive"> <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span> </Button>
+                        <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9"> <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span> </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader> <AlertDialogTitle className="flex items-center"><AlertTriangle className="mr-2 h-5 w-5 text-destructive" />Are you sure?</AlertDialogTitle> <AlertDialogDescription> This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}. </AlertDialogDescription> </AlertDialogHeader>
@@ -346,26 +316,33 @@ export default function DailyFinancialSummaryListClient() {
       )}
 
       {summaries.length > 0 && (
-        <div className="flex items-center justify-end space-x-2 py-4">
-          <span className="text-sm text-muted-foreground">
-            Page {currentPage}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={prevPage}
-            disabled={currentPage === 1 || isLoading}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={nextPage}
-            disabled={!hasMore || isLoading}
-          >
-            Next
-          </Button>
+        <div className="flex justify-between items-center mt-4 px-2">
+          <div className="text-sm text-muted-foreground">
+            Showing {startIndexText} to {endIndexText} results {hasMore ? "(more available)" : ""}
+          </div>
+          <div className="flex items-center space-x-1">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={prevPage}
+              disabled={currentPage === 1 || isLoading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="sr-only">Previous Page</span>
+            </Button>
+            <span className="text-sm font-medium p-2">Page {currentPage}</span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={nextPage}
+              disabled={!hasMore || isLoading}
+            >
+              <ChevronRight className="h-4 w-4" />
+              <span className="sr-only">Next Page</span>
+            </Button>
+          </div>
         </div>
       )}
 
