@@ -1,9 +1,9 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { collection, onSnapshot, orderBy, query as firestoreQuery, Timestamp } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, GlassWater } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, GlassWater, ChevronLeft, ChevronRight, ClipboardList } from "lucide-react";
 import { format, isValid } from "date-fns";
 
 import { db } from "@/lib/firebase";
@@ -27,12 +27,14 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
+const ITEMS_PER_PAGE = 5;
+
 export default function BeverageCostEntryListClient() {
   const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
-  const [beverageCostEntries, setBeverageCostEntries] = useState<BeverageCostEntry[]>([]);
+  const [allBeverageCostEntries, setAllBeverageCostEntries] = useState<BeverageCostEntry[]>([]);
   const [outlets, setOutlets] = useState<Outlet[]>([]);
   const [beverageCategories, setBeverageCategories] = useState<Category[]>([]);
   
@@ -47,6 +49,7 @@ export default function BeverageCostEntryListClient() {
   const [dialogOutletId, setDialogOutletId] = useState<string | undefined>(undefined);
 
   const [error, setError] = useState<Error | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     setIsClient(true);
@@ -89,8 +92,9 @@ export default function BeverageCostEntryListClient() {
           updatedAt: convertToValidDate(data.updatedAt),
         } as BeverageCostEntry;
       });
-      setBeverageCostEntries(fetchedEntries);
+      setAllBeverageCostEntries(fetchedEntries);
       setIsLoadingEntries(false);
+      setCurrentPage(1);
       
     }, (err) => {
       console.error("Error fetching beverage cost entries:", err);
@@ -177,6 +181,55 @@ export default function BeverageCostEntryListClient() {
     }
   };
 
+  const totalEntries = allBeverageCostEntries.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / ITEMS_PER_PAGE));
+  const currentItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return allBeverageCostEntries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [allBeverageCostEntries, currentPage]);
+
+  const startIndexDisplay = totalEntries > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay = totalEntries > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalEntries) : 0;
+
+  const renderPageNumbers = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    let startPage, endPage;
+
+    if (totalPages <= maxPagesToShow) {
+      startPage = 1;
+      endPage = totalPages;
+    } else {
+      if (currentPage <= Math.ceil(maxPagesToShow / 2)) {
+        startPage = 1;
+        endPage = maxPagesToShow;
+      } else if (currentPage + Math.floor(maxPagesToShow / 2) >= totalPages) {
+        startPage = totalPages - maxPagesToShow + 1;
+        endPage = totalPages;
+      } else {
+        startPage = currentPage - Math.floor(maxPagesToShow / 2);
+        endPage = currentPage + Math.floor(maxPagesToShow / 2);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <Button
+          key={i}
+          variant={currentPage === i ? "default" : "outline"}
+          size="icon"
+          className="h-9 w-9"
+          onClick={() => setCurrentPage(i)}
+          disabled={isLoadingEntries || isLoadingOutlets || isLoadingCategories}
+        >
+          {i}
+        </Button>
+      );
+    }
+    return pageNumbers;
+  };
+
+
   if (error) {
     return (
       <div className="text-center py-10 text-destructive-foreground bg-destructive/20 rounded-lg border border-destructive">
@@ -189,7 +242,9 @@ export default function BeverageCostEntryListClient() {
 
   if (!isClient) return null; 
 
-  const isLoading = isLoadingEntries || isLoadingOutlets || isLoadingCategories || isLoadingDetailsForEdit;
+  const isLoadingInitialData = isLoadingEntries || isLoadingOutlets || isLoadingCategories;
+  const isLoading = isLoadingInitialData || isLoadingDetailsForEdit;
+
 
   return (
     <>
@@ -200,28 +255,39 @@ export default function BeverageCostEntryListClient() {
         </Button>
       </div>
 
-      {isLoading ? (
-        <div className="rounded-lg border overflow-hidden shadow-md bg-card p-4">
-          <Skeleton className="h-8 w-3/4 mb-4 bg-muted/50" />
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex justify-between items-center p-4 border-b">
-              <Skeleton className="h-6 w-1/4 bg-muted" />
-              <Skeleton className="h-6 w-1/4 bg-muted" />
-              <Skeleton className="h-6 w-1/6 bg-muted" />
-              <div className="flex gap-2">
-                <Skeleton className="h-8 w-8 bg-muted" />
-                <Skeleton className="h-8 w-8 bg-muted" />
+      {isLoadingInitialData && currentItems.length === 0 ? (
+         <div>
+          <div className="rounded-lg border overflow-hidden shadow-md bg-card p-4">
+            <Skeleton className="h-8 w-3/4 mb-4 bg-muted/50" />
+            {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
+              <div key={i} className="flex justify-between items-center p-4 border-b">
+                <Skeleton className="h-6 w-1/4 bg-muted" />
+                <Skeleton className="h-6 w-1/4 bg-muted" />
+                <Skeleton className="h-6 w-1/6 bg-muted" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-8 bg-muted" />
+                  <Skeleton className="h-8 w-8 bg-muted" />
+                </div>
               </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-4 px-2">
+            <Skeleton className="h-6 w-1/4 bg-muted" />
+            <div className="flex items-center space-x-1">
+              <Skeleton className="h-9 w-9 bg-muted rounded-md" />
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />)}
+              <Skeleton className="h-9 w-9 bg-muted rounded-md" />
             </div>
-          ))}
+          </div>
         </div>
-      ) : beverageCostEntries.length === 0 ? (
+      ) : currentItems.length === 0 && !isLoadingInitialData ? (
         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
-           <GlassWater className="mx-auto h-12 w-12 mb-4 text-primary" />
+           <ClipboardList className="mx-auto h-12 w-12 mb-4 text-primary" />
            <h3 className="mt-2 text-lg font-semibold">No Beverage Cost Entries</h3>
           <p className="mt-1 text-sm text-muted-foreground">Get started by creating a new beverage cost entry.</p>
         </div> 
       ) : (
+        <>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Table>
             <TableHeader className="bg-muted/50">
@@ -233,13 +299,13 @@ export default function BeverageCostEntryListClient() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {beverageCostEntries.map((entry) => (
+              {currentItems.map((entry) => (
                   <TableRow key={entry.id}>
                     <TableCell>{entry.date instanceof Date && isValid(entry.date) ? format(entry.date, "PPP") : "Invalid Date"}</TableCell>
                     <TableCell>{outlets.find(o => o.id === entry.outlet_id)?.name || entry.outlet_id || 'Unknown Outlet'}</TableCell>
                     <TableCell className="text-right font-code">${(entry.total_beverage_cost || 0).toFixed(2)}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(entry)} className="mr-2 hover:text-primary">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(entry)} className="mr-2 hover:text-primary" disabled={isLoadingDetailsForEdit}>
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Edit Entry</span>
                       </Button>
@@ -267,6 +333,25 @@ export default function BeverageCostEntryListClient() {
             </TableBody>
           </Table>
         </div>
+        {totalPages > 1 && (
+            <div className="flex justify-between items-center mt-4 px-2">
+                <div className="text-sm text-muted-foreground">
+                Showing {startIndexDisplay} to {endIndexDisplay} of {totalEntries} results
+                </div>
+                <div className="flex items-center space-x-1">
+                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1 || isLoading}>
+                    <ChevronLeft className="h-4 w-4" />
+                    <span className="sr-only">Previous Page</span>
+                </Button>
+                {renderPageNumbers()}
+                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages || isLoading}>
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="sr-only">Next Page</span>
+                </Button>
+                </div>
+            </div>
+        )}
+        </>
       )}
 
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setEditingEntry(null); }}>
@@ -321,7 +406,7 @@ export default function BeverageCostEntryListClient() {
             )}
 
             <div className="p-6">
-              {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry && (!dialogOutletId || !isValid(dialogDate)) ? ( 
+              {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry && (!dialogOutletId || !(dialogDate && isValid(dialogDate))) ? ( 
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
                     {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet above to start."}
