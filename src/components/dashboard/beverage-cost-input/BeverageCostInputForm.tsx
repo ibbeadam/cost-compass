@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import type { Category, BeverageCostEntry, BeverageCostDetail } from "@/types";
 import { saveBeverageCostEntryAction } from "@/actions/beverageCostActions";
@@ -66,6 +66,25 @@ export default function BeverageCostInputForm({
     },
     mode: "onChange",
   });
+  
+  useEffect(() => {
+    if (existingEntry) {
+      form.reset({
+        items: existingEntry.details.map(d => ({
+          id: d.id,
+          categoryId: d.category_id,
+          categoryName: d.categoryName || d.category_id,
+          cost: d.cost,
+          description: d.description || "",
+        }))
+      });
+    } else {
+      form.reset({
+        items: [{ categoryId: "", cost: 0, description: "" }]
+      });
+    }
+  }, [existingEntry, form, selectedDate, selectedOutletId]);
+
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -75,6 +94,14 @@ export default function BeverageCostInputForm({
   const totalCost = form.watch("items").reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
 
   async function onSubmit(data: BeverageCostInputFormValues) {
+    if (!selectedDate) {
+        toast({ variant: "destructive", title: "Date Missing", description: "Please ensure a date is selected."});
+        return;
+    }
+    if (!selectedOutletId) {
+        toast({ variant: "destructive", title: "Outlet Missing", description: "Please ensure an outlet is selected."});
+        return;
+    }
     setIsSubmitting(true);
     try {
       const itemsToSave = data.items.map(item => ({

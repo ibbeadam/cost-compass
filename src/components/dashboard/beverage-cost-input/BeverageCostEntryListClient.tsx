@@ -43,8 +43,8 @@ export default function BeverageCostEntryListClient() {
 
   const [editingEntry, setEditingEntry] = useState<(BeverageCostEntry & { details: BeverageCostDetail[] }) | null>(null);
   
-  const [dateForNewEntry, setDateForNewEntry] = useState<Date>(new Date());
-  const [outletIdForNewEntry, setOutletIdForNewEntry] = useState<string | undefined>(undefined);
+  const [dialogDate, setDialogDate] = useState<Date>(new Date());
+  const [dialogOutletId, setDialogOutletId] = useState<string | undefined>(undefined);
 
   const [error, setError] = useState<Error | null>(null);
 
@@ -111,8 +111,8 @@ export default function BeverageCostEntryListClient() {
         getBeverageCategoriesAction()
       ]);
       setOutlets(outletsData);
-      if (outletsData.length > 0 && !outletIdForNewEntry) {
-        setOutletIdForNewEntry(outletsData[0].id);
+      if (outletsData.length > 0 && !dialogOutletId) {
+        setDialogOutletId(outletsData[0].id);
       }
       setBeverageCategories(categoriesData);    
     } catch (err) {
@@ -123,7 +123,7 @@ export default function BeverageCostEntryListClient() {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, outletIdForNewEntry]); 
+  }, [toast, dialogOutletId]); 
 
   useEffect(() => {
     if (isClient) {
@@ -133,14 +133,9 @@ export default function BeverageCostEntryListClient() {
 
   const handleAddNew = () => {
     setEditingEntry(null); 
-    setDateForNewEntry(new Date()); 
-    if (outlets.length > 0 && !outletIdForNewEntry) { 
-        setOutletIdForNewEntry(outlets[0].id);
-    } else if (outlets.length > 0 && outletIdForNewEntry) {
-        // keep current outletIdForNewEntry
-    } else {
-        setOutletIdForNewEntry(undefined);
-    }
+    setDialogDate(new Date()); 
+    const initialOutletId = outlets.length > 0 ? outlets[0].id : undefined;
+    setDialogOutletId(initialOutletId);
     setIsFormOpen(true);
   };
 
@@ -154,6 +149,8 @@ export default function BeverageCostEntryListClient() {
       const fullEntryWithDetails = await getBeverageCostEntryWithDetailsAction(listEntry.date, listEntry.outlet_id);
       if (fullEntryWithDetails) {
         setEditingEntry(fullEntryWithDetails);
+        setDialogDate(fullEntryWithDetails.date);
+        setDialogOutletId(fullEntryWithDetails.outlet_id);
         setIsFormOpen(true);
       } else {
         toast({ title: "Entry Not Found", description: "Could not load details. It might have been deleted.", variant: "destructive"});
@@ -281,33 +278,33 @@ export default function BeverageCostEntryListClient() {
             <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit Beverage Cost Entry" : "Add New Beverage Cost Entry"}</DialogTitle>
             <DialogDescription>
               {editingEntry 
-                ? `Update details for outlet: ${outlets.find(o => o.id === editingEntry.outlet_id)?.name || 'Unknown'} on ${editingEntry.date && isValid(editingEntry.date) ? format(editingEntry.date, "PPP") : "selected date"}` 
+                ? `Update details for outlet: ${outlets.find(o => o.id === dialogOutletId)?.name || 'Unknown'} on ${dialogDate && isValid(dialogDate) ? format(dialogDate, "PPP") : "selected date"}` 
                 : "Enter the details for a new beverage cost entry."}
             </DialogDescription>
           </DialogHeader>
           
           <div className="flex-grow min-h-0 overflow-y-auto">
-            {!editingEntry && isClient && (outlets.length > 0 || isLoadingOutlets) && (
+            {isClient && (outlets.length > 0 || isLoadingOutlets) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
                 <div>
-                  <Label htmlFor="new-beverage-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
+                  <Label htmlFor="dialog-beverage-entry-date" className="mb-1 block text-sm font-medium">Date</Label>
                   <DatePicker 
-                    date={dateForNewEntry} 
-                    setDate={setDateForNewEntry}
-                    id="new-beverage-entry-date"
+                    date={dialogDate && isValid(dialogDate) ? dialogDate : undefined} 
+                    setDate={(newDate) => newDate && isValid(newDate) && setDialogDate(newDate)}
+                    id="dialog-beverage-entry-date"
                     className="w-full"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="new-beverage-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
+                  <Label htmlFor="dialog-beverage-entry-outlet" className="mb-1 block text-sm font-medium">Outlet</Label>
                   {isLoadingOutlets ? (
                     <Skeleton className="h-10 w-full bg-muted" />
                   ) : (
                     <Select 
-                      value={outletIdForNewEntry} 
-                      onValueChange={(id) => setOutletIdForNewEntry(id)}
+                      value={dialogOutletId} 
+                      onValueChange={(id) => setDialogOutletId(id)}
                     >
-                      <SelectTrigger id="new-beverage-entry-outlet" className="w-full">
+                      <SelectTrigger id="dialog-beverage-entry-outlet" className="w-full">
                         <SelectValue placeholder="Select an outlet" />
                       </SelectTrigger>
                       <SelectContent>
@@ -324,21 +321,21 @@ export default function BeverageCostEntryListClient() {
             )}
 
             <div className="p-6">
-              {isClient && (isLoadingOutlets || isLoadingCategories) ? (
+              {isClient && (isLoadingOutlets || isLoadingCategories) && !editingEntry && (!dialogOutletId || !isValid(dialogDate)) ? ( 
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
-                    {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet."}
+                    {isLoadingOutlets || isLoadingCategories ? "Loading selection options..." : "Please select a date and outlet above to start."}
                   </p>
                 </div>
               ) : (
                 <BeverageCostInputForm
                     key={
                         editingEntry
-                        ? `${editingEntry.id}-${editingEntry.date instanceof Date && isValid(editingEntry.date) ? editingEntry.date.toISOString() : 'invalid-edit-date'}`
-                        : `new-${dateForNewEntry instanceof Date && isValid(dateForNewEntry) ? dateForNewEntry.toISOString() : 'invalid-new-date'}-${outletIdForNewEntry || 'no-outlet'}`
+                        ? `${editingEntry.id}-${dialogDate instanceof Date && isValid(dialogDate) ? dialogDate.toISOString() : 'invalid-edit-date'}-${dialogOutletId || 'no-dialog-outlet'}`
+                        : `new-${dialogDate instanceof Date && isValid(dialogDate) ? dialogDate.toISOString() : 'invalid-new-date'}-${dialogOutletId || 'no-dialog-outlet'}`
                     }
-                    selectedDate={editingEntry && editingEntry.date && isValid(editingEntry.date) ? editingEntry.date : dateForNewEntry}
-                    selectedOutletId={editingEntry ? editingEntry.outlet_id : (outletIdForNewEntry || (outlets.length > 0 ? outlets[0].id : ""))}
+                    selectedDate={dialogDate}
+                    selectedOutletId={dialogOutletId || (outlets.length > 0 ? outlets[0].id : "")}
                     beverageCategories={beverageCategories}
                     existingEntry={editingEntry} 
                     onSuccess={onFormSuccess}
