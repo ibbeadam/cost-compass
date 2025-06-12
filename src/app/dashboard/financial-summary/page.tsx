@@ -47,10 +47,12 @@ export default function DailyFinancialSummariesPage() {
               Actual costs and variances are calculated based on detailed Food & Beverage cost entries.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="overflow-x-auto p-0">
+            <div className="p-6">
             <Suspense fallback={<ListSkeleton />}>
               <DailyFinancialSummaryListClient />
             </Suspense>
+            </div>
           </CardContent>
         </Card>
     </div>

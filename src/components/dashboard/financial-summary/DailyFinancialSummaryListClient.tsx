@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -219,9 +218,13 @@ export default function DailyFinancialSummaryListClient() {
 
   if (isLoading && allSummaries.length === 0) { 
     return (
-      <div>
-        <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-52 bg-muted" /> </div>
-        <div className="rounded-lg border shadow-md bg-card overflow-x-auto">
+      <div className="w-full">
+        <div className="flex justify-end mb-4"> 
+          <Skeleton className="h-10 w-52 bg-muted" /> 
+        </div>
+        {/* Scrollable skeleton table */}
+        <div className="w-full border rounded-lg shadow-md bg-card">
+          <div className="overflow-x-auto">
             <table className="w-full caption-bottom text-sm min-w-[1200px]">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
@@ -250,6 +253,7 @@ export default function DailyFinancialSummaryListClient() {
                 ))}
               </tbody>
             </table>
+          </div>
         </div>
         <div className="flex items-center justify-between mt-4 px-2">
           <Skeleton className="h-6 w-1/4 bg-muted" />
@@ -264,9 +268,12 @@ export default function DailyFinancialSummaryListClient() {
   }
 
   return (
- <div className="w-full flex flex-col">
+    <div className="w-full flex flex-col">
       <div className="flex justify-end mb-4">
-        <Button onClick={handleAddNew}> <PlusCircle className="mr-2 h-4 w-4" /> Add New Daily Summary </Button>
+        <Button onClick={handleAddNew}> 
+          <PlusCircle className="mr-2 h-4 w-4" /> 
+          Add New Daily Summary 
+        </Button>
       </div>
 
       {currentItems.length === 0 && !isLoading ? (
@@ -275,60 +282,102 @@ export default function DailyFinancialSummaryListClient() {
           <p className="text-lg font-medium">No daily financial summaries found.</p>
           <p>Click "Add New Daily Summary" to get started.</p>
         </div>
- ) : (
-        <div className="rounded-lg border shadow-md bg-card overflow-x-auto w-full">
-          <Table className="min-w-[1200px]"><TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="font-headline cursor-pointer hover:text-primary" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>Date</TableHead>
-                <TableHead className="font-headline text-right">Food Rev.</TableHead>
-                <TableHead className="font-headline text-right">Bud. Food %</TableHead>
-                <TableHead className="font-headline text-right">Act. Food Cost</TableHead>
-                <TableHead className="font-headline text-right">Act. Food %</TableHead>
-                <TableHead className="font-headline text-right">Food Var. %</TableHead>
-                <TableHead className="font-headline text-right">Bev Rev.</TableHead>
-                <TableHead className="font-headline text-right">Bud. Bev %</TableHead>
-                <TableHead className="font-headline text-right">Act. Bev Cost</TableHead>
-                <TableHead className="font-headline text-right">Act. Bev %</TableHead>
-                <TableHead className="font-headline text-right">Bev Var. %</TableHead>
-                <TableHead className="font-headline w-[100px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentItems.map((summary) => (
-                <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
-                  <TableCell className="font-code" onClick={() => handleViewDetails(summary)}> {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id} </TableCell>
-                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.food_revenue)}</TableCell>
-                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderPercentage(summary.budget_food_cost_pct)}</TableCell>
-                  <TableCell className="text-right font-code font-semibold" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.actual_food_cost)}</TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getActualCostColor(summary.actual_food_cost_pct, summary.budget_food_cost_pct))} onClick={() => handleViewDetails(summary)}> {renderPercentage(summary.actual_food_cost_pct)} </TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.food_variance_pct))} onClick={() => handleViewDetails(summary)}>
-                    {summary.food_variance_pct != null && summary.food_variance_pct !== 0 ? (summary.food_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
-                    {renderPercentage(summary.food_variance_pct)}
-                  </TableCell>
-                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.beverage_revenue)}</TableCell>
-                  <TableCell className="text-right font-code" onClick={() => handleViewDetails(summary)}>{renderPercentage(summary.budget_beverage_cost_pct)}</TableCell>
-                  <TableCell className="text-right font-code font-semibold" onClick={() => handleViewDetails(summary)}>{renderCurrency(summary.actual_beverage_cost)}</TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getActualCostColor(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))} onClick={() => handleViewDetails(summary)}> {renderPercentage(summary.actual_beverage_cost_pct)} </TableCell>
-                  <TableCell className={cn("text-right font-code font-semibold", getVarianceColor(summary.beverage_variance_pct))} onClick={() => handleViewDetails(summary)}>
-                    {summary.beverage_variance_pct != null && summary.beverage_variance_pct !== 0 ? (summary.beverage_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
-                    {renderPercentage(summary.beverage_variance_pct)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9"> <Edit className="h-4 w-4" /><span className="sr-only">Edit</span> </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9"> <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span> </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader> <AlertDialogTitle className="flex items-center"><AlertTriangle className="mr-2 h-5 w-5 text-destructive" />Are you sure?</AlertDialogTitle> <AlertDialogDescription> This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}. </AlertDialogDescription> </AlertDialogHeader>
-                        <AlertDialogFooter> <AlertDialogCancel>Cancel</AlertDialogCancel> <AlertDialogAction onClick={() => handleDelete(summary.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">Delete</AlertDialogAction> </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
+      ) : (
+        <div className="w-full border rounded-lg shadow-md bg-card">
+          <div className="overflow-x-auto w-full">
+            <Table className="min-w-[1200px] w-full text-sm text-left border-collapse">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>
+                    Date
+                  </TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Food Rev.</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Bud. Food %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Food Cost</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Food %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Food Var. %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Bev Rev.</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Bud. Bev %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Bev Cost</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Bev %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap">Bev Var. %</TableHead>
+                  <TableHead className="font-headline w-[100px] text-right whitespace-nowrap">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {currentItems.map((summary) => (
+                  <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
+                    <TableCell className="font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}> 
+                      {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id} 
+                    </TableCell>
+                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                      {renderCurrency(summary.food_revenue)}
+                    </TableCell>
+                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                      {renderPercentage(summary.budget_food_cost_pct)}
+                    </TableCell>
+                    <TableCell className="text-right font-code font-semibold whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                      {renderCurrency(summary.actual_food_cost)}
+                    </TableCell>
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getActualCostColor(summary.actual_food_cost_pct, summary.budget_food_cost_pct))} onClick={() => handleViewDetails(summary)}> 
+                      {renderPercentage(summary.actual_food_cost_pct)} 
+                    </TableCell>
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getVarianceColor(summary.food_variance_pct))} onClick={() => handleViewDetails(summary)}>
+                      {summary.food_variance_pct != null && summary.food_variance_pct !== 0 ? (summary.food_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
+                      {renderPercentage(summary.food_variance_pct)}
+                    </TableCell>
+                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                      {renderCurrency(summary.beverage_revenue)}
+                    </TableCell>
+                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                      {renderPercentage(summary.budget_beverage_cost_pct)}
+                    </TableCell>
+                    <TableCell className="text-right font-code font-semibold whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                      {renderCurrency(summary.actual_beverage_cost)}
+                    </TableCell>
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getActualCostColor(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))} onClick={() => handleViewDetails(summary)}> 
+                      {renderPercentage(summary.actual_beverage_cost_pct)} 
+                    </TableCell>
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getVarianceColor(summary.beverage_variance_pct))} onClick={() => handleViewDetails(summary)}>
+                      {summary.beverage_variance_pct != null && summary.beverage_variance_pct !== 0 ? (summary.beverage_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
+                      {renderPercentage(summary.beverage_variance_pct)}
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9"> 
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit</span> 
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9"> 
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span> 
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader> 
+                            <AlertDialogTitle className="flex items-center">
+                              <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
+                              Are you sure?
+                            </AlertDialogTitle> 
+                            <AlertDialogDescription> 
+                              This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}. 
+                            </AlertDialogDescription> 
+                          </AlertDialogHeader>
+                          <AlertDialogFooter> 
+                            <AlertDialogCancel>Cancel</AlertDialogCancel> 
+                            <AlertDialogAction onClick={() => handleDelete(summary.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                              Delete
+                            </AlertDialogAction> 
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 
@@ -398,6 +447,6 @@ export default function DailyFinancialSummaryListClient() {
           isLoadingDetails={isLoadingDetails}
         />
       )}
- </div>
+    </div>
   );
 }
