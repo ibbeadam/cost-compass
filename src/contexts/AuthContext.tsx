@@ -1,4 +1,3 @@
-
 "use client";
 
 import type { User } from "firebase/auth";
@@ -7,15 +6,15 @@ import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { useRouter, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { Skeleton } from "@/components/ui/skeleton"; 
-
-// Define the admin email here. In a real app, use environment variables.
-const ADMIN_EMAIL = "admin@example.com";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getUserByEmailAction } from "@/actions/userActions";
+import type { User as FirestoreUser } from "@/types";
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  isAdmin: boolean; // New property
+  isAdmin: boolean;
+  userProfile: FirestoreUser | null;
   signOut: () => Promise<void>;
 }
 
@@ -26,13 +25,17 @@ const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false); // New state for admin status
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userProfile, setUserProfile] = useState<FirestoreUser | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const signOut = useCallback(async () => {
     try {
+      if (!auth) {
+        throw new Error("Firebase Auth is not initialized");
+      }
       await firebaseSignOut(auth);
       // User state will be updated by onAuthStateChanged
       // router.push will be handled by useEffect below or PrivateRoute
@@ -79,9 +82,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, resetInactivityTimer]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    if (!auth) {
+      console.error("Firebase Auth is not initialized");
+      setLoading(false);
+      return;
+    }
+    
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      setIsAdmin(currentUser?.email === ADMIN_EMAIL); // Set admin status
+      
+      if (currentUser?.email) {
+        try {
+          // Fetch user profile from Firestore
+          const firestoreUser = await getUserByEmailAction(currentUser.email);
+          setUserProfile(firestoreUser);
+          setIsAdmin(firestoreUser?.role === 'admin' || false);
+        } catch (error) {
+          console.error("Error fetching user profile:", error);
+          setUserProfile(null);
+          setIsAdmin(false);
+        }
+      } else {
+        setUserProfile(null);
+        setIsAdmin(false);
+      }
+      
       setLoading(false);
       if (currentUser) {
         resetInactivityTimer(); // Reset timer if user state changes to logged in
@@ -114,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, userProfile, signOut }}>
       {children}
     </AuthContext.Provider>
   );

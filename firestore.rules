@@ -1,0 +1,44 @@
+rules_version = "2";
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ========================================
+    // DEVELOPMENT RULES (Completely Open)
+    // WARNING: These rules allow ALL access - ONLY for development!
+    // ========================================
+    
+    // Allow all read/write operations for development
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
+    // ========================================
+    // PRODUCTION RULES (Secure)
+    // Uncomment these and comment out the above rules for production
+    // ========================================
+    
+    /*
+    // Allow users to read their own profile
+    match /users/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == resource.data.email);
+      allow write: if request.auth != null && request.auth.token.email == resource.data.email;
+    }
+    
+    // Allow admins to read/write all users
+    match /users/{userId} {
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+    
+    // Allow authenticated users to create their own profile (for initial setup)
+    match /users/{userId} {
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow access to other collections for authenticated users
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+    */
+  }
+} 

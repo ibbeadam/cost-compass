@@ -1,27 +1,56 @@
-
+import UserManagementClient from "@/components/dashboard/users/UserManagementClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import UserListClient from "@/components/dashboard/users/UserListClient";
 import { Suspense } from "react";
-import Loading from "./loading"; // Import the loading component
+import { Skeleton } from "@/components/ui/skeleton";
 
 export const metadata = {
-  title: "Manage Users | Cost Compass",
+  title: "User Management | Cost Compass",
 };
 
-export default function ManageUsersPage() {
+function UserManagementSkeleton() {
+  return (
+    <div>
+      <div className="flex justify-end mb-4">
+        <Skeleton className="h-10 w-40 bg-muted" />
+      </div>
+      <div className="rounded-lg border overflow-hidden shadow-md bg-card">
+        <Skeleton className="h-12 w-full bg-muted/50" />
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="grid grid-cols-7 items-center p-4 border-b gap-2">
+            <Skeleton className="h-6 bg-muted" />
+            <Skeleton className="h-6 bg-muted" />
+            <Skeleton className="h-6 bg-muted" />
+            <Skeleton className="h-6 bg-muted" />
+            <Skeleton className="h-6 bg-muted" />
+            <Skeleton className="h-6 bg-muted" />
+            <div className="flex justify-end gap-1">
+              <Skeleton className="h-8 w-8 bg-muted" />
+              <Skeleton className="h-8 w-8 bg-muted" />
+              <Skeleton className="h-8 w-8 bg-muted" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function UserManagementPage() {
   return (
     <div className="flex flex-col flex-grow w-full">
       <Card className="shadow-lg bg-card w-full">
         <CardHeader>
-          <CardTitle className="font-headline text-2xl">Manage Users</CardTitle>
+          <CardTitle className="font-headline text-2xl">User Management</CardTitle>
           <CardDescription>
-            View and manage user accounts for the application. (Full functionality requires backend setup)
+            Manage system users, roles, and permissions. Create new users, edit existing ones, and control access levels.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Suspense fallback={<Loading />}>
-            <UserListClient />
-          </Suspense>
+        <CardContent className="p-0">
+          <div className="p-6">
+            <Suspense fallback={<UserManagementSkeleton />}>
+              <UserManagementClient />
+            </Suspense>
+          </div>
         </CardContent>
       </Card>
     </div>

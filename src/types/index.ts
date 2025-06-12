@@ -1,4 +1,3 @@
-
 import type { Timestamp } from "firebase/firestore";
 
 export interface Outlet {
@@ -277,4 +276,36 @@ export interface ManagedUser {
   disabled?: boolean;
   creationTime?: string; // Or Date
   lastSignInTime?: string; // Or Date
+}
+
+export interface User {
+  id: string;
+  email: string;
+  displayName?: string;
+  role: 'admin' | 'manager' | 'user';
+  isActive: boolean;
+  createdAt: Date | Timestamp;
+  updatedAt: Date | Timestamp;
+  lastLoginAt?: Date | Timestamp;
+  permissions?: string[];
+  department?: string;
+  phoneNumber?: string;
+}
+
+export interface CreateUserData {
+  email: string;
+  displayName?: string;
+  role: 'admin' | 'manager' | 'user';
+  department?: string;
+  phoneNumber?: string;
+  permissions?: string[];
+}
+
+export interface UpdateUserData {
+  displayName?: string;
+  role?: 'admin' | 'manager' | 'user';
+  isActive?: boolean;
+  department?: string;
+  phoneNumber?: string;
+  permissions?: string[];
 }

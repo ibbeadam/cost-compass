@@ -104,7 +104,9 @@ export default function DailyFinancialSummaryListClient() {
     setIsDetailDialogOpen(true);
     try {
       if (summary.date) {
-        const targetDate = summary.date instanceof Date ? summary.date : new Date(summary.date);
+        const targetDate = summary.date instanceof Date ? summary.date : 
+          summary.date instanceof Timestamp ? summary.date.toDate() : 
+          new Date(summary.date as string | number);
         const [foodDetails, beverageDetails] = await Promise.all([
             getFoodCostEntriesForDateAction(targetDate),
             getBeverageCostEntriesForDateAction(targetDate)
