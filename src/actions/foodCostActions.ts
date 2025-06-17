@@ -1,9 +1,9 @@
 "use server";
 
-import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction, orderBy } from "firebase/firestore";
+import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction, orderBy, getFirestore } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
-import type { FoodCostEntry, FoodCostDetail, Category, Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse } from "@/types";
+import type { FoodCostEntry, FoodCostDetail, Category, Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse, CostAnalysisByCategoryReport } from "@/types";
 import { format as formatDateFn, isValid } from "date-fns";
 // Import the recalculate function from dailyFinancialSummaryActions
 import { recalculateAndSaveFinancialSummary } from "./dailyFinancialSummaryActions";
@@ -623,6 +623,305 @@ export async function getDetailedFoodCostReportAction(
   } catch (error: any) {
     console.error("Error fetching detailed food cost report:", error);
     throw new Error(`Could not load detailed food cost report. Details: ${error.message}`);
+  }
+}
+
+export async function getCostAnalysisByCategoryReportAction(
+  fromDate: Date,
+  toDate: Date,
+  outletId?: string
+): Promise<CostAnalysisByCategoryReport> {
+  try {
+    console.log('=== Cost Analysis by Category Report Debug ===');
+    console.log('Date range:', fromDate, 'to', toDate);
+    console.log('Outlet ID:', outletId);
+    
+    const db = getFirestore();
+    
+    // Get all outlets
+    const outletsSnapshot = await getDocs(collection(db, 'outlets'));
+    const outlets = outletsSnapshot.docs.map(doc => ({
+      id: doc.id,
+      name: doc.data().name
+    }));
+    console.log('Found outlets:', outlets.length);
+
+    // Filter outlets based on outletId parameter
+    const targetOutlets = outletId && outletId !== "all" 
+      ? outlets.filter(outlet => outlet.id === outletId)
+      : outlets;
+    console.log('Target outlets:', targetOutlets.length);
+
+    // Get all categories
+    const categoriesSnapshot = await getDocs(collection(db, 'categories'));
+    const categories = categoriesSnapshot.docs.map(doc => ({
+      id: doc.id,
+      name: doc.data().name,
+      type: doc.data().type
+    }));
+    console.log('Found categories:', categories.length);
+
+    // Get food cost entries and details for the date range
+    const foodCostEntriesQuery = query(
+      collection(db, 'foodCostEntries'),
+      where('date', '>=', fromDate),
+      where('date', '<=', toDate)
+    );
+    const foodCostEntriesSnapshot = await getDocs(foodCostEntriesQuery);
+    console.log('Found food cost entries:', foodCostEntriesSnapshot.docs.length);
+    
+    // Get beverage cost entries and details for the date range
+    const beverageCostEntriesQuery = query(
+      collection(db, 'beverageCostEntries'),
+      where('date', '>=', fromDate),
+      where('date', '<=', toDate)
+    );
+    const beverageCostEntriesSnapshot = await getDocs(beverageCostEntriesQuery);
+    console.log('Found beverage cost entries:', beverageCostEntriesSnapshot.docs.length);
+
+    // Get food cost details for the found entries
+    const foodCostEntryIds = foodCostEntriesSnapshot.docs.map(doc => doc.id);
+    let foodCostDetailsSnapshot: { docs: any[] } = { docs: [] };
+    if (foodCostEntryIds.length > 0) {
+      // Use 'in' query for food cost details (Firestore allows up to 10 items in 'in' clause)
+      const chunkSize = 10;
+      for (let i = 0; i < foodCostEntryIds.length; i += chunkSize) {
+        const chunk = foodCostEntryIds.slice(i, i + chunkSize);
+        const foodCostDetailsQuery = query(
+          collection(db, 'foodCostDetails'),
+          where('food_cost_entry_id', 'in', chunk)
+        );
+        const chunkSnapshot = await getDocs(foodCostDetailsQuery);
+        foodCostDetailsSnapshot.docs.push(...chunkSnapshot.docs);
+      }
+    }
+    console.log('Found food cost details:', foodCostDetailsSnapshot.docs.length);
+
+    // Get beverage cost details for the found entries
+    const beverageCostEntryIds = beverageCostEntriesSnapshot.docs.map(doc => doc.id);
+    let beverageCostDetailsSnapshot: { docs: any[] } = { docs: [] };
+    if (beverageCostEntryIds.length > 0) {
+      // Use 'in' query for beverage cost details
+      const chunkSize = 10;
+      for (let i = 0; i < beverageCostEntryIds.length; i += chunkSize) {
+        const chunk = beverageCostEntryIds.slice(i, i + chunkSize);
+        const beverageCostDetailsQuery = query(
+          collection(db, 'beverageCostDetails'),
+          where('beverage_cost_entry_id', 'in', chunk)
+        );
+        const chunkSnapshot = await getDocs(beverageCostDetailsQuery);
+        beverageCostDetailsSnapshot.docs.push(...chunkSnapshot.docs);
+      }
+    }
+    console.log('Found beverage cost details:', beverageCostDetailsSnapshot.docs.length);
+
+    // Get daily financial summaries for revenue data
+    const dailySummariesQuery = query(
+      collection(db, 'dailyFinancialSummaries'),
+      where('date', '>=', fromDate),
+      where('date', '<=', toDate)
+    );
+    const dailySummariesSnapshot = await getDocs(dailySummariesQuery);
+    console.log('Found daily financial summaries:', dailySummariesSnapshot.docs.length);
+
+    // Calculate total revenue (filtered by outlet if specified)
+    let totalFoodRevenue = 0;
+    let totalBeverageRevenue = 0;
+    dailySummariesSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (!outletId || outletId === "all" || data.outlet_id === outletId) {
+        totalFoodRevenue += data.food_revenue || 0;
+        totalBeverageRevenue += data.beverage_revenue || 0;
+      }
+    });
+    const totalRevenue = totalFoodRevenue + totalBeverageRevenue;
+    console.log('Total food revenue:', totalFoodRevenue);
+    console.log('Total beverage revenue:', totalBeverageRevenue);
+    console.log('Total revenue:', totalRevenue);
+
+    // Process food cost details by category (filtered by outlet if specified)
+    const foodCategoryData: { [categoryId: string]: { [outletId: string]: number } } = {};
+    const foodCategoryNames: { [categoryId: string]: string } = {};
+    
+    foodCostDetailsSnapshot.docs.forEach((doc: any) => {
+      const data = doc.data();
+      const categoryId = data.category_id;
+      const cost = data.cost || 0;
+      
+      // Get the outlet_id from the food cost entry
+      const foodCostEntryId = data.food_cost_entry_id;
+      const foodCostEntryDoc = foodCostEntriesSnapshot.docs.find(entryDoc => entryDoc.id === foodCostEntryId);
+      if (!foodCostEntryDoc) {
+        console.log('No food cost entry found for detail:', foodCostEntryId);
+        return;
+      }
+      
+      const entryData = foodCostEntryDoc.data();
+      const entryOutletId = entryData.outlet_id;
+      
+      // Filter by outlet if specified
+      if (outletId && outletId !== "all" && entryOutletId !== outletId) return;
+      
+      if (!foodCategoryData[categoryId]) {
+        foodCategoryData[categoryId] = {};
+        const category = categories.find(c => c.id === categoryId);
+        foodCategoryNames[categoryId] = category?.name || 'Unknown Category';
+      }
+      
+      if (!foodCategoryData[categoryId][entryOutletId]) {
+        foodCategoryData[categoryId][entryOutletId] = 0;
+      }
+      foodCategoryData[categoryId][entryOutletId] += cost;
+    });
+    console.log('Food category data:', Object.keys(foodCategoryData).length, 'categories');
+
+    // Process beverage cost details by category (filtered by outlet if specified)
+    const beverageCategoryData: { [categoryId: string]: { [outletId: string]: number } } = {};
+    const beverageCategoryNames: { [categoryId: string]: string } = {};
+    
+    beverageCostDetailsSnapshot.docs.forEach((doc: any) => {
+      const data = doc.data();
+      const categoryId = data.category_id;
+      const cost = data.cost || 0;
+      
+      // Get the outlet_id from the beverage cost entry
+      const beverageCostEntryId = data.beverage_cost_entry_id;
+      const beverageCostEntryDoc = beverageCostEntriesSnapshot.docs.find(entryDoc => entryDoc.id === beverageCostEntryId);
+      if (!beverageCostEntryDoc) {
+        console.log('No beverage cost entry found for detail:', beverageCostEntryId);
+        return;
+      }
+      
+      const entryData = beverageCostEntryDoc.data();
+      const entryOutletId = entryData.outlet_id;
+      
+      // Filter by outlet if specified
+      if (outletId && outletId !== "all" && entryOutletId !== outletId) return;
+      
+      if (!beverageCategoryData[categoryId]) {
+        beverageCategoryData[categoryId] = {};
+        const category = categories.find(c => c.id === categoryId);
+        beverageCategoryNames[categoryId] = category?.name || 'Unknown Category';
+      }
+      
+      if (!beverageCategoryData[categoryId][entryOutletId]) {
+        beverageCategoryData[categoryId][entryOutletId] = 0;
+      }
+      beverageCategoryData[categoryId][entryOutletId] += cost;
+    });
+    console.log('Beverage category data:', Object.keys(beverageCategoryData).length, 'categories');
+
+    // Calculate total costs
+    let totalFoodCost = 0;
+    let totalBeverageCost = 0;
+
+    Object.values(foodCategoryData).forEach(outletCosts => {
+      Object.values(outletCosts).forEach(cost => {
+        totalFoodCost += cost;
+      });
+    });
+
+    Object.values(beverageCategoryData).forEach(outletCosts => {
+      Object.values(outletCosts).forEach(cost => {
+        totalBeverageCost += cost;
+      });
+    });
+
+    const totalCost = totalFoodCost + totalBeverageCost;
+    console.log('Total food cost:', totalFoodCost);
+    console.log('Total beverage cost:', totalBeverageCost);
+    console.log('Total cost:', totalCost);
+
+    // Calculate number of days in the range
+    const daysInRange = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Build food categories analysis
+    const foodCategories = Object.entries(foodCategoryData).map(([categoryId, outletCosts]) => {
+      const categoryTotalCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
+      const outletBreakdown = Object.entries(outletCosts).map(([outletId, cost]) => {
+        const outlet = outlets.find(o => o.id === outletId);
+        return {
+          outletName: outlet?.name || 'Unknown Outlet',
+          outletId,
+          cost,
+          percentageOfOutletFoodCost: totalFoodCost > 0 ? (cost / totalFoodCost) * 100 : 0
+        };
+      });
+
+      return {
+        categoryName: foodCategoryNames[categoryId],
+        categoryId,
+        totalCost: categoryTotalCost,
+        percentageOfTotalFoodCost: totalFoodCost > 0 ? (categoryTotalCost / totalFoodCost) * 100 : 0,
+        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryTotalCost / totalRevenue) * 100 : 0,
+        averageDailyCost: categoryTotalCost / daysInRange,
+        outletBreakdown
+      };
+    }).sort((a, b) => b.totalCost - a.totalCost);
+
+    // Build beverage categories analysis
+    const beverageCategories = Object.entries(beverageCategoryData).map(([categoryId, outletCosts]) => {
+      const categoryTotalCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
+      const outletBreakdown = Object.entries(outletCosts).map(([outletId, cost]) => {
+        const outlet = outlets.find(o => o.id === outletId);
+        return {
+          outletName: outlet?.name || 'Unknown Outlet',
+          outletId,
+          cost,
+          percentageOfOutletBeverageCost: totalBeverageCost > 0 ? (cost / totalBeverageCost) * 100 : 0
+        };
+      });
+
+      return {
+        categoryName: beverageCategoryNames[categoryId],
+        categoryId,
+        totalCost: categoryTotalCost,
+        percentageOfTotalBeverageCost: totalBeverageCost > 0 ? (categoryTotalCost / totalBeverageCost) * 100 : 0,
+        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryTotalCost / totalRevenue) * 100 : 0,
+        averageDailyCost: categoryTotalCost / daysInRange,
+        outletBreakdown
+      };
+    }).sort((a, b) => b.totalCost - a.totalCost);
+
+    // Get top categories (top 5)
+    const topFoodCategories = foodCategories.slice(0, 5).map(cat => ({
+      categoryName: cat.categoryName,
+      totalCost: cat.totalCost,
+      percentageOfTotalFoodCost: cat.percentageOfTotalFoodCost
+    }));
+
+    const topBeverageCategories = beverageCategories.slice(0, 5).map(cat => ({
+      categoryName: cat.categoryName,
+      totalCost: cat.totalCost,
+      percentageOfTotalBeverageCost: cat.percentageOfTotalBeverageCost
+    }));
+
+    console.log('Final report structure:');
+    console.log('- Food categories:', foodCategories.length);
+    console.log('- Beverage categories:', beverageCategories.length);
+    console.log('- Top food categories:', topFoodCategories.length);
+    console.log('- Top beverage categories:', topBeverageCategories.length);
+
+    return {
+      dateRange: { from: fromDate, to: toDate },
+      totalFoodRevenue,
+      totalBeverageRevenue,
+      totalRevenue,
+      foodCategories,
+      beverageCategories,
+      totalFoodCost,
+      totalBeverageCost,
+      totalCost,
+      overallFoodCostPercentage: totalFoodRevenue > 0 ? (totalFoodCost / totalFoodRevenue) * 100 : 0,
+      overallBeverageCostPercentage: totalBeverageRevenue > 0 ? (totalBeverageCost / totalBeverageRevenue) * 100 : 0,
+      overallCostPercentage: totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0,
+      topFoodCategories,
+      topBeverageCategories
+    };
+
+  } catch (error) {
+    console.error('Error generating cost analysis by category report:', error);
+    throw new Error('Failed to generate cost analysis by category report');
   }
 }
     

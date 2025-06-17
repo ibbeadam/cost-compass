@@ -6,9 +6,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { DollarSign, Percent, TrendingUp, TrendingDown } from "lucide-react";
 import type { MonthlyProfitLossReport } from "@/types";
 import { cn, formatNumber } from "@/lib/utils";
+import React, { useState } from "react";
 
 interface MonthlyProfitLossReportTableProps {
   data: MonthlyProfitLossReport | null;
@@ -66,10 +75,43 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
     return <p className="text-center text-muted-foreground">No monthly profit/loss data available for the selected period.</p>;
   }
 
+  const [taxRate, setTaxRate] = useState<number>(0);
+
+  const renderCurrency = (value: number | null | undefined) => {
+    if (value == null) return "-";
+    return `$${formatNumber(value)}`;
+  };
+
+  const renderPercentage = (value: number | null | undefined) => {
+    if (value == null) return "-";
+    return `${formatNumber(value)}%`;
+  };
+
+  // Calculate tax and net income based on user input
+  const grossProfit = data.netIncomeBeforeTaxes;
+  const incomeTaxExpense = grossProfit * (taxRate / 100);
+  const netIncome = grossProfit - incomeTaxExpense;
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-foreground text-center">Monthly Profit/Loss Report for {data.monthYear}</h2>
 
+      {/* Tax Rate Input */}
+      <div className="flex items-center gap-2 justify-end mb-2">
+        <label htmlFor="tax-rate-input" className="font-medium">Tax Rate (%):</label>
+        <input
+          id="tax-rate-input"
+          type="number"
+          min={0}
+          max={100}
+          step={0.01}
+          value={taxRate}
+          onChange={e => setTaxRate(Number(e.target.value))}
+          className="border rounded px-2 py-1 w-24 text-right font-mono"
+        />
+      </div>
+
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard title="Total Food Revenue" value={data.totalFoodRevenue} isCurrency />
         <StatCard title="Total Beverage Revenue" value={data.totalBeverageRevenue} isCurrency />
@@ -83,7 +125,7 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Gross Profit" value={data.grossProfit} isCurrency trendValue={data.grossProfit} />
+        <StatCard title="Gross Profit" value={grossProfit} isCurrency trendValue={grossProfit} />
         <StatCard title="Food Cost %" value={data.foodCostPercentage} isPercentage trendValue={data.foodCostPercentage - data.averageBudgetFoodCostPct} />
         <StatCard title="Beverage Cost %" value={data.beverageCostPercentage} isPercentage trendValue={data.beverageCostPercentage - data.averageBudgetBeverageCostPct} />
         <StatCard title="Overall Cost %" value={data.overallCostPercentage} isPercentage trendValue={data.overallCostPercentage - ((data.averageBudgetFoodCostPct + data.averageBudgetBeverageCostPct) / 2)} />
@@ -94,6 +136,164 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
         <StatCard title="Avg. Budget Beverage Cost %" value={data.averageBudgetBeverageCostPct} isPercentage />
       </div>
 
+      {/* Detailed P&L Statement */}
+      <Card className="w-full shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800">Profit & Loss Statement</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="mb-8">
+            <h3 className="text-xl font-bold mb-4">INCOME</h3>
+            <Table className="w-full mb-4">
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[150px]">REFERENCE ID.</TableHead>
+                  <TableHead>DESCRIPTION</TableHead>
+                  <TableHead className="text-right">AMOUNT</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.incomeItems.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-mono">{item.referenceId}</TableCell>
+                    <TableCell>{item.description}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(item.amount)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold bg-muted">
+                  <TableCell colSpan={2} className="text-right">INCOME TOTAL</TableCell>
+                  <TableCell className="text-right">{renderCurrency(data.totalIncome)}</TableCell>
+                </TableRow>
+                <TableRow className="font-bold bg-primary/10">
+                  <TableCell colSpan={2} className="text-right text-lg">TOTAL REVENUE</TableCell>
+                  <TableCell className="text-right text-lg">{renderCurrency(data.totalIncome)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="mb-8">
+            <h3 className="text-xl font-bold mb-4">EXPENSES</h3>
+            <Table className="w-full mb-4">
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[150px]">REFERENCE ID.</TableHead>
+                  <TableHead>DESCRIPTION</TableHead>
+                  <TableHead className="text-right">AMOUNT</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.expenseItems.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-mono">{item.referenceId}</TableCell>
+                    <TableCell>{item.description}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(item.amount)}</TableCell>
+                  </TableRow>
+                ))}
+                <TableRow className="font-bold bg-muted">
+                  <TableCell colSpan={2} className="text-right">EXPENSE TOTAL</TableCell>
+                  <TableCell className="text-right">{renderCurrency(data.totalExpenses)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* OC & ENT Section as a separate table */}
+          <div className="mb-8">
+            <h3 className="text-xl font-bold mb-4">OC & ENT</h3>
+            <Table className="w-full mb-4">
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[150px]">REFERENCE ID.</TableHead>
+                  <TableHead>DESCRIPTION</TableHead>
+                  <TableHead className="text-right">AMOUNT</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow className="bg-accent/10">
+                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
+                  <TableCell className="font-semibold">Food OC & ENT</TableCell>
+                  <TableCell className="text-right font-mono">{renderCurrency((data as any).ocEntFood)}</TableCell>
+                </TableRow>
+                <TableRow className="bg-accent/10">
+                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
+                  <TableCell className="font-semibold">Beverage OC & ENT</TableCell>
+                  <TableCell className="text-right font-mono">{renderCurrency((data as any).ocEntBeverage)}</TableCell>
+                </TableRow>
+                <TableRow className="font-bold bg-muted">
+                  <TableCell colSpan={2} className="text-right">OC & ENT TOTAL</TableCell>
+                  <TableCell className="text-right">{renderCurrency(((data as any).ocEntFood || 0) + ((data as any).ocEntBeverage || 0))}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Other Adjustments Section as a separate table */}
+          <div className="mb-8">
+            <h3 className="text-xl font-bold mb-4">Other Adjustments</h3>
+            <Table className="w-full mb-4">
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-[150px]">REFERENCE ID.</TableHead>
+                  <TableHead>DESCRIPTION</TableHead>
+                  <TableHead className="text-right">AMOUNT</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow className="bg-accent/5">
+                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
+                  <TableCell className="font-semibold">Food Other Adjustments</TableCell>
+                  <TableCell className="text-right font-mono">{renderCurrency((data as any).otherAdjFood)}</TableCell>
+                </TableRow>
+                <TableRow className="bg-accent/5">
+                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
+                  <TableCell className="font-semibold">Beverage Other Adjustments</TableCell>
+                  <TableCell className="text-right font-mono">{renderCurrency((data as any).otherAdjBeverage)}</TableCell>
+                </TableRow>
+                <TableRow className="font-bold bg-muted">
+                  <TableCell colSpan={2} className="text-right">Other Adjustments TOTAL</TableCell>
+                  <TableCell className="text-right">{renderCurrency(((data as any).otherAdjFood || 0) + ((data as any).otherAdjBeverage || 0))}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Total Expenses After Adjustments row */}
+          <div className="mb-8">
+            <Table className="w-full">
+              <TableBody>
+                <TableRow className="font-bold bg-primary/20 text-lg">
+                  <TableCell colSpan={2} className="text-right">Total Expenses After Adjustments</TableCell>
+                  <TableCell className="text-right">
+                    {renderCurrency(
+                      (data.totalExpenses || 0) - (((data as any).ocEntFood || 0) + ((data as any).ocEntBeverage || 0)) + (((data as any).otherAdjFood || 0) + ((data as any).otherAdjBeverage || 0))
+                    )}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="space-y-2 max-w-sm ml-auto text-right text-base font-semibold">
+            <div className="flex justify-between items-center">
+              <span>NET INCOME BEFORE TAXES</span>
+              <span className="font-mono">{renderCurrency(grossProfit)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span>INCOME TAX EXPENSE</span>
+              <span className="font-mono">{renderCurrency(incomeTaxExpense)}</span>
+            </div>
+            <div className="flex justify-between items-center border-b pb-2">
+              <span>TAX RATE</span>
+              <span className="font-mono">{renderPercentage(taxRate)}</span>
+            </div>
+            <div className="flex justify-between items-center text-lg pt-2 font-extrabold text-primary">
+              <span>NET INCOME</span>
+              <span className="font-mono">{renderCurrency(netIncome)}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 } 

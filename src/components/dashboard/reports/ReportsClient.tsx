@@ -9,17 +9,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileSpreadsheet, FileText, Filter, Download, Info } from "lucide-react";
-import { getOutletsAction, getFlashFoodCostReportAction, getDetailedFoodCostReportAction } from "@/actions/foodCostActions";
+import { FileSpreadsheet, FileText, Filter, Download, Info, RefreshCw, Clock, Play, Pause } from "lucide-react";
+import { getOutletsAction, getFlashFoodCostReportAction, getDetailedFoodCostReportAction, getCostAnalysisByCategoryReportAction } from "@/actions/foodCostActions";
 import { getDetailedBeverageCostReportAction } from "@/actions/beverageCostActions";
-import { getMonthlyProfitLossReportAction } from "@/actions/profitLossActions";
-import type { Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse, DetailedBeverageCostReportResponse, MonthlyProfitLossReport } from "@/types";
+import { getMonthlyProfitLossReportAction, getMonthlyProfitLossReportForDateRangeAction } from "@/actions/profitLossActions";
+import type { Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse, DetailedBeverageCostReportResponse, MonthlyProfitLossReport, CostAnalysisByCategoryReport } from "@/types";
 import { FlashFoodCostReportTable } from "../../ui/flash-food-cost-report-table";
 import { DetailedFoodCostReportTable } from "../../ui/detailed-food-cost-report-table";
 import { CombinedFoodCostReportTable } from "../../ui/combined-food-cost-report-table";
 import { DetailedBeverageCostReportTable } from "../../ui/detailed-beverage-cost-report-table";
 import { CombinedBeverageCostReportTable } from "../../ui/combined-beverage-cost-report-table";
 import { MonthlyProfitLossReportTable } from "../../ui/MonthlyProfitLossReportTable";
+import { CostAnalysisByCategoryReportTable } from "../../ui/cost-analysis-by-category-report-table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import * as XLSX from "xlsx"; // Import the xlsx library
 import { jsPDF } from "jspdf"; // Import jsPDF
@@ -45,8 +46,11 @@ export default function ReportsClient() {
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>("all");
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
-  const [reportData, setReportData] = useState<DetailedFoodCostReportResponse | DetailedBeverageCostReportResponse | MonthlyProfitLossReport | null>(null);
+  const [reportData, setReportData] = useState<DetailedFoodCostReportResponse | DetailedBeverageCostReportResponse | MonthlyProfitLossReport | CostAnalysisByCategoryReport | null>(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(null);
 
   const { toast } = useToast();
 
@@ -115,26 +119,57 @@ export default function ReportsClient() {
         const data = await getDetailedBeverageCostReportAction(dateRange.from, dateRange.to, "all");
         setReportData(data);
       } else if (selectedReport === "monthly_profit_loss") {
-        if (!dateRange?.from) {
-          toast({ variant: "destructive", title: "Missing Date", description: "Please select a date for the monthly report." });
+        if (!dateRange?.from || !dateRange?.to) {
+          toast({ variant: "destructive", title: "Missing Date Range", description: "Please select a date range for the monthly report." });
           return;
         }
         console.log("Calling getMonthlyProfitLossReportAction from client...");
-        const year = dateRange.from.getFullYear();
-        const month = dateRange.from.getMonth(); // 0-indexed
-        const data = await getMonthlyProfitLossReportAction(year, month);
+        console.log("Date range:", dateRange.from, "to", dateRange.to);
+        
+        // For Monthly Profit/Loss Report, we'll use the entire date range
+        // but we need to create a new action that accepts date range instead of year/month
+        const data = await getMonthlyProfitLossReportForDateRangeAction(dateRange.from, dateRange.to);
+        setReportData(data);
+      } else if (selectedReport === "cost_analysis_by_category") {
+        console.log("Calling getCostAnalysisByCategoryReportAction from client...");
+        const data = await getCostAnalysisByCategoryReportAction(dateRange.from, dateRange.to, selectedOutletId);
         setReportData(data);
       } else {
         // Fallback for other reports not yet implemented
         console.log(`Generating ${selectedReport} for ${formatDateFn(dateRange.from, 'PPP')} to ${formatDateFn(dateRange.to, 'PPP')}`);
         setReportData(null); // Clear data for unsupported reports
       }
+      setLastRefreshTime(new Date());
       toast({ title: "Report Generated", description: "Your report is ready." });
     } catch (error) {
       console.error("Error generating report:", error);
       toast({ variant: "destructive", title: "Report Generation Error", description: (error as Error).message || "Failed to generate report." });
     } finally {
       setIsLoadingReport(false);
+    }
+  };
+
+  // Auto-refresh functionality
+  useEffect(() => {
+    if (autoRefresh && reportData) {
+      const interval = setInterval(() => {
+        handleGenerateReport();
+      }, 30000); // Refresh every 30 seconds
+      
+      setRefreshInterval(interval);
+      
+      return () => {
+        if (interval) clearInterval(interval);
+      };
+    } else if (refreshInterval) {
+      clearInterval(refreshInterval);
+      setRefreshInterval(null);
+    }
+  }, [autoRefresh, reportData, dateRange, selectedReport, selectedOutletId]);
+
+  const handleRefresh = () => {
+    if (reportData) {
+      handleGenerateReport();
     }
   };
 
@@ -219,32 +254,125 @@ export default function ReportsClient() {
       const monthlyReportData = reportData as MonthlyProfitLossReport;
       ws_data.push([`Monthly Profit/Loss Report for ${monthlyReportData.monthYear}`]);
       ws_data.push([]);
-      ws_data.push(["Metric", "Value"]);
-      ws_data.push(["Total Food Revenue", formatNumber(monthlyReportData.totalFoodRevenue)]);
-      ws_data.push(["Total Beverage Revenue", formatNumber(monthlyReportData.totalBeverageRevenue)]);
-      ws_data.push(["Total Revenue", formatNumber(monthlyReportData.totalRevenue)]);
-      ws_data.push(["Total Actual Food Cost", formatNumber(monthlyReportData.totalActualFoodCost)]);
-      ws_data.push(["Total Actual Beverage Cost", formatNumber(monthlyReportData.totalActualBeverageCost)]);
-      ws_data.push(["Total Actual Cost", formatNumber(monthlyReportData.totalActualCost)]);
-      ws_data.push(["Gross Profit", formatNumber(monthlyReportData.grossProfit)]);
-      ws_data.push(["Food Cost %", formatNumber(monthlyReportData.foodCostPercentage)]);
-      ws_data.push(["Beverage Cost %", formatNumber(monthlyReportData.beverageCostPercentage)]);
-      ws_data.push(["Overall Cost %", formatNumber(monthlyReportData.overallCostPercentage)]);
-      ws_data.push(["Avg. Budget Food Cost %", formatNumber(monthlyReportData.averageBudgetFoodCostPct)]);
-      ws_data.push(["Avg. Budget Beverage Cost %", formatNumber(monthlyReportData.averageBudgetBeverageCostPct)]);
+      // INCOME SECTION
+      ws_data.push(["INCOME"]);
+      ws_data.push(["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]);
+      monthlyReportData.incomeItems.forEach(item => {
+        ws_data.push([item.referenceId, item.description, formatNumber(item.amount)]);
+      });
+      ws_data.push(["", "INCOME TOTAL", formatNumber(monthlyReportData.totalIncome)]);
+      ws_data.push([]);
+      // EXPENSES SECTION
+      ws_data.push(["EXPENSES"]);
+      ws_data.push(["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]);
+      monthlyReportData.expenseItems.forEach(item => {
+        ws_data.push([item.referenceId, item.description, formatNumber(item.amount)]);
+      });
+      ws_data.push(["", "EXPENSE TOTAL", formatNumber(monthlyReportData.totalExpenses)]);
+      ws_data.push([]);
+      // OC & ENT SECTION
+      ws_data.push(["OC & ENT"]);
+      ws_data.push(["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]);
+      ws_data.push(["OC-001", "Food OC & ENT", formatNumber((monthlyReportData as any).ocEntFood)]);
+      ws_data.push(["OC-002", "Beverage OC & ENT", formatNumber((monthlyReportData as any).ocEntBeverage)]);
+      ws_data.push(["", "OC & ENT TOTAL", formatNumber(((monthlyReportData as any).ocEntFood || 0) + ((monthlyReportData as any).ocEntBeverage || 0))]);
+      ws_data.push([]);
+      // Other Adjustments SECTION
+      ws_data.push(["Other Adjustments"]);
+      ws_data.push(["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]);
+      ws_data.push(["OA-001", "Food Other Adjustments", formatNumber((monthlyReportData as any).otherAdjFood)]);
+      ws_data.push(["OA-002", "Beverage Other Adjustments", formatNumber((monthlyReportData as any).otherAdjBeverage)]);
+      ws_data.push(["", "Other Adjustments TOTAL", formatNumber(((monthlyReportData as any).otherAdjFood || 0) + ((monthlyReportData as any).otherAdjBeverage || 0))]);
+      ws_data.push([]);
+      // Total Expenses After Adjustments
+      ws_data.push(["", "Total Expenses After Adjustments", formatNumber(
+        (monthlyReportData.totalExpenses || 0) - (((monthlyReportData as any).ocEntFood || 0) + ((monthlyReportData as any).ocEntBeverage || 0)) + (((monthlyReportData as any).otherAdjFood || 0) + ((monthlyReportData as any).otherAdjBeverage || 0))
+      )]);
+      ws_data.push([]);
+      // Summary Section
+      ws_data.push(["Summary"]);
+      ws_data.push(["NET INCOME BEFORE TAXES", formatNumber(monthlyReportData.netIncomeBeforeTaxes)]);
+      ws_data.push(["INCOME TAX EXPENSE", formatNumber(monthlyReportData.incomeTaxExpense)]);
+      ws_data.push(["TAX RATE", formatNumber((monthlyReportData.taxRate || 0)) + "%"]);
+      ws_data.push(["NET INCOME", formatNumber(monthlyReportData.netIncome)]);
 
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Monthly Profit Loss Report");
       XLSX.writeFile(wb, `Monthly_Profit_Loss_Report_${monthlyReportData.monthYear.replace(/[^a-zA-Z0-9-]/g, '_')}.xlsx`);
+      
+      toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
+      return; // Exit early to avoid creating duplicate files
+    } else if (selectedReport === "cost_analysis_by_category" && 'foodCategories' in reportData) {
+      const categoryReport = reportData as CostAnalysisByCategoryReport;
+      const selectedOutlet = allOutlets.find(o => o.id === selectedOutletId);
+      const isOutletSpecific = selectedOutletId && selectedOutletId !== "all" && selectedOutlet;
+      
+      ws_data.push(["Cost Analysis by Category Report"]);
+      if (isOutletSpecific) {
+        ws_data.push([`Outlet: ${selectedOutlet.name}`]);
+      }
+      ws_data.push([`Date Range: ${formatDateFn(categoryReport.dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(categoryReport.dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([]);
+      
+      // Summary section
+      ws_data.push(["Summary"]);
+      ws_data.push(["Total Food Revenue", formatNumber(categoryReport.totalFoodRevenue)]);
+      ws_data.push(["Total Beverage Revenue", formatNumber(categoryReport.totalBeverageRevenue)]);
+      ws_data.push(["Total Revenue", formatNumber(categoryReport.totalRevenue)]);
+      ws_data.push(["Total Food Cost", formatNumber(categoryReport.totalFoodCost)]);
+      ws_data.push(["Total Beverage Cost", formatNumber(categoryReport.totalBeverageCost)]);
+      ws_data.push(["Total Cost", formatNumber(categoryReport.totalCost)]);
+      ws_data.push(["Overall Food Cost %", formatNumber(categoryReport.overallFoodCostPercentage)]);
+      ws_data.push(["Overall Beverage Cost %", formatNumber(categoryReport.overallBeverageCostPercentage)]);
+      ws_data.push(["Overall Cost %", formatNumber(categoryReport.overallCostPercentage)]);
+      ws_data.push([]);
+      
+      // Food Categories
+      ws_data.push(["Food Categories Analysis"]);
+      ws_data.push(["Category", "Total Cost", "% of Food Cost", "% of Total Revenue", "Avg Daily Cost"]);
+      categoryReport.foodCategories.forEach(category => {
+        ws_data.push([
+          category.categoryName,
+          formatNumber(category.totalCost),
+          formatNumber(category.percentageOfTotalFoodCost),
+          formatNumber(category.percentageOfTotalRevenue),
+          formatNumber(category.averageDailyCost)
+        ]);
+      });
+      ws_data.push([]);
+      
+      // Beverage Categories
+      ws_data.push(["Beverage Categories Analysis"]);
+      ws_data.push(["Category", "Total Cost", "% of Beverage Cost", "% of Total Revenue", "Avg Daily Cost"]);
+      categoryReport.beverageCategories.forEach(category => {
+        ws_data.push([
+          category.categoryName,
+          formatNumber(category.totalCost),
+          formatNumber(category.percentageOfTotalBeverageCost),
+          formatNumber(category.percentageOfTotalRevenue),
+          formatNumber(category.averageDailyCost)
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Cost Analysis by Category Report");
+      XLSX.writeFile(wb, `Cost_Analysis_by_Category_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.xlsx`);
+      
+      toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
+      return; // Exit early to avoid creating duplicate files
     }
 
-    const ws = XLSX.utils.aoa_to_sheet(ws_data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, selectedReport === "detailed_food_cost" ? "Food Cost Report" : "Beverage Cost Report");
-    XLSX.writeFile(wb, `${selectedReport === "detailed_food_cost" ? "Detailed_Food_Cost_Report" : "Detailed_Beverage_Cost_Report"}_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.xlsx`);
+    // Only create Excel files for food and beverage reports (monthly profit/loss handled above)
+    if (selectedReport === "detailed_food_cost" || selectedReport === "detailed_beverage_cost") {
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, selectedReport === "detailed_food_cost" ? "Food Cost Report" : "Beverage Cost Report");
+      XLSX.writeFile(wb, `${selectedReport === "detailed_food_cost" ? "Detailed_Food_Cost_Report" : "Detailed_Beverage_Cost_Report"}_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.xlsx`);
 
-    toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
+      toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
+    }
   };
 
   const handleExportToPDF = () => {
@@ -429,38 +557,231 @@ export default function ReportsClient() {
       const monthlyReportData = reportData as MonthlyProfitLossReport;
       doc.setFontSize(18);
       doc.text(`Monthly Profit/Loss Report for ${monthlyReportData.monthYear}`, 14, yPos);
+      yPos += 10;
+      // INCOME SECTION
+      doc.setFontSize(14);
+      doc.text("INCOME", 14, yPos);
+      yPos += 6;
+      autoTable(doc, {
+        startY: yPos,
+        head: [["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]],
+        body: monthlyReportData.incomeItems.map(item => [item.referenceId, item.description, renderCurrency(item.amount)]),
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 2;
+      autoTable(doc, {
+        startY: yPos,
+        body: [["", "INCOME TOTAL", renderCurrency(monthlyReportData.totalIncome)]],
+        theme: 'plain',
+        styles: { fontStyle: 'bold', fontSize: 11, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 10;
+      // EXPENSES SECTION
+      doc.setFontSize(14);
+      doc.text("EXPENSES", 14, yPos);
+      yPos += 6;
+      autoTable(doc, {
+        startY: yPos,
+        head: [["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]],
+        body: monthlyReportData.expenseItems.map(item => [item.referenceId, item.description, renderCurrency(item.amount)]),
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 2;
+      autoTable(doc, {
+        startY: yPos,
+        body: [["", "EXPENSE TOTAL", renderCurrency(monthlyReportData.totalExpenses)]],
+        theme: 'plain',
+        styles: { fontStyle: 'bold', fontSize: 11, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 10;
+      // OC & ENT SECTION
+      doc.setFontSize(14);
+      doc.text("OC & ENT", 14, yPos);
+      yPos += 6;
+      autoTable(doc, {
+        startY: yPos,
+        head: [["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]],
+        body: [
+          ["OC-001", "Food OC & ENT", renderCurrency((monthlyReportData as any).ocEntFood)],
+          ["OC-002", "Beverage OC & ENT", renderCurrency((monthlyReportData as any).ocEntBeverage)]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      autoTable(doc, {
+        startY: yPos,
+        body: [["", "OC & ENT TOTAL", renderCurrency(((monthlyReportData as any).ocEntFood || 0) + ((monthlyReportData as any).ocEntBeverage || 0))]],
+        theme: 'plain',
+        styles: { fontStyle: 'bold', fontSize: 11, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 10;
+      // Other Adjustments SECTION
+      doc.setFontSize(14);
+      doc.text("Other Adjustments", 14, yPos);
+      yPos += 6;
+      autoTable(doc, {
+        startY: yPos,
+        head: [["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]],
+        body: [
+          ["OA-001", "Food Other Adjustments", renderCurrency((monthlyReportData as any).otherAdjFood)],
+          ["OA-002", "Beverage Other Adjustments", renderCurrency((monthlyReportData as any).otherAdjBeverage)]
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      autoTable(doc, {
+        startY: yPos,
+        body: [["", "Other Adjustments TOTAL", renderCurrency(((monthlyReportData as any).otherAdjFood || 0) + ((monthlyReportData as any).otherAdjBeverage || 0))]],
+        theme: 'plain',
+        styles: { fontStyle: 'bold', fontSize: 11, cellPadding: 2 },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 10;
+      // Total Expenses After Adjustments
+      autoTable(doc, {
+        startY: yPos,
+        body: [["", "Total Expenses After Adjustments", renderCurrency(
+          (monthlyReportData.totalExpenses || 0) - (((monthlyReportData as any).ocEntFood || 0) + ((monthlyReportData as any).ocEntBeverage || 0)) + (((monthlyReportData as any).otherAdjFood || 0) + ((monthlyReportData as any).otherAdjBeverage || 0))
+        )]],
+        theme: 'plain',
+        styles: { fontStyle: 'bold', fontSize: 13, cellPadding: 2, fillColor: [220, 235, 255] },
+        columnStyles: { 2: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 10;
+      // Summary Section
+      doc.setFontSize(13);
+      autoTable(doc, {
+        startY: yPos,
+        body: [
+          ["NET INCOME BEFORE TAXES", renderCurrency(monthlyReportData.netIncomeBeforeTaxes)],
+          ["INCOME TAX EXPENSE", renderCurrency(monthlyReportData.incomeTaxExpense)],
+          ["TAX RATE", renderPercentage(monthlyReportData.taxRate)],
+          ["NET INCOME", renderCurrency(monthlyReportData.netIncome)]
+        ],
+        theme: 'plain',
+        styles: { fontStyle: 'bold', fontSize: 12, cellPadding: 2 },
+        columnStyles: { 1: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      doc.save(`Monthly_Profit_Loss_Report_${monthlyReportData.monthYear.replace(/ /g, '_')}.pdf`);
+    } else if (selectedReport === "cost_analysis_by_category" && 'foodCategories' in reportData) {
+      const categoryReport = reportData as CostAnalysisByCategoryReport;
+      const selectedOutlet = allOutlets.find(o => o.id === selectedOutletId);
+      const isOutletSpecific = selectedOutletId && selectedOutletId !== "all" && selectedOutlet;
+      
+      doc.setFontSize(18);
+      doc.text("Cost Analysis by Category Report", 14, yPos);
+      yPos += 10;
+      if (isOutletSpecific) {
+        doc.setFontSize(12);
+        doc.text(`Outlet: ${selectedOutlet.name}`, 14, yPos);
+        yPos += 8;
+      }
+      doc.setFontSize(10);
+      doc.text(`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`, 14, yPos);
       yPos += 15;
 
-      const monthlyHeaders = [["Metric", "Value"]];
-      const monthlyData = [
-        ["Total Food Revenue:", renderCurrency(monthlyReportData.totalFoodRevenue)],
-        ["Total Beverage Revenue:", renderCurrency(monthlyReportData.totalBeverageRevenue)],
-        ["Total Revenue:", renderCurrency(monthlyReportData.totalRevenue)],
-        ["Total Actual Food Cost:", renderCurrency(monthlyReportData.totalActualFoodCost)],
-        ["Total Actual Beverage Cost:", renderCurrency(monthlyReportData.totalActualBeverageCost)],
-        ["Total Actual Cost:", renderCurrency(monthlyReportData.totalActualCost)],
-        ["Gross Profit:", renderCurrency(monthlyReportData.grossProfit)],
-        ["Food Cost %:", renderPercentage(monthlyReportData.foodCostPercentage)],
-        ["Beverage Cost %:", renderPercentage(monthlyReportData.beverageCostPercentage)],
-        ["Overall Cost %:", renderPercentage(monthlyReportData.overallCostPercentage)],
-        ["Avg. Budget Food Cost %:", renderPercentage(monthlyReportData.averageBudgetFoodCostPct)],
-        ["Avg. Budget Beverage Cost %:", renderPercentage(monthlyReportData.averageBudgetBeverageCostPct)],
+      // Summary section
+      doc.setFontSize(14);
+      doc.text("Summary", 14, yPos);
+      yPos += 6;
+      const summaryHeaders = [["Metric", "Value"]];
+      const summaryData = [
+        ["Total Food Revenue", renderCurrency(categoryReport.totalFoodRevenue)],
+        ["Total Beverage Revenue", renderCurrency(categoryReport.totalBeverageRevenue)],
+        ["Total Revenue", renderCurrency(categoryReport.totalRevenue)],
+        ["Total Food Cost", renderCurrency(categoryReport.totalFoodCost)],
+        ["Total Beverage Cost", renderCurrency(categoryReport.totalBeverageCost)],
+        ["Total Cost", renderCurrency(categoryReport.totalCost)],
+        ["Overall Food Cost %", renderPercentage(categoryReport.overallFoodCostPercentage)],
+        ["Overall Beverage Cost %", renderPercentage(categoryReport.overallBeverageCostPercentage)],
+        ["Overall Cost %", renderPercentage(categoryReport.overallCostPercentage)],
       ];
 
       autoTable(doc, {
         startY: yPos,
-        head: monthlyHeaders,
-        body: monthlyData,
+        head: summaryHeaders,
+        body: summaryData,
         theme: 'grid',
         headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
         styles: { fontSize: 10, cellPadding: 2 },
         columnStyles: { 1: { halign: 'right' } },
-        didDrawPage: function (data) {
-          yPos = data.cursor?.y || yPos; 
-        },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 15;
+
+      // Food Categories
+      doc.setFontSize(14);
+      doc.text("Food Categories Analysis", 14, yPos);
+      yPos += 6;
+      const foodHeaders = [["Category", "Total Cost", "% of Food Cost", "% of Revenue", "Avg Daily Cost"]];
+      const foodData = categoryReport.foodCategories.map(category => [
+        category.categoryName,
+        renderCurrency(category.totalCost),
+        renderPercentage(category.percentageOfTotalFoodCost),
+        renderPercentage(category.percentageOfTotalRevenue),
+        renderCurrency(category.averageDailyCost)
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: foodHeaders,
+        body: foodData,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 1.5 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 15;
+
+      // Beverage Categories
+      doc.setFontSize(14);
+      doc.text("Beverage Categories Analysis", 14, yPos);
+      yPos += 6;
+      const beverageHeaders = [["Category", "Total Cost", "% of Beverage Cost", "% of Revenue", "Avg Daily Cost"]];
+      const beverageData = categoryReport.beverageCategories.map(category => [
+        category.categoryName,
+        renderCurrency(category.totalCost),
+        renderPercentage(category.percentageOfTotalBeverageCost),
+        renderPercentage(category.percentageOfTotalRevenue),
+        renderCurrency(category.averageDailyCost)
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: beverageHeaders,
+        body: beverageData,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 1.5 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
       });
 
-      doc.save(`Monthly_Profit_Loss_Report_${monthlyReportData.monthYear.replace(/ /g, '_')}.pdf`);
+      doc.save(`Cost_Analysis_by_Category_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.pdf`);
     }
 
     toast({ title: "Export to PDF", description: "Report successfully exported to PDF." });
@@ -554,8 +875,47 @@ export default function ReportsClient() {
       {/* Report Display Area */}
       <Card className="w-full shadow-md bg-card">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="font-headline text-xl">Report Display</CardTitle>
+          <div className="flex items-center gap-4">
+            <CardTitle className="font-headline text-xl">Report Display</CardTitle>
+            {lastRefreshTime && (
+              <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                <Clock className="h-4 w-4" />
+                <span>Last updated: {formatDateFn(lastRefreshTime, "HH:mm:ss")}</span>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
+            {reportData && (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={handleRefresh}
+                  disabled={isLoadingReport}
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={cn("h-4 w-4", { "animate-spin": isLoadingReport })} />
+                  Refresh
+                </Button>
+                <Button 
+                  variant={autoRefresh ? "default" : "outline"}
+                  onClick={() => setAutoRefresh(!autoRefresh)}
+                  disabled={isLoadingReport}
+                  className="flex items-center gap-2"
+                >
+                  {autoRefresh ? (
+                    <>
+                      <Pause className="h-4 w-4" />
+                      Stop Auto-refresh
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4" />
+                      Auto-refresh
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
             <Button variant="outline" onClick={handleExportToExcel}>
               <FileSpreadsheet className="mr-2 h-4 w-4" />
               Export to Excel
@@ -584,7 +944,17 @@ export default function ReportsClient() {
               <MonthlyProfitLossReportTable data={reportData as MonthlyProfitLossReport} />
             </div>
           )}
-          {!isLoadingReport && reportData && selectedReport !== "detailed_food_cost" && selectedReport !== "detailed_beverage_cost" && selectedReport !== "monthly_profit_loss" && (
+          {!isLoadingReport && reportData && selectedReport === "cost_analysis_by_category" && (
+            <div className="space-y-6">
+              <CostAnalysisByCategoryReportTable 
+                data={reportData as CostAnalysisByCategoryReport} 
+                outletId={selectedOutletId}
+                outletName={allOutlets.find(o => o.id === selectedOutletId)?.name}
+                isLoading={isLoadingReport}
+              />
+            </div>
+          )}
+          {!isLoadingReport && reportData && selectedReport !== "detailed_food_cost" && selectedReport !== "detailed_beverage_cost" && selectedReport !== "monthly_profit_loss" && selectedReport !== "cost_analysis_by_category" && (
             <div className="border p-4 rounded-lg bg-secondary/10">
               <h3 className="text-lg font-semibold mb-2">Report Output:</h3>
               <pre className="whitespace-pre-wrap text-sm text-foreground/80">{JSON.stringify(reportData, null, 2)}</pre>

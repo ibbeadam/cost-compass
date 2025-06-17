@@ -306,7 +306,7 @@ export interface DetailedBeverageCostReportResponse {
 }
 
 export interface MonthlyProfitLossReport {
-  monthYear: string; // e.g., "June 2024"
+  monthYear: string; // e.g., "June 2024" or "Jan 01, 2024 - Jan 31, 2024"
   totalFoodRevenue: number;
   totalBeverageRevenue: number;
   totalRevenue: number;
@@ -319,6 +319,86 @@ export interface MonthlyProfitLossReport {
   overallCostPercentage: number;
   averageBudgetFoodCostPct: number;
   averageBudgetBeverageCostPct: number;
+  
+  // New fields for detailed P&L statement
+  incomeItems: PLStatementItem[];
+  salesReturnsAllowances: number; // A negative value
+  totalIncome: number; // Sum of incomeItems.amount
+  totalRevenuePL: number; // totalIncome - salesReturnsAllowances
+
+  expenseItems: PLStatementItem[];
+  totalExpenses: number; // Sum of expenseItems.amount
+
+  netIncomeBeforeTaxes: number;
+  taxRate: number; // e.g., 0.0953 for 9.53%
+  incomeTaxExpense: number;
+  netIncome: number;
+}
+
+export interface PLStatementItem {
+  referenceId: string;
+  description: string;
+  amount: number;
+}
+
+export interface CostAnalysisByCategoryReport {
+  dateRange: { from: Date; to: Date };
+  totalFoodRevenue: number;
+  totalBeverageRevenue: number;
+  totalRevenue: number;
+  
+  // Food categories analysis
+  foodCategories: {
+    categoryName: string;
+    categoryId: string;
+    totalCost: number;
+    percentageOfTotalFoodCost: number;
+    percentageOfTotalRevenue: number;
+    averageDailyCost: number;
+    outletBreakdown: {
+      outletName: string;
+      outletId: string;
+      cost: number;
+      percentageOfOutletFoodCost: number;
+    }[];
+  }[];
+  
+  // Beverage categories analysis
+  beverageCategories: {
+    categoryName: string;
+    categoryId: string;
+    totalCost: number;
+    percentageOfTotalBeverageCost: number;
+    percentageOfTotalRevenue: number;
+    averageDailyCost: number;
+    outletBreakdown: {
+      outletName: string;
+      outletId: string;
+      cost: number;
+      percentageOfOutletBeverageCost: number;
+    }[];
+  }[];
+  
+  // Summary statistics
+  totalFoodCost: number;
+  totalBeverageCost: number;
+  totalCost: number;
+  overallFoodCostPercentage: number;
+  overallBeverageCostPercentage: number;
+  overallCostPercentage: number;
+  
+  // Top performing categories
+  topFoodCategories: {
+    categoryName: string;
+    totalCost: number;
+    percentageOfTotalFoodCost: number;
+  }[];
+  
+  topBeverageCategories: {
+    categoryName: string;
+    totalCost: number;
+    percentageOfTotalBeverageCost: number;
+  }[];
 }
 
 export interface DashboardReportData {
@@ -336,6 +416,7 @@ export interface DashboardReportData {
   outletPerformanceData: OutletPerformanceDataPoint[];
   topFoodCategories?: TopCategoryDataPoint[];
   topBeverageCategories?: TopCategoryDataPoint[];
+  costAnalysisByCategoryReport: CostAnalysisByCategoryReport;
 }
 
 // Type for Managed User (placeholder)

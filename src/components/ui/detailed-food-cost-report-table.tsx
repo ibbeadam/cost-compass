@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DetailedFoodCostReport } from "@/types";
 import { format as formatDateFn } from "date-fns";
 import { Utensils } from "lucide-react";
@@ -36,12 +37,26 @@ export function DetailedFoodCostReportTable({ data, onOutletClick }: DetailedFoo
     return `${formatNumber(value)}%`;
   };
 
+  // Calculate category costs from detailed items
+  const categoryCosts = foodCostDetailsByItem?.reduce((acc, item) => {
+    const existing = acc.find(cat => cat.categoryName === item.categoryName);
+    if (existing) {
+      existing.totalCost += item.cost || 0;
+    } else {
+      acc.push({
+        categoryName: item.categoryName,
+        totalCost: item.cost || 0
+      });
+    }
+    return acc;
+  }, [] as { categoryName: string; totalCost: number }[]) || [];
+
   return (
-    <div className="space-y-8 p-4 bg-background rounded-lg shadow-lg">
+    <div className="space-y-6 p-4 bg-background rounded-lg shadow-lg">
       {/* Report Title and Date Range */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-4 mb-4">
         <h2 
-          className="text-3xl font-extrabold font-headline text-foreground tracking-tight"
+          className="text-3xl font-extrabold font-headline text-foreground tracking-tight cursor-pointer hover:text-primary transition-colors"
           onClick={() => onOutletClick?.(data.outletId)}
         >
           {outletName} - Detailed Food Cost Report
@@ -51,49 +66,80 @@ export function DetailedFoodCostReportTable({ data, onOutletClick }: DetailedFoo
         </p>
       </div>
 
-      {/* PART 1: Cost details from outlets */}
-      <div className="border rounded-md shadow-sm overflow-hidden">
-        <div className="flex items-center space-x-3 p-4 bg-secondary/10 border-b">
-          <Utensils className="h-6 w-6 text-primary" />
-          <h3 className="font-bold text-xl text-foreground">Cost Details from Outlets</h3>
-          <span className="ml-auto font-extrabold text-primary text-lg">Total Cost from Transfers: {renderCurrency(totalCostFromTransfers)}</span>
-        </div>
-        <div className="overflow-x-auto">
-          <Table className="min-w-full divide-y divide-border">
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</TableHead>
-                <TableHead className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Description</TableHead>
-                <TableHead className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">Cost</TableHead>
-                <TableHead className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">% of Total</TableHead>
+      {/* Category Costs Table */}
+      <Card className="shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+            <Utensils className="h-5 w-5 mr-2 text-orange-600" />
+            Category Costs
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50">
+                <TableHead className="font-semibold">Category</TableHead>
+                <TableHead className="text-right font-semibold">Total Cost</TableHead>
+                <TableHead className="text-right font-semibold">Percentage</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody className="divide-y divide-border">
+            <TableBody>
+              {categoryCosts.map((category) => (
+                <TableRow key={category.categoryName} className="hover:bg-gray-50">
+                  <TableCell className="font-medium">{category.categoryName}</TableCell>
+                  <TableCell className="text-right font-mono">{renderCurrency(category.totalCost)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {totalCostFromTransfers > 0 
+                      ? `${formatNumber((category.totalCost / totalCostFromTransfers) * 100)}%`
+                      : "0.00%"
+                    }
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="bg-gray-100 font-semibold">
+                <TableCell>Total</TableCell>
+                <TableCell className="text-right font-mono">{renderCurrency(totalCostFromTransfers)}</TableCell>
+                <TableCell className="text-right font-mono">100.00%</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Detailed Items Table */}
+      <Card className="shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800">Detailed Food Cost Items</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50">
+                <TableHead className="font-semibold">Category</TableHead>
+                <TableHead className="font-semibold">Description</TableHead>
+                <TableHead className="text-right font-semibold">Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {foodCostDetailsByItem && foodCostDetailsByItem.length > 0 ? (
                 foodCostDetailsByItem.map((item, index) => (
-                  <TableRow key={index} className="hover:bg-muted/20">
-                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm font-medium text-foreground">{item.categoryName}</TableCell>
-                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm text-muted-foreground">{item.description}</TableCell>
-                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm text-right font-medium text-foreground">{renderCurrency(item.cost)}</TableCell>
-                    <TableCell className="px-4 py-2 whitespace-nowrap text-sm text-right font-medium text-foreground">{renderPercentage(item.percentageOfTotalCost)}</TableCell>
+                  <TableRow key={index} className="hover:bg-gray-50">
+                    <TableCell className="font-medium">{item.categoryName}</TableCell>
+                    <TableCell className="text-gray-600">{item.description}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(item.cost)}</TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
-                    No detailed food cost entries for this period.
+                  <TableCell colSpan={3} className="text-center text-gray-500 py-6">
+                    No detailed food cost items found
                   </TableCell>
                 </TableRow>
               )}
-              <TableRow className="bg-accent/30 font-bold hover:bg-accent/40">
-                <TableCell colSpan={2} className="px-4 py-3 text-base">Total Cost from Transfers</TableCell>
-                <TableCell className="px-4 py-3 text-right text-base">{renderCurrency(totalCostFromTransfers)}</TableCell>
-                <TableCell className="px-4 py-3 text-right text-base"></TableCell>
-              </TableRow>
             </TableBody>
           </Table>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 } 

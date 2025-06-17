@@ -1,0 +1,569 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { 
+  DollarSign, 
+  Percent, 
+  TrendingUp, 
+  TrendingDown, 
+  BarChart3, 
+  ChevronDown, 
+  ChevronRight, 
+  Calendar,
+  Building2,
+  PieChart,
+  Activity
+} from "lucide-react";
+import type { CostAnalysisByCategoryReport } from "@/types";
+import { cn, formatNumber } from "@/lib/utils";
+import { format } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+
+interface CostAnalysisByCategoryReportTableProps {
+  data: CostAnalysisByCategoryReport | null;
+  outletId?: string;
+  outletName?: string;
+  isLoading?: boolean;
+}
+
+const StatCard = ({
+  title,
+  value,
+  isCurrency = false,
+  isPercentage = false,
+  trendValue = null,
+  subtitle = "",
+}: { 
+  title: string; 
+  value: number; 
+  isCurrency?: boolean; 
+  isPercentage?: boolean; 
+  trendValue?: number | null;
+  subtitle?: string;
+}) => {
+  const formattedValue = isCurrency
+    ? `$${formatNumber(value)}`
+    : isPercentage
+    ? `${formatNumber(value)}%`
+    : formatNumber(value);
+
+  const trendIcon = trendValue !== null ? (
+    trendValue > 0 ? (
+      <TrendingUp className="h-4 w-4 text-green-500 ml-1" />
+    ) : trendValue < 0 ? (
+      <TrendingDown className="h-4 w-4 text-destructive ml-1" />
+    ) : null
+  ) : null;
+
+  return (
+    <Card className="shadow-sm transition-all duration-300 hover:shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        {isCurrency && <DollarSign className="h-4 w-4 text-muted-foreground" />}
+        {isPercentage && <Percent className="h-4 w-4 text-muted-foreground" />}
+      </CardHeader>
+      <CardContent>
+        <div className={cn("text-2xl font-bold flex items-center", {
+          "text-green-600": isPercentage && trendValue !== null && trendValue < 0,
+          "text-destructive": isPercentage && trendValue !== null && trendValue > 0
+        })}>
+          {formattedValue}
+          {trendIcon}
+        </div>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const CategoryProgressBar = ({ 
+  value, 
+  maxValue, 
+  label, 
+  color = "bg-blue-500" 
+}: { 
+  value: number; 
+  maxValue: number; 
+  label: string; 
+  color?: string; 
+}) => {
+  const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
+  
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-between text-sm">
+        <span className="font-medium">{label}</span>
+        <span className="text-muted-foreground">{formatNumber(percentage)}%</span>
+      </div>
+      <Progress value={percentage} className="h-2" />
+    </div>
+  );
+};
+
+export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, isLoading }: CostAnalysisByCategoryReportTableProps) {
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [showOutletBreakdown, setShowOutletBreakdown] = useState(true);
+
+  if (isLoading) {
+    return (
+      <div className="text-center py-12">
+        <Activity className="mx-auto h-12 w-12 text-muted-foreground mb-4 animate-spin" />
+        <p className="text-muted-foreground">Loading cost analysis data...</p>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="text-center py-12">
+        <Activity className="mx-auto h-12 w-12 text-muted-foreground mb-4 animate-pulse" />
+        <p className="text-muted-foreground">No cost analysis data available for the selected period.</p>
+      </div>
+    );
+  }
+
+  const renderCurrency = (value: number | null | undefined) => {
+    if (value == null) return "-";
+    return `$${formatNumber(value)}`;
+  };
+
+  const renderPercentage = (value: number | null | undefined) => {
+    if (value == null) return "-";
+    return `${formatNumber(value)}%`;
+  };
+
+  const isOutletSpecific = outletId && outletId !== "all" && outletName;
+
+  const toggleCategoryExpansion = (categoryId: string) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(categoryId)) {
+      newExpanded.delete(categoryId);
+    } else {
+      newExpanded.add(categoryId);
+    }
+    setExpandedCategories(newExpanded);
+  };
+
+  const daysInRange = Math.ceil((data.dateRange.to.getTime() - data.dateRange.from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+  return (
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="text-center space-y-2">
+        <div className="flex items-center justify-center gap-2">
+          <h2 className="text-3xl font-bold text-foreground">
+            Cost Analysis by Category Report
+            {isOutletSpecific && (
+              <span className="block text-xl font-normal text-muted-foreground mt-1">
+                for {outletName}
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center gap-1 text-green-600">
+            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <span className="text-xs font-medium">Live Data</span>
+          </div>
+        </div>
+        <div className="flex items-center justify-center gap-4 text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Calendar className="h-4 w-4" />
+            <span>{format(data.dateRange.from, "MMM dd, yyyy")} - {format(data.dateRange.to, "MMM dd, yyyy")}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Building2 className="h-4 w-4" />
+            <span>{daysInRange} days</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Activity className="h-4 w-4" />
+            <span>Generated at {format(new Date(), "HH:mm:ss")}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard 
+          title="Total Food Revenue" 
+          value={data.totalFoodRevenue} 
+          isCurrency 
+          subtitle={`${daysInRange} days`}
+        />
+        <StatCard 
+          title="Total Beverage Revenue" 
+          value={data.totalBeverageRevenue} 
+          isCurrency 
+          subtitle={`${daysInRange} days`}
+        />
+        <StatCard 
+          title="Total Revenue" 
+          value={data.totalRevenue} 
+          isCurrency 
+          subtitle={`${daysInRange} days`}
+        />
+        <StatCard 
+          title="Total Cost" 
+          value={data.totalCost} 
+          isCurrency 
+          subtitle={`${daysInRange} days`}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard 
+          title="Food Cost %" 
+          value={data.overallFoodCostPercentage} 
+          isPercentage 
+          trendValue={data.overallFoodCostPercentage}
+          subtitle="vs Budget"
+        />
+        <StatCard 
+          title="Beverage Cost %" 
+          value={data.overallBeverageCostPercentage} 
+          isPercentage 
+          trendValue={data.overallBeverageCostPercentage}
+          subtitle="vs Budget"
+        />
+        <StatCard 
+          title="Overall Cost %" 
+          value={data.overallCostPercentage} 
+          isPercentage 
+          trendValue={data.overallCostPercentage}
+          subtitle="vs Budget"
+        />
+      </div>
+
+      {/* Cost Distribution Visualization */}
+      <Card className="w-full shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+            <PieChart className="mr-2 h-5 w-5" />
+            Cost Distribution Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="font-semibold text-orange-800">Food Cost Distribution</h4>
+              {data.topFoodCategories.slice(0, 5).map((category, index) => (
+                <CategoryProgressBar
+                  key={index}
+                  value={category.totalCost}
+                  maxValue={data.totalFoodCost}
+                  label={category.categoryName}
+                  color="bg-orange-500"
+                />
+              ))}
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-semibold text-blue-800">Beverage Cost Distribution</h4>
+              {data.topBeverageCategories.slice(0, 5).map((category, index) => (
+                <CategoryProgressBar
+                  key={index}
+                  value={category.totalCost}
+                  maxValue={data.totalBeverageCost}
+                  label={category.categoryName}
+                  color="bg-blue-500"
+                />
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top Categories Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 border-b">
+            <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+              <BarChart3 className="mr-2 h-5 w-5" />
+              Top Food Categories
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">Total Cost</TableHead>
+                  <TableHead className="text-right">% of Food Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.topFoodCategories.map((category, index) => (
+                  <TableRow key={index} className="hover:bg-muted/30">
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          #{index + 1}
+                        </Badge>
+                        {category.categoryName}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(category.totalCost)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderPercentage(category.percentageOfTotalFoodCost)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+            <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+              <BarChart3 className="mr-2 h-5 w-5" />
+              Top Beverage Categories
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">Total Cost</TableHead>
+                  <TableHead className="text-right">% of Beverage Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.topBeverageCategories.map((category, index) => (
+                  <TableRow key={index} className="hover:bg-muted/30">
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          #{index + 1}
+                        </Badge>
+                        {category.categoryName}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(category.totalCost)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderPercentage(category.percentageOfTotalBeverageCost)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Food Categories Analysis */}
+      <Card className="w-full shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800">Food Categories Analysis</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead></TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Total Cost</TableHead>
+                <TableHead className="text-right">% of Food Cost</TableHead>
+                <TableHead className="text-right">% of Total Revenue</TableHead>
+                <TableHead className="text-right">Avg Daily Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.foodCategories.map((category, index) => (
+                <React.Fragment key={index}>
+                  <TableRow className="hover:bg-muted/30">
+                    <TableCell className="w-8">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleCategoryExpansion(category.categoryId)}
+                        className="h-6 w-6 p-0"
+                      >
+                        {expandedCategories.has(category.categoryId) ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TableCell>
+                    <TableCell className="font-medium">{category.categoryName}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(category.totalCost)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderPercentage(category.percentageOfTotalFoodCost)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderPercentage(category.percentageOfTotalRevenue)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(category.averageDailyCost)}</TableCell>
+                  </TableRow>
+                  {expandedCategories.has(category.categoryId) && category.outletBreakdown.length > 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-0">
+                        <div className="bg-muted/20 p-4">
+                          <h5 className="font-semibold mb-3 text-orange-800">Outlet Breakdown</h5>
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/30">
+                                <TableHead>Outlet</TableHead>
+                                <TableHead className="text-right">Cost</TableHead>
+                                <TableHead className="text-right">% of Outlet Food Cost</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {category.outletBreakdown.map((outlet, outletIndex) => (
+                                <TableRow key={outletIndex} className="hover:bg-muted/20">
+                                  <TableCell className="font-medium">{outlet.outletName}</TableCell>
+                                  <TableCell className="text-right font-mono">{renderCurrency(outlet.cost)}</TableCell>
+                                  <TableCell className="text-right font-mono">{renderPercentage(outlet.percentageOfOutletFoodCost)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Beverage Categories Analysis */}
+      <Card className="w-full shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800">Beverage Categories Analysis</CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead></TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Total Cost</TableHead>
+                <TableHead className="text-right">% of Beverage Cost</TableHead>
+                <TableHead className="text-right">% of Total Revenue</TableHead>
+                <TableHead className="text-right">Avg Daily Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.beverageCategories.map((category, index) => (
+                <React.Fragment key={index}>
+                  <TableRow className="hover:bg-muted/30">
+                    <TableCell className="w-8">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleCategoryExpansion(category.categoryId)}
+                        className="h-6 w-6 p-0"
+                      >
+                        {expandedCategories.has(category.categoryId) ? (
+                          <ChevronDown className="h-4 w-4" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TableCell>
+                    <TableCell className="font-medium">{category.categoryName}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(category.totalCost)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderPercentage(category.percentageOfTotalBeverageCost)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderPercentage(category.percentageOfTotalRevenue)}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(category.averageDailyCost)}</TableCell>
+                  </TableRow>
+                  {expandedCategories.has(category.categoryId) && category.outletBreakdown.length > 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="p-0">
+                        <div className="bg-muted/20 p-4">
+                          <h5 className="font-semibold mb-3 text-blue-800">Outlet Breakdown</h5>
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-muted/30">
+                                <TableHead>Outlet</TableHead>
+                                <TableHead className="text-right">Cost</TableHead>
+                                <TableHead className="text-right">% of Outlet Beverage Cost</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {category.outletBreakdown.map((outlet, outletIndex) => (
+                                <TableRow key={outletIndex} className="hover:bg-muted/20">
+                                  <TableCell className="font-medium">{outlet.outletName}</TableCell>
+                                  <TableCell className="text-right font-mono">{renderCurrency(outlet.cost)}</TableCell>
+                                  <TableCell className="text-right font-mono">{renderPercentage(outlet.percentageOfOutletBeverageCost)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </React.Fragment>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Summary Insights */}
+      <Card className="w-full shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b">
+          <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+            <Activity className="mr-2 h-5 w-5" />
+            Key Insights
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="font-semibold text-green-800">Performance Highlights</h4>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Total revenue: <strong>{renderCurrency(data.totalRevenue)}</strong> over {daysInRange} days</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>Overall cost percentage: <strong>{renderPercentage(data.overallCostPercentage)}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span>Food categories analyzed: <strong>{data.foodCategories.length}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <span>Beverage categories analyzed: <strong>{data.beverageCategories.length}</strong></span>
+                </li>
+              </ul>
+            </div>
+            <div className="space-y-4">
+              <h4 className="font-semibold text-blue-800">Top Performers</h4>
+              <ul className="space-y-2 text-sm">
+                {data.topFoodCategories.slice(0, 2).map((category, index) => (
+                  <li key={index} className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                    <span>Food: <strong>{category.categoryName}</strong> ({renderPercentage(category.percentageOfTotalFoodCost)})</span>
+                  </li>
+                ))}
+                {data.topBeverageCategories.slice(0, 2).map((category, index) => (
+                  <li key={index} className="flex items-center gap-2">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    <span>Beverage: <strong>{category.categoryName}</strong> ({renderPercentage(category.percentageOfTotalBeverageCost)})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+} 
