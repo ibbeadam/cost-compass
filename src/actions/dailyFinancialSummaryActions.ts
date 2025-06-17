@@ -1,7 +1,6 @@
-
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs, limit as firestoreLimit, orderBy, startAfter, DocumentSnapshot } from "firebase/firestore";
+import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs, limit as firestoreLimit, orderBy, startAfter, DocumentSnapshot, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { DailyFinancialSummary, FoodCostEntry, BeverageCostEntry } from "@/types"; 
@@ -18,18 +17,56 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
 
   console.log(`[recalculateAndSaveFS] Recalculating for summary ID: ${summaryId} using timestamp: ${dateTimestampForQuery.toDate().toISOString()}`);
 
-  const summaryDocRef = doc(db, collectionName, summaryId);
+  const summaryDocRef = doc(db!, collectionName, summaryId);
   const summarySnap = await getDoc(summaryDocRef);
 
+  let summaryData: DailyFinancialSummary;
   if (!summarySnap.exists()) {
-    console.log(`[recalculateAndSaveFS] No DailyFinancialSummary found for ${summaryId}. Updating calculated fields to null/0 where appropriate.`);
-    return;
+    console.log(`[recalculateAndSaveFS] No DailyFinancialSummary found for ${summaryId}. Creating new summary with defaults.`);
+    summaryData = {
+      id: summaryId,
+      date: dateTimestampForQuery,
+      outlet_id: "", 
+      food_revenue: 0,
+      beverage_revenue: 0,
+      gross_food_cost: 0,
+      gross_beverage_cost: 0,
+      net_food_cost: 0,
+      net_beverage_cost: 0,
+      total_adjusted_food_cost: 0,
+      total_adjusted_beverage_cost: 0,
+      total_covers: 0,
+      average_check: 0,
+
+      budget_food_cost_pct: 0, 
+      budget_beverage_cost_pct: 0, 
+
+      ent_food: 0,
+      oc_food: 0,
+      other_food_adjustment: 0,
+
+      entertainment_beverage_cost: 0,
+      officer_check_comp_beverage: 0,
+      other_beverage_adjustments: 0,
+
+      actual_food_cost: null, 
+      actual_food_cost_pct: null,
+      food_variance_pct: null,
+      actual_beverage_cost: null, 
+      actual_beverage_cost_pct: null,
+      beverage_variance_pct: null,
+      notes: "",
+      createdAt: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp,
+    };
+    await setDoc(summaryDocRef, summaryData, { merge: true });
+  } else {
+    summaryData = summarySnap.data() as DailyFinancialSummary;
+    console.log(`[recalculateAndSaveFS] DailyFinancialSummary found for ${summaryId}. Proceeding with recalculation.`);
   }
 
-  const summaryData = summarySnap.data() as DailyFinancialSummary;
-
   const foodCostEntriesQuery = query(
-    collection(db, foodCostEntriesCollectionName),
+    collection(db!, foodCostEntriesCollectionName),
     where("date", "==", dateTimestampForQuery)
   );
   const foodCostEntriesSnap = await getDocs(foodCostEntriesQuery);
@@ -57,7 +94,7 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
   }
 
   const beverageCostEntriesQuery = query(
-    collection(db, beverageCostEntriesCollectionName),
+    collection(db!, beverageCostEntriesCollectionName),
     where("date", "==", dateTimestampForQuery)
   );
   const beverageCostEntriesSnap = await getDocs(beverageCostEntriesQuery);
@@ -67,14 +104,14 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
     grossBeverageCost += entry.total_beverage_cost || 0;
   });
   
-  const entBeverage = summaryData.ent_beverage || 0;
-  const ocBeverage = summaryData.oc_beverage || 0;
-  const otherBeverageAdjustment = summaryData.other_beverage_adjustment || 0;
+  const entBeverage = summaryData.entertainment_beverage_cost || 0;
+  const ocBeverage = summaryData.officer_check_comp_beverage || 0;
+  const otherBeverageAdjustment = summaryData.other_beverage_adjustments || 0;
   const actual_beverage_cost = grossBeverageCost - entBeverage - ocBeverage + otherBeverageAdjustment;
   let actual_beverage_cost_pct: number | null = null;
-  if (summaryData.beverage_revenue != null && summaryData.beverage_revenue > 0) {
-    actual_beverage_cost_pct = (actual_beverage_cost / summaryData.beverage_revenue) * 100;
-  } else if (summaryData.beverage_revenue === 0 && actual_beverage_cost > 0) {
+  if (summaryData.food_revenue != null && summaryData.food_revenue > 0) {
+    actual_beverage_cost_pct = (actual_beverage_cost / summaryData.food_revenue) * 100;
+  } else if (summaryData.food_revenue === 0 && actual_beverage_cost > 0) {
      actual_beverage_cost_pct = null;
   } else {
     actual_beverage_cost_pct = 0;
@@ -91,6 +128,12 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
     actual_beverage_cost,
     actual_beverage_cost_pct,
     beverage_variance_pct,
+    ent_food: summaryData.ent_food,
+    oc_food: summaryData.oc_food,
+    other_food_adjustment: summaryData.other_food_adjustment,
+    entertainment_beverage_cost: summaryData.entertainment_beverage_cost,
+    officer_check_comp_beverage: summaryData.officer_check_comp_beverage,
+    other_beverage_adjustments: summaryData.other_beverage_adjustments,
     updatedAt: serverTimestamp() as Timestamp,
   };
 
@@ -118,28 +161,50 @@ export async function saveDailyFinancialSummaryAction(
       date: Timestamp.fromDate(newNormalizedDate),
       updatedAt: serverTimestamp() as Timestamp,
     };
-    delete (dataToSave as any).actual_food_cost;
-    delete (dataToSave as any).actual_food_cost_pct;
-    delete (dataToSave as any).food_variance_pct;
-    delete (dataToSave as any).actual_beverage_cost;
-    delete (dataToSave as any).actual_beverage_cost_pct;
-    delete (dataToSave as any).beverage_variance_pct;
+    // These fields are already optional in the interface, no need to delete.
+    // delete (dataToSave as any).actual_food_cost;
+    // delete (dataToSave as any).actual_food_cost_pct;
+    // delete (dataToSave as any).food_variance_pct;
+    // delete (dataToSave as any).actual_beverage_cost;
+    // delete (dataToSave as any).actual_beverage_cost_pct;
+    // delete (dataToSave as any).beverage_variance_pct;
 
     const defaultsForNewEntry: Partial<DailyFinancialSummary> = {
-        food_revenue: 0, budget_food_cost_pct: 0, ent_food: 0, oc_food: 0, other_food_adjustment: 0,
-        beverage_revenue: 0, budget_beverage_cost_pct: 0, ent_beverage: 0, oc_beverage: 0, other_beverage_adjustment: 0,
+        food_revenue: 0,
+        beverage_revenue: 0,
+        budget_food_cost_pct: 0, 
+        ent_food: 0,
+        oc_food: 0,
+        other_food_adjustment: 0,
+        budget_beverage_cost_pct: 0, 
+        entertainment_beverage_cost: 0, 
+        officer_check_comp_beverage: 0, 
+        other_beverage_adjustments: 0,
+        total_covers: 0,
+        average_check: 0,
         notes: '',
-        actual_food_cost: null, actual_food_cost_pct: null, food_variance_pct: null,
-        actual_beverage_cost: null, actual_beverage_cost_pct: null, beverage_variance_pct: null,
+        actual_food_cost: null, 
+        actual_food_cost_pct: null, 
+        food_variance_pct: null,
+        actual_beverage_cost: null, 
+        actual_beverage_cost_pct: null, 
+        beverage_variance_pct: null,
+        gross_food_cost: 0, 
+        gross_beverage_cost: 0, 
+        net_food_cost: 0, 
+        net_beverage_cost: 0, 
+        total_adjusted_food_cost: 0, 
+        total_adjusted_beverage_cost: 0, 
+        outlet_id: "", 
     };
     
     if (originalIdIfEditing && originalIdIfEditing !== newEntryId) {
-      const oldDocRef = doc(db, collectionName, originalIdIfEditing);
+      const oldDocRef = doc(db!, collectionName, originalIdIfEditing);
       await deleteDoc(oldDocRef);
       console.log(`[saveDFSAction] Deleted old summary ${originalIdIfEditing} as date changed to ${newEntryId}.`);
 
       dataToSave.createdAt = serverTimestamp() as Timestamp; 
-      await setDoc(doc(db, collectionName, newEntryId), { ...defaultsForNewEntry, ...dataToSave });
+      await setDoc(doc(db!, collectionName, newEntryId), { ...defaultsForNewEntry, ...dataToSave });
       console.log(`[saveDFSAction] Created new summary ${newEntryId} after date change.`);
       
       const [year, month, day] = originalIdIfEditing.split('-').map(Number);
@@ -148,7 +213,7 @@ export async function saveDailyFinancialSummaryAction(
       await recalculateAndSaveFinancialSummary(newNormalizedDate); 
 
     } else {
-      const entryDocRef = doc(db, collectionName, newEntryId);
+      const entryDocRef = doc(db!, collectionName, newEntryId);
       const existingDocSnap = await getDoc(entryDocRef);
 
       if (existingDocSnap.exists()) {
@@ -173,7 +238,7 @@ export async function getDailyFinancialSummaryAction(id: string): Promise<DailyF
     throw new Error("Entry ID (YYYY-MM-DD) is required to fetch data.");
   }
   try {
-    const entryDocRef = doc(db, collectionName, id);
+    const entryDocRef = doc(db!, collectionName, id);
     const docSnap = await getDoc(entryDocRef);
 
     if (docSnap.exists()) {
@@ -198,94 +263,91 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
   if (!id) {
     throw new Error("Entry ID (YYYY-MM-DD) is required for deletion.");
   }
+  let entryDate: Date | null = null;
+
   try {
-    const entryDocRef = doc(db, collectionName, id);
-    const entrySnap = await getDoc(entryDocRef);
-    let entryDate: Date | null = null;
+    const entryRef = doc(db!, collectionName, id);
+    const entrySnap = await getDoc(entryRef);
     if (entrySnap.exists()) {
         const entryData = entrySnap.data();
-        if (entryData?.date instanceof Timestamp) {
+        if (entryData && entryData.date instanceof Timestamp) {
             entryDate = entryData.date.toDate();
-        } else if (entryData?.date) {
-            entryDate = new Date(entryData.date as any);
         }
     }
 
-    await deleteDoc(entryDocRef);
-    
+    const batch = writeBatch(db!);
+    batch.delete(entryRef);
+
+    const detailsQuery = query(collection(db!, foodCostEntriesCollectionName), where("food_cost_entry_id", "==", id));
+    const detailsSnapshot = await getDocs(detailsQuery);
+    detailsSnapshot.forEach(detailDoc => batch.delete(detailDoc.ref));
+
+    await batch.commit();
+
     if (entryDate) {
         await recalculateAndSaveFinancialSummary(entryDate);
     }
 
     revalidatePath("/dashboard/financial-summary");
     revalidatePath("/dashboard");
+
   } catch (error) {
-    console.error("Error deleting daily financial summary: ", error);
-    throw new Error(`Failed to delete daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error deleting food cost entry: ", error);
+    throw new Error(`Failed to delete food cost entry: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 export async function getPaginatedDailyFinancialSummariesAction(
-  limitValue?: number, // Make limitValue optional
+  limitValue?: number, 
   lastVisibleDocId?: string,
-  fetchAll: boolean = false // New parameter
+  fetchAll: boolean = false 
 ): Promise<{ summaries: DailyFinancialSummary[]; lastVisibleDocId: string | null; totalCount: number; hasMore: boolean }> {
   try {
-    const baseQuery = collection(db, collectionName);
-    let summariesQuery;
+    if (!db) {
+      throw new Error("Firestore 'db' instance is not available.");
+    }
 
-    const totalCountQuery = query(baseQuery);
-    const totalSnapshot = await getDocs(totalCountQuery);
-    const totalCount = totalSnapshot.size;
+    let q = query(collection(db!, collectionName), orderBy("date", "desc"));
+    let totalCount = 0;
 
     if (fetchAll) {
-      summariesQuery = query(baseQuery, orderBy("date", "desc"));
-    } else if (limitValue && limitValue > 0) {
-      let q = query(baseQuery, orderBy("date", "desc"), firestoreLimit(limitValue));
-      if (lastVisibleDocId) {
-        const lastDocSnap = await getDoc(doc(db, collectionName, lastVisibleDocId));
-        if (lastDocSnap.exists()) {
-          q = query(q, startAfter(lastDocSnap));
-        }
-      }
-      summariesQuery = q;
+      const allDocsSnap = await getDocs(q);
+      totalCount = allDocsSnap.size;
     } else {
-      // Default case if no limit specified and not fetching all (though UI should ensure limitValue if not fetchAll)
-      summariesQuery = query(baseQuery, orderBy("date", "desc"), firestoreLimit(10)); // Default limit
+      const countQuery = query(collection(db!, collectionName));
+      const countSnapshot = await getDocs(countQuery);
+      totalCount = countSnapshot.size;
     }
-    
-    const querySnapshot = await getDocs(summariesQuery);
-    const summaries: DailyFinancialSummary[] = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data() as Omit<DailyFinancialSummary, 'id'>,
-      date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date as any),
-      createdAt: doc.data().createdAt && doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : (doc.data().createdAt ? new Date(doc.data().createdAt as any) : undefined),
-      updatedAt: doc.data().updatedAt && doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : (doc.data().updatedAt ? new Date(doc.data().updatedAt as any) : undefined),
-    }));
 
-    let newLastVisibleDocId: string | null = null;
-    let hasMoreResult = false;
+    if (limitValue && !fetchAll) {
+      q = query(q, firestoreLimit(limitValue));
+    }
 
-    if (!fetchAll && limitValue && limitValue > 0) {
-      newLastVisibleDocId = summaries.length > 0 ? summaries[summaries.length - 1].id : null;
-      // A more robust check for hasMore: fetch limit + 1, then slice.
-      // For now, assuming if fetched items = limit, there might be more.
-      if (summaries.length === limitValue) {
-         // Check if there's at least one more document after the current set
-        const nextQuery = query(baseQuery, orderBy("date", "desc"), startAfter(querySnapshot.docs[querySnapshot.docs.length -1]), firestoreLimit(1));
-        const nextSnapshot = await getDocs(nextQuery);
-        hasMoreResult = !nextSnapshot.empty;
-      } else {
-        hasMoreResult = false;
+    if (lastVisibleDocId && !fetchAll) {
+      const lastDocSnap = await getDoc(doc(db!, collectionName, lastVisibleDocId));
+      if (lastDocSnap.exists()) {
+        q = query(q, startAfter(lastDocSnap));
       }
-    } else if (fetchAll) {
-      newLastVisibleDocId = null;
-      hasMoreResult = false;
     }
 
-    return { summaries, lastVisibleDocId: newLastVisibleDocId, totalCount, hasMore: hasMoreResult };
-  } catch (error) {
-    console.error("Error fetching paginated daily financial summaries: ", error);
-    throw new Error(`Failed to fetch paginated daily financial summaries: ${error instanceof Error ? error.message : String(error)}`);
+    const querySnapshot = await getDocs(q);
+    const summaries: DailyFinancialSummary[] = querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        date: data.date instanceof Timestamp ? data.date.toDate() : data.date,
+        createdAt: data.createdAt && data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt as any) : undefined),
+        updatedAt: data.updatedAt && data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt as any) : undefined),
+      } as DailyFinancialSummary;
+    });
+
+    const hasMore = !fetchAll && (summaries.length === limitValue);
+    const newLastVisibleDocId = summaries.length > 0 && !fetchAll ? summaries[summaries.length - 1].id : null;
+
+    return { summaries, lastVisibleDocId: newLastVisibleDocId, totalCount, hasMore };
+  } catch (error: any) {
+    console.error("Error fetching paginated daily financial summaries:", error);
+    throw new Error(`Could not load daily financial summaries. Details: ${error.message}`);
   }
 }

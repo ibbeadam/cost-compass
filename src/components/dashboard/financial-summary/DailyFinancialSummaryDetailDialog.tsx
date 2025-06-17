@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -17,7 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Utensils, DollarSign, Percent, TrendingUp, TrendingDown, Building, ListChecks, GlassWater } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 
 interface DailyFinancialSummaryDetailDialogProps {
   isOpen: boolean;
@@ -40,9 +39,9 @@ const DetailItem: React.FC<{
   let displayValue: React.ReactNode = value ?? <span className="text-muted-foreground/70">N/A</span>;
   if (value != null) {
     if (typeof value === 'number') {
-      if (isCurrency) displayValue = `$${Number(value).toFixed(2)}`;
-      else if (isPercentage) displayValue = `${Number(value).toFixed(2)}%`;
-      else displayValue = value;
+      if (isCurrency) displayValue = `$${formatNumber(value)}`;
+      else if (isPercentage) displayValue = `${formatNumber(value)}%`;
+      else displayValue = formatNumber(value);
     } else {
         displayValue = value; 
     }
@@ -160,9 +159,9 @@ export default function DailyFinancialSummaryDetailDialog({
                     icon={summary.beverage_variance_pct != null && summary.beverage_variance_pct > 0 ? TrendingUp : (summary.beverage_variance_pct != null && summary.beverage_variance_pct < 0 ? TrendingDown : Percent)} 
                     valueClassName={cn("font-bold", getVarianceColorClass(summary.beverage_variance_pct))}
                   />
-                  <DetailItem label="Entertainment Beverage" value={summary.ent_beverage} isCurrency />
-                  <DetailItem label="OC Beverage" value={summary.oc_beverage} isCurrency />
-                  <DetailItem label="Other Beverage Adjustments" value={summary.other_beverage_adjustment} isCurrency />
+                  <DetailItem label="Entertainment Beverage" value={summary.entertainment_beverage_cost} isCurrency />
+                  <DetailItem label="OC Beverage" value={summary.officer_check_comp_beverage} isCurrency />
+                  <DetailItem label="Other Beverage Adjustments" value={summary.other_beverage_adjustments} isCurrency />
                 </div>
               </div>
               {summary.notes && (
@@ -189,21 +188,25 @@ export default function DailyFinancialSummaryDetailDialog({
                             <Building className="h-5 w-5 mr-2 text-muted-foreground" />
                             Outlet: {entry.outletName || entry.outlet_id}
                         </h4>
-                        <Badge variant="secondary">Total Food Cost: ${entry.total_food_cost.toFixed(2)}</Badge>
+                        <Badge variant="secondary">Total Food Cost: {formatNumber(entry.total_food_cost)}</Badge>
                     </div>
                     {entry.details && entry.details.length > 0 ? (
-                      <Table size="sm">
+                      <Table>
                         <TableHeader><TableRow><TableHead className="w-[40%]">Category</TableHead><TableHead className="w-[40%]">Description</TableHead><TableHead className="text-right w-[20%]">Cost</TableHead></TableRow></TableHeader>
                         <TableBody>
                           {entry.details.map((detail) => (
-                            <TableRow key={detail.id}><TableCell className="text-xs flex items-center"><ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />{detail.categoryName || detail.category_id}</TableCell><TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell><TableCell className="text-right text-xs font-code">${detail.cost.toFixed(2)}</TableCell></TableRow>
+                            <TableRow key={detail.id}><TableCell className="text-xs flex items-center"><ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />{detail.categoryName || detail.category_id}</TableCell><TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell><TableCell className="text-right text-xs font-code">{formatNumber(detail.cost)}</TableCell></TableRow>
                           ))}
                         </TableBody>
                       </Table>
-                    ) : ( <p className="text-sm text-muted-foreground text-center py-3">No specific food items recorded for this outlet entry.</p> )}
+                    ) : (
+                      <p className="text-muted-foreground text-sm">No detailed food cost entries for this outlet.</p>
+                    )}
                   </div>
                 ))
-              ) : ( <p className="text-sm text-muted-foreground text-center py-4">No detailed food cost entries found for this date.</p> )}
+              ) : (
+                <p className="text-center text-muted-foreground py-4">No food cost entries available for this summary date.</p>
+              )}
             </section>
 
             {/* Detailed Beverage Cost Entries Section */}
@@ -221,28 +224,31 @@ export default function DailyFinancialSummaryDetailDialog({
                             <Building className="h-5 w-5 mr-2 text-muted-foreground" />
                             Outlet: {entry.outletName || entry.outlet_id}
                         </h4>
-                        <Badge variant="secondary">Total Beverage Cost: ${entry.total_beverage_cost.toFixed(2)}</Badge>
+                        <Badge variant="secondary">Total Beverage Cost: {formatNumber(entry.total_beverage_cost)}</Badge>
                     </div>
                     {entry.details && entry.details.length > 0 ? (
-                      <Table size="sm">
+                      <Table>
                         <TableHeader><TableRow><TableHead className="w-[40%]">Category</TableHead><TableHead className="w-[40%]">Description</TableHead><TableHead className="text-right w-[20%]">Cost</TableHead></TableRow></TableHeader>
                         <TableBody>
                           {entry.details.map((detail) => (
-                            <TableRow key={detail.id}><TableCell className="text-xs flex items-center"><ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />{detail.categoryName || detail.category_id}</TableCell><TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell><TableCell className="text-right text-xs font-code">${detail.cost.toFixed(2)}</TableCell></TableRow>
+                            <TableRow key={detail.id}><TableCell className="text-xs flex items-center"><ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />{detail.categoryName || detail.category_id}</TableCell><TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell><TableCell className="text-right text-xs font-code">{formatNumber(detail.cost)}</TableCell></TableRow>
                           ))}
                         </TableBody>
                       </Table>
-                    ) : ( <p className="text-sm text-muted-foreground text-center py-3">No specific beverage items recorded for this outlet entry.</p> )}
+                    ) : (
+                      <p className="text-muted-foreground text-sm">No detailed beverage cost entries for this outlet.</p>
+                    )}
                   </div>
                 ))
-              ) : ( <p className="text-sm text-muted-foreground text-center py-4">No detailed beverage cost entries found for this date.</p> )}
+              ) : (
+                <p className="text-center text-muted-foreground py-4">No beverage cost entries available for this summary date.</p>
+              )}
             </section>
-
           </div>
         </div>
 
-        <DialogFooter className="pt-4 border-t flex-shrink-0">
-          <Button variant="outline" onClick={onClose}>Close</Button>
+        <DialogFooter className="flex-shrink-0 pt-4 border-t">
+          <Button onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

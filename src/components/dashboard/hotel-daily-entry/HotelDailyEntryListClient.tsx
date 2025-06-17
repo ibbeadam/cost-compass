@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -39,6 +38,7 @@ import HotelDailyEntryForm from "./HotelDailyEntryForm"; // Ensure this path is 
 import { useToast } from "@/hooks/use-toast";
 import { deleteDailyHotelEntryAction } from "@/actions/dailyEntryActions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatNumber } from "@/lib/utils";
 
 // Helper to convert Firestore Timestamps in an entry to JS Dates
 const convertTimestampsToDates = (entry: DailyHotelEntry): DailyHotelEntry => {
@@ -172,10 +172,10 @@ export default function HotelDailyEntryListClient() {
                   <TableCell className="font-code">
                     {entry.date instanceof Date ? format(entry.date, "PPP") : entry.id}
                   </TableCell>
-                  <TableCell className="text-right font-code">${entry.hotelNetFoodSales?.toFixed(2) ?? '0.00'}</TableCell>
-                  <TableCell className="text-right font-code">{entry.budgetHotelFoodCostPct?.toFixed(2) ?? '0.00'}%</TableCell>
-                  <TableCell className="text-right font-code">${entry.hotelNetBeverageSales?.toFixed(2) ?? '0.00'}</TableCell>
-                  <TableCell className="text-right font-code">{entry.budgetHotelBeverageCostPct?.toFixed(2) ?? '0.00'}%</TableCell>
+                  <TableCell className="text-right font-code">{formatNumber(entry.hotelNetFoodSales)}</TableCell>
+                  <TableCell className="text-right font-code">{formatNumber(entry.budgetHotelFoodCostPct)}%</TableCell>
+                  <TableCell className="text-right font-code">{formatNumber(entry.hotelNetBeverageSales)}</TableCell>
+                  <TableCell className="text-right font-code">{formatNumber(entry.budgetHotelBeverageCostPct)}%</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(entry)} className="mr-2 hover:text-primary">
                       <Edit className="h-4 w-4" />
@@ -201,10 +201,7 @@ export default function HotelDailyEntryListClient() {
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(entry.id)}
-                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                          >
+                          <AlertDialogAction onClick={() => handleDelete(entry.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                             Delete
                           </AlertDialogAction>
                         </AlertDialogFooter>
@@ -218,23 +215,21 @@ export default function HotelDailyEntryListClient() {
         </div>
       )}
 
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-3xl md:max-w-4xl max-h-[90vh] flex flex-col bg-card">
+      <Dialog open={isFormOpen} onOpenChange={(open) => {if (!open) { setEditingEntry(null); setIsFormOpen(false); } else { setIsFormOpen(open); }}}>
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl max-h-[90vh] flex flex-col bg-card">
           <DialogHeader>
-            <DialogTitle className="font-headline text-xl">
-              {editingEntry ? "Edit Hotel Daily Entry" : "Add New Hotel Daily Entry"}
-            </DialogTitle>
+            <DialogTitle className="font-headline text-xl">{editingEntry ? "Edit" : "Add New"} Hotel Daily Entry</DialogTitle>
             <DialogDescription>
-              {editingEntry ? `Update the hotel daily financial details for ${editingEntry.date instanceof Date ? format(editingEntry.date, "PPP") : editingEntry.id}.` : "Enter the hotel daily financial details for a new date."}
+              {editingEntry ? `Update entry for ${editingEntry.date instanceof Date ? format(editingEntry.date, "PPP") : editingEntry.id}.` : "Enter details for a new hotel daily entry."}
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-grow overflow-y-auto pr-2 pl-1 py-2">
-             <HotelDailyEntryForm
-                key={editingEntry ? editingEntry.id : 'new-entry'}
-                initialData={editingEntry}
-                onSuccess={onFormSuccess}
-                onCancel={onFormCancel}
-              />
+          <div className="flex-grow min-h-0 overflow-y-auto">
+            <HotelDailyEntryForm
+              key={editingEntry ? editingEntry.id : 'new-entry'}
+              initialData={editingEntry}
+              onSuccess={onFormSuccess}
+              onCancel={onFormCancel}
+            />
           </div>
         </DialogContent>
       </Dialog>

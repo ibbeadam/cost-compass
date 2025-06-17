@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Timestamp } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Upload, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
+import * as XLSX from 'xlsx';
 
 import type { DailyFinancialSummary, FoodCostEntry, FoodCostDetail, BeverageCostEntry, BeverageCostDetail } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -36,11 +37,12 @@ import {
 import DailyFinancialSummaryForm from "./DailyFinancialSummaryForm";
 import DailyFinancialSummaryDetailDialog from "./DailyFinancialSummaryDetailDialog";
 import { useToast } from "@/hooks/use-toast";
-import { deleteDailyFinancialSummaryAction, getPaginatedDailyFinancialSummariesAction } from "@/actions/dailyFinancialSummaryActions";
+import { deleteDailyFinancialSummaryAction, getPaginatedDailyFinancialSummariesAction, saveDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
 import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions";
 import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/utils";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -52,6 +54,22 @@ const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialS
     updatedAt: entry.updatedAt && entry.updatedAt instanceof Timestamp ? entry.updatedAt.toDate() : (entry.updatedAt ? new Date(entry.updatedAt as any) : undefined),
   };
 };
+
+// Excel import interface
+interface ExcelRow {
+  date: string;
+  food_revenue: number;
+  budget_food_cost_pct: number;
+  ent_food?: number;
+  oc_food?: number;
+  other_food_adjustment?: number;
+  beverage_revenue: number;
+  budget_beverage_cost_pct: number;
+  entertainment_beverage_cost?: number;
+  officer_check_comp_beverage?: number;
+  other_beverage_adjustments?: number;
+  notes?: string;
+}
 
 export default function DailyFinancialSummaryListClient() {
   const [allSummaries, setAllSummaries] = useState<DailyFinancialSummary[]>([]);
@@ -65,10 +83,18 @@ export default function DailyFinancialSummaryListClient() {
   const [detailedBeverageCosts, setDetailedBeverageCosts] = useState<(BeverageCostEntry & { details: BeverageCostDetail[]; outletName?: string })[]>([]);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
+  // Excel import states
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importedData, setImportedData] = useState<ExcelRow[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
   const { toast } = useToast();
   const [currentPage, setCurrentPage] = useState(1);
   const [totalSummaries, setTotalSummaries] = useState(0);
 
+  // File input ref
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const fetchAllSummaries = useCallback(async () => {
     setIsLoading(true);
@@ -147,14 +173,169 @@ export default function DailyFinancialSummaryListClient() {
     setEditingSummary(null);
   };
 
+  // Excel import functions
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Skip header row and process data
+        const processedData: ExcelRow[] = [];
+        const errors: string[] = [];
+
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          if (!row || row.length < 11) {
+            errors.push(`Row ${i + 1}: Insufficient number of columns. Expected at least 11, got ${row?.length || 0}.`);
+            continue;
+          }
+
+          try {
+            const dateStr = String(row[0]).trim();
+            const date = new Date(dateStr);
+            
+            if (isNaN(date.getTime())) {
+              errors.push(`Row ${i + 1}: Invalid date format - ${dateStr}`);
+              continue;
+            }
+
+            const excelRow: ExcelRow = {
+              date: date.toISOString().split('T')[0], // YYYY-MM-DD format
+              food_revenue: parseFloat(row[1]) || 0,
+              budget_food_cost_pct: parseFloat(row[2]) || 0,
+              ent_food: parseFloat(row[3]) || 0,
+              oc_food: parseFloat(row[4]) || 0,
+              other_food_adjustment: parseFloat(row[5]) || 0,
+              beverage_revenue: parseFloat(row[6]) || 0,
+              budget_beverage_cost_pct: parseFloat(row[7]) || 0,
+              entertainment_beverage_cost: parseFloat(row[8]) || 0,
+              officer_check_comp_beverage: parseFloat(row[9]) || 0,
+              other_beverage_adjustments: parseFloat(row[10]) || 0,
+              notes: row[11] ? String(row[11]) : undefined,
+            };
+
+            processedData.push(excelRow);
+          } catch (error) {
+            errors.push(`Row ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+
+        setImportedData(processedData);
+        setImportErrors(errors);
+        setIsImportDialogOpen(true);
+      } catch (error) {
+        toast({ 
+          variant: "destructive", 
+          title: "Import Error", 
+          description: "Failed to read Excel file. Please ensure it's a valid Excel file." 
+        });
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportData = async () => {
+    if (importedData.length === 0) return;
+
+    setIsImporting(true);
+    const errors: string[] = [];
+    let successCount = 0;
+
+    try {
+      for (const row of importedData) {
+        try {
+          const summaryData = {
+            date: new Date(row.date),
+            food_revenue: row.food_revenue,
+            budget_food_cost_pct: row.budget_food_cost_pct,
+            ent_food: row.ent_food,
+            oc_food: row.oc_food,
+            other_food_adjustment: row.other_food_adjustment,
+            beverage_revenue: row.beverage_revenue,
+            budget_beverage_cost_pct: row.budget_beverage_cost_pct,
+            entertainment_beverage_cost: row.entertainment_beverage_cost,
+            officer_check_comp_beverage: row.officer_check_comp_beverage,
+            other_beverage_adjustments: row.other_beverage_adjustments,
+            notes: row.notes,
+            actual_food_cost: 0,
+            actual_beverage_cost: 0,
+            actual_food_cost_pct: 0,
+            actual_beverage_cost_pct: 0,
+            food_variance_pct: 0,
+            beverage_variance_pct: 0,
+          };
+
+          await saveDailyFinancialSummaryAction(summaryData);
+          successCount++;
+        } catch (error) {
+          errors.push(`Date ${row.date}: ${error instanceof Error ? error.message : 'Failed to save'}`);
+        }
+      }
+
+      if (successCount > 0) {
+        toast({ 
+          title: "Import Successful", 
+          description: `Successfully imported ${successCount} summaries.${errors.length > 0 ? ` ${errors.length} errors occurred.` : ''}` 
+        });
+        fetchAllSummaries();
+        setIsImportDialogOpen(false);
+        setImportedData([]);
+        setImportErrors([]);
+      }
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+      }
+    } catch (error) {
+      toast({ 
+        variant: "destructive", 
+        title: "Import Failed", 
+        description: error instanceof Error ? error.message : "Failed to import data" 
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportCancel = () => {
+    setIsImportDialogOpen(false);
+    setImportedData([]);
+    setImportErrors([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    const template = [
+      ['Date', 'Food Revenue', 'Budget Food Cost %', 'Entertainment Food Cost', 'Officer\'s Check / Comp Food', 'Other Food Adjustments', 'Beverage Revenue', 'Budget Beverage Cost %', 'Entertainment Beverage Cost', 'Officer\'s Check / Comp Beverage', 'Other Beverage Adjustments', 'Notes'],
+      ['2024-01-01', 5000, 30, 100, 50, 20, 2000, 25, 60, 30, 10, 'Sample data for all fields'],
+      ['2024-01-02', 5500, 30, 120, 60, 25, 2200, 25, 70, 35, 12, 'Another sample row'],
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Daily Summary Template');
+    
+    XLSX.writeFile(wb, 'daily_financial_summary_template.xlsx');
+  };
+
   const renderPercentage = (value: number | null | undefined) => {
     if (value == null) return <span className="text-muted-foreground">-</span>;
-    return `${value.toFixed(2)}%`;
+    return `${formatNumber(value)}%`;
   };
 
   const renderCurrency = (value: number | null | undefined) => {
     if (value == null) return <span className="text-muted-foreground">-</span>;
-    return `$${value.toFixed(2)}`;
+    return `$${formatNumber(value)}`;
   };
 
   const getVarianceColor = (variance: number | null | undefined) => {
@@ -230,7 +411,7 @@ export default function DailyFinancialSummaryListClient() {
             <table className="w-full caption-bottom text-sm min-w-[1200px]">
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                  {[...Array(12)].map((_, i) => (
+                  {[...Array(11)].map((_, i) => (
                     <th key={i} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                       <Skeleton className="h-6 w-full bg-muted/50" />
                     </th>
@@ -240,7 +421,7 @@ export default function DailyFinancialSummaryListClient() {
               <tbody>
                 {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
                   <tr key={i} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                    {[...Array(11)].map((_, j) => (
+                    {[...Array(10)].map((_, j) => (
                       <td key={j} className="p-4 align-middle">
                         <Skeleton className="h-6 w-full bg-muted" />
                       </td>
@@ -271,11 +452,33 @@ export default function DailyFinancialSummaryListClient() {
 
   return (
     <div className="w-full flex flex-col">
-      <div className="flex justify-end mb-4">
-        <Button onClick={handleAddNew}> 
-          <PlusCircle className="mr-2 h-4 w-4" /> 
-          Add New Daily Summary 
-        </Button>
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex gap-2">
+          <Button onClick={downloadTemplate} variant="outline">
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Download Template
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button 
+            onClick={() => fileInputRef.current?.click()} 
+            variant="outline"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Import Excel
+          </Button>
+          <Button onClick={handleAddNew}> 
+            <PlusCircle className="mr-2 h-4 w-4" /> 
+            Add New Daily Summary 
+          </Button>
+        </div>
       </div>
 
       {currentItems.length === 0 && !isLoading ? (
@@ -287,7 +490,7 @@ export default function DailyFinancialSummaryListClient() {
       ) : (
         <div className="w-full border rounded-lg shadow-md bg-card">
           <div className="overflow-x-auto w-full">
-            <Table className="min-w-[1200px] w-full text-sm text-left border-collapse">
+            <Table className="min-w-[1200px] w-full text-sm text-left border-collapse devide-y devide-border">
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>
@@ -449,6 +652,99 @@ export default function DailyFinancialSummaryListClient() {
           isLoadingDetails={isLoadingDetails}
         />
       )}
+
+      {/* Import Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col bg-card">
+          <DialogHeader>
+            <DialogTitle className="font-headline text-xl flex items-center">
+              <FileSpreadsheet className="mr-2 h-5 w-5" />
+              Import Daily Financial Summaries
+            </DialogTitle>
+            <DialogDescription>
+              Review the data from your Excel file before importing. Make sure all dates and values are correct.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-grow min-h-0 overflow-y-auto">
+            {importErrors.length > 0 && (
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                <h4 className="font-medium text-destructive mb-2">Import Errors ({importErrors.length})</h4>
+                <div className="max-h-32 overflow-y-auto text-sm">
+                  {importErrors.map((error, index) => (
+                    <div key={index} className="text-destructive mb-1">• {error}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {importedData.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-medium">Preview ({importedData.length} records)</h4>
+                  <div className="text-sm text-muted-foreground">
+                    {importedData.length} summaries ready to import
+                  </div>
+                </div>
+                
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">Food Revenue</TableHead>
+                          <TableHead className="text-right">Budget Food %</TableHead>
+                          <TableHead className="text-right">Beverage Revenue</TableHead>
+                          <TableHead className="text-right">Budget Bev %</TableHead>
+                          <TableHead>Notes</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {importedData.slice(0, 10).map((row, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-code">{row.date}</TableCell>
+                            <TableCell className="text-right font-code">${row.food_revenue.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-code">{row.budget_food_cost_pct.toFixed(2)}%</TableCell>
+                            <TableCell className="text-right font-code">${row.beverage_revenue.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-code">{row.budget_beverage_cost_pct.toFixed(2)}%</TableCell>
+                            <TableCell className="max-w-[200px] truncate">{row.notes || '-'}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {importedData.length > 10 && (
+                    <div className="p-3 bg-muted/30 text-center text-sm text-muted-foreground">
+                      Showing first 10 of {importedData.length} records
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={handleImportCancel} disabled={isImporting}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleImportData} 
+              disabled={isImporting || importedData.length === 0}
+              className="min-w-[100px]"
+            >
+              {isImporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Importing...
+                </>
+              ) : (
+                `Import ${importedData.length} Records`
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

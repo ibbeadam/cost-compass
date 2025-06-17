@@ -1,4 +1,3 @@
-
 // src/components/layout/MainNav.tsx
 "use client";
 
@@ -16,27 +15,41 @@ import {
 import { LayoutDashboard, Settings, FileText, Building, ListChecks, DollarSign, ClipboardList, GlassWater, Users } from 'lucide-react'; // Added Users icon
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
-const navItemsBase = [
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  disabled?: boolean; // Add optional disabled property
+}
+
+const navItemsBase: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/financial-summary', label: 'Daily Financial Summary', icon: DollarSign },
   { href: '/dashboard/food-cost-input', label: 'Food Cost Input', icon: ClipboardList },
   { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater },
-  { href: '/dashboard/reports', label: 'Reports', icon: FileText, disabled: true },
+  { href: '/dashboard/reports', label: 'Reports', icon: FileText },
   { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
   { href: '/dashboard/categories', label: 'Manage Categories', icon: ListChecks },
 ];
 
-const adminNavItems = [
+const adminNavItems: NavItem[] = [
   { href: '/dashboard/users', label: 'Manage Users', icon: Users },
 ];
 
-const settingsNavItem = {
+const settingsNavItem: NavItem = {
   href: '/dashboard/settings',
   label: 'General Settings',
   icon: Settings,
 };
 
+const SidebarMenuSkeleton: React.FC<{ showIcon?: boolean }> = ({ showIcon }) => (
+  <div className="flex items-center space-x-3 p-2">
+    {showIcon && <Skeleton className="h-5 w-5 rounded-full bg-muted" />}
+    <Skeleton className="h-4 w-3/4 bg-muted" />
+  </div>
+);
 
 export function MainNav() {
   const [isMounted, setIsMounted] = React.useState(false);
@@ -87,7 +100,7 @@ export function MainNav() {
     <SidebarMenu>
       {navItems.map((item) => (
         <SidebarMenuItem key={item.href}>
-          <Link href={item.href} legacyBehavior passHref suppressHydrationWarning>
+          <Link href={item.href} legacyBehavior passHref>
             <SidebarMenuButton
               asChild
               isActive={isActive(item.href)}
@@ -111,7 +124,7 @@ export function MainNav() {
              <SidebarMenuSub>
               {(item as any).subItems.map((subItem: any) => (
                 <SidebarMenuSubItem key={subItem.href}>
-                   <Link href={subItem.href} legacyBehavior passHref suppressHydrationWarning>
+                   <Link href={subItem.href} legacyBehavior passHref>
                     <SidebarMenuSubButton
                       asChild
                       isActive={isMounted && pathname === subItem.href}

@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -25,27 +24,67 @@ export function DateRangePicker({
   setDate,
   className,
 }: DateRangePickerProps) {
+  const [open, setOpen] = React.useState(false);
+  const [internalDate, setInternalDate] = React.useState<DateRange | undefined>(date);
+
+  // Update internal date when external date changes
+  React.useEffect(() => {
+    if (date) {
+      setInternalDate(date);
+    }
+  }, [date]);
+
+  const handleDateSelect = (newDate: DateRange | undefined) => {
+    // If newDate is undefined, keep the current date range
+    if (!newDate) {
+      return;
+    }
+
+    // If we have a from date but no to date, or if it's the same date
+    if (newDate.from && (!newDate.to || newDate.from.getTime() === newDate.to.getTime())) {
+      const sameDateRange = {
+        from: newDate.from,
+        to: newDate.from
+      };
+      setInternalDate(sameDateRange);
+      setDate(sameDateRange);
+      setOpen(false);
+    } else if (newDate.from && newDate.to) {
+      // If we have both dates, update both states
+      setInternalDate(newDate);
+      setDate(newDate);
+      setOpen(false);
+    } else {
+      // If we only have a from date, update internal state but don't close
+      setInternalDate(newDate);
+      setDate(newDate);
+    }
+  };
+
+  // Ensure we always have a valid date range to display
+  const displayDate = internalDate || date;
+
   return (
     <div className={cn("grid gap-2", className)}>
-      <Popover>
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             id="date-range"
             variant={"outline"}
             className={cn(
               "w-full sm:w-[300px] justify-start text-left font-normal text-base md:text-sm",
-              !date && "text-muted-foreground"
+              !displayDate && "text-muted-foreground"
             )}
           >
             <CalendarIcon className="mr-2 h-4 w-4" />
-            {date?.from ? (
-              date.to ? (
+            {displayDate?.from ? (
+              displayDate.to ? (
                 <>
-                  {format(date.from, "LLL dd, y")} -{" "}
-                  {format(date.to, "LLL dd, y")}
+                  {format(displayDate.from, "LLL dd, y")} -{" "}
+                  {format(displayDate.to, "LLL dd, y")}
                 </>
               ) : (
-                format(date.from, "LLL dd, y")
+                format(displayDate.from, "LLL dd, y")
               )
             ) : (
               <span>Pick a date range</span>
@@ -55,14 +94,19 @@ export function DateRangePicker({
         <PopoverContent 
           className="w-auto p-0 bg-card" 
           align="start"
-          // Removed: onPointerDownOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => {
+            // Only close if clicking outside the calendar
+            if (!(e.target as HTMLElement).closest('.rdp')) {
+              setOpen(false);
+            }
+          }}
         >
           <Calendar
             initialFocus
             mode="range"
-            defaultMonth={date?.from}
-            selected={date}
-            onSelect={setDate}
+            defaultMonth={internalDate?.from || new Date()}
+            selected={internalDate}
+            onSelect={handleDateSelect}
             numberOfMonths={2}
           />
         </PopoverContent>

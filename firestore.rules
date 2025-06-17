@@ -2,43 +2,86 @@ rules_version = "2";
 service cloud.firestore {
   match /databases/{database}/documents {
     // ========================================
-    // DEVELOPMENT RULES (Completely Open)
-    // WARNING: These rules allow ALL access - ONLY for development!
+    // SECURE RULES (Check admin roles)
     // ========================================
     
-    // Allow all read/write operations for development
-    match /{document=**} {
-      allow read, write: if true;
-    }
-    
-    // ========================================
-    // PRODUCTION RULES (Secure)
-    // Uncomment these and comment out the above rules for production
-    // ========================================
-    
-    /*
-    // Allow users to read their own profile
-    match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.email == resource.data.email);
-      allow write: if request.auth != null && request.auth.token.email == resource.data.email;
-    }
-    
-    // Allow admins to read/write all users
-    match /users/{userId} {
-      allow read, write: if request.auth != null && 
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
     }
     
-    // Allow authenticated users to create their own profile (for initial setup)
-    match /users/{userId} {
-      allow create: if request.auth != null && request.auth.uid == userId;
+    // Helper function to check if user is manager or admin
+    function isManagerOrAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin" ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "manager");
     }
     
-    // Allow access to other collections for authenticated users
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Helper function to check if user is active
+    function isUserActive() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isActive == true;
     }
-    */
+    
+    // Users collection rules - crucial for AuthContext to get user profile
+    match /users/{userId} {
+      // Authenticated users can always read their own profile (based on UID)
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Allow authenticated users to *list* (query) the users collection to find their own profile.
+      // This is essential for the AuthContext to get the user's role and isActive status.
+      allow list: if request.auth != null;
+
+      // Authenticated users can create their own profile (only if it doesn't exist)
+      // This handles the AuthContext creating a default user profile on first login
+      allow create: if request.auth != null && request.auth.uid == userId && !exists(request.resource.data);
+
+      // Authenticated users can update their own profile
+      allow update: if request.auth != null && request.auth.uid == userId;
+
+      // Admins can read (get) any user profile by explicit ID
+      allow get: if isAdmin();
+
+      // Admins can create, update, and delete any user profile (for user management panel)
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Rules for other collections - requiring authenticated user and appropriate role
+    match /foodCostEntries/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /foodCostDetails/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /beverageCostEntries/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /beverageCostDetails/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /dailyFinancialSummaries/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /dailyEntries/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /dailyHotelEntries/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /outlets/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+    match /categories/{document} {
+      allow read, write: if isManagerOrAdmin();
+    }
+
+    // Default deny for everything else (new collections not explicitly handled)
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 } 

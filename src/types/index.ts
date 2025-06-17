@@ -147,18 +147,29 @@ export interface Category {
 export interface DailyFinancialSummary {
   id: string; // Document ID, format YYYY-MM-DD
   date: Timestamp | Date; // Firestore Timestamp or JS Date
+  outlet_id: string;
   
-  food_revenue?: number;
-  budget_food_cost_pct?: number; // e.g., 30 for 30%
-  ent_food?: number; // Entertainment Food cost
-  oc_food?: number; // Officer's Check Food / Complimentary Food cost
-  other_food_adjustment?: number; // Other food related adjustments (e.g., spoilage, staff meals if treated as cost)
+  food_revenue: number; // Total revenue for the day (changed from 'revenue')
+  beverage_revenue: number; // Total beverage revenue for the day
+  gross_food_cost: number; // Sum of all FoodCostEntry.total_food_cost for the day
+  gross_beverage_cost: number; // Sum of all BeverageCostEntry.total_beverage_cost for the day
+  net_food_cost: number; // gross_food_cost - ent_food - oc_food - other_food_adjustment
+  net_beverage_cost: number; // gross_beverage_cost - entertainment_beverage_cost - officer_check_comp_beverage - other_beverage_adjustments
+  total_adjusted_food_cost: number; // Adjusted for transfers, credits etc.
+  total_adjusted_beverage_cost: number; // Adjusted for transfers, credits etc.
+  total_covers: number; // Total number of customers/guests served
+  average_check: number; // food_revenue / total_covers
 
-  beverage_revenue?: number;
-  budget_beverage_cost_pct?: number; // e.g., 25 for 25%
-  ent_beverage?: number; // Entertainment Beverage cost
-  oc_beverage?: number; // Officer's Check Beverage / Complimentary Beverage cost
-  other_beverage_adjustment?: number; // Other beverage related adjustments
+  budget_food_cost_pct: number; // Budgeted food cost percentage
+  budget_beverage_cost_pct: number; // Budgeted beverage cost percentage
+
+  ent_food: number; // Entertainment Food cost (changed from 'entertainment_food_cost')
+  oc_food: number; // Officer's Check Food / Complimentary Food cost (changed from 'officer_check_comp_food')
+  other_food_adjustment: number; // Other food related adjustments (e.g., spoilage, staff meals if treated as cost) (changed from 'other_food_adjustments')
+
+  entertainment_beverage_cost: number; // Entertainment Beverage cost
+  officer_check_comp_beverage: number; // Officer's Check Beverage / Complimentary Beverage cost
+  other_beverage_adjustments: number; // Other beverage related adjustments
 
   // Calculated fields (will be populated later or calculated on the fly)
   actual_food_cost?: number | null; 
@@ -248,6 +259,66 @@ export interface OutletPerformanceDataPoint {
 export interface TopCategoryDataPoint {
   name: string;
   value: number; // Total cost
+}
+
+export interface DetailedFoodCostReport {
+  outletName: string;
+  outletId: string;
+  dateRange: { from: Date; to: Date };
+  categoryCosts: { categoryName: string; totalCost: number; percentageOfTotalCost?: number }[];
+  totalCostFromTransfers: number;  // Total cost from food cost entries
+  otherAdjustmentsFood: number;    // Other food adjustments from daily summary
+  ocFoodTotal: number;            // Officer check food from daily summary
+  entFoodTotal: number;           // Entertainment food from daily summary
+  totalCostOfFood: number;        // Calculated as: totalCostFromTransfers - ocFoodTotal - entFoodTotal + otherAdjustmentsFood
+  totalFoodRevenue: number;       // Total food revenue from daily summary
+  foodCostPercentage: number;     // Calculated as: (totalCostOfFood / totalFoodRevenue) * 100
+  budgetFoodCostPercentage: number; // Average budget food cost percentage from daily summary
+  variancePercentage: number;     // Calculated as: foodCostPercentage - budgetFoodCostPercentage
+  foodCostDetailsByItem: { categoryName: string; description: string; cost: number; percentageOfTotalCost?: number }[];
+}
+
+export interface DetailedFoodCostReportResponse {
+  outletReports: DetailedFoodCostReport[];
+  overallSummaryReport: DetailedFoodCostReport;
+}
+
+export interface DetailedBeverageCostReport {
+  outletName: string;
+  outletId: string;
+  dateRange: { from: Date; to: Date };
+  categoryCosts: { categoryName: string; totalCost: number }[];
+  totalCostFromTransfers: number;  // Total cost from beverage cost entries
+  otherAdjustmentsBeverage: number;    // Other beverage adjustments from daily summary
+  ocBeverageTotal: number;            // Officer check beverage from daily summary
+  entBeverageTotal: number;           // Entertainment beverage from daily summary
+  totalCostOfBeverage: number;        // Calculated as: totalCostFromTransfers - ocBeverageTotal - entBeverageTotal + otherAdjustmentsBeverage
+  totalBeverageRevenue: number;       // Total beverage revenue from daily summary
+  beverageCostPercentage: number;     // Calculated as: (totalCostOfBeverage / totalBeverageRevenue) * 100
+  budgetBeverageCostPercentage: number; // Average budget beverage cost percentage from daily summary
+  variancePercentage: number;     // Calculated as: beverageCostPercentage - budgetBeverageCostPercentage
+  beverageCostDetailsByItem: { categoryName: string; description: string; cost: number }[];
+}
+
+export interface DetailedBeverageCostReportResponse {
+  outletReports: DetailedBeverageCostReport[];
+  overallSummaryReport: DetailedBeverageCostReport;
+}
+
+export interface MonthlyProfitLossReport {
+  monthYear: string; // e.g., "June 2024"
+  totalFoodRevenue: number;
+  totalBeverageRevenue: number;
+  totalRevenue: number;
+  totalActualFoodCost: number;
+  totalActualBeverageCost: number;
+  totalActualCost: number;
+  grossProfit: number;
+  foodCostPercentage: number;
+  beverageCostPercentage: number;
+  overallCostPercentage: number;
+  averageBudgetFoodCostPct: number;
+  averageBudgetBeverageCostPct: number;
 }
 
 export interface DashboardReportData {

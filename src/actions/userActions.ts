@@ -98,7 +98,7 @@ export async function createUserAction(userData: CreateUserData): Promise<User> 
     if (!auth) throw new Error("Firebase Auth is not initialized");
     
     // Check if user already exists
-    const existingUser = await getUserByEmailAction(userData.email);
+    const existingUser = await getUserByEmailAction(userData.email); // Use original function
     if (existingUser) {
       throw new Error("User with this email already exists");
     }
@@ -198,11 +198,9 @@ export async function updateUserLastLoginAction(userId: string): Promise<void> {
     if (!db) throw new Error("Firestore is not initialized");
     
     const userRef = doc(db, USERS_COLLECTION, userId);
-    await updateDoc(userRef, {
-      lastLoginAt: serverTimestamp(),
-    });
+    await updateDoc(userRef, { lastLoginAt: serverTimestamp() });
   } catch (error) {
-    console.error("Error updating last login:", error);
-    // Don't throw error for this as it's not critical
+    console.error("Error updating user last login:", error);
+    throw new Error("Failed to update user last login");
   }
 } 

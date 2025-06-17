@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -95,7 +94,7 @@ export default function DashboardClient() {
     const fetchFirestoreOutlets = async () => {
       setIsFetchingOutlets(true);
       try {
-        const outletsCol = collection(db, 'outlets');
+        const outletsCol = collection(db!, 'outlets');
         const outletsSnapshot = await getDocs(outletsCol);
         const fetchedOutletsFromDB = outletsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Outlet));
         
@@ -126,13 +125,29 @@ export default function DashboardClient() {
     setAiError(null);   
 
     async function fetchDataForDashboard() {
+      if (!db) {
+        console.error("Firestore 'db' instance is not available. Cannot fetch dashboard data.");
+        toast({ variant: "destructive", title: "Database Error", description: "Firestore is not initialized." });
+        setIsLoadingData(false);
+        setIsLoadingAIInsights(false);
+        return;
+      }
+      if (!dateRange?.from || !dateRange?.to) {
+        console.warn("fetchDataForDashboard: Date range is undefined. Skipping data fetch.");
+        setIsLoadingData(false);
+        setIsLoadingAIInsights(false);
+        setDashboardData(null); 
+        setAiInsights(null); 
+        return;
+      }
+
       setIsLoadingAIInsights(true); 
       try {
-        const from = Timestamp.fromDate(dateRange.from!);
-        const to = Timestamp.fromDate(dateRange.to!);
+        const from = Timestamp.fromDate(dateRange.from);
+        const to = Timestamp.fromDate(dateRange.to);
 
         const summariesQuery = query(
-          collection(db, "dailyFinancialSummaries"),
+          collection(db!, "dailyFinancialSummaries"),
           where("date", ">=", from),
           where("date", "<=", to),
           orderBy("date", "asc")
@@ -143,17 +158,17 @@ export default function DashboardClient() {
           return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate(),
-            createdAt: data.createdAt ? (data.createdAt as Timestamp).toDate() : undefined,
-            updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate() : undefined,
+            date: (data.date instanceof Timestamp) ? data.date.toDate() : data.date, 
+            createdAt: data.createdAt ? ((data.createdAt instanceof Timestamp) ? data.createdAt.toDate() : data.createdAt) : undefined,
+            updatedAt: data.updatedAt ? ((data.updatedAt instanceof Timestamp) ? data.updatedAt.toDate() : data.updatedAt) : undefined,
           } as DailyFinancialSummary;
         });
         
         const summariesMap = new Map<string, DailyFinancialSummary>();
-        dailySummaries.forEach(s => summariesMap.set(formatDateFn(s.date, 'yyyy-MM-dd'), s));
+        dailySummaries.forEach(s => summariesMap.set(formatDateFn(s.date as Date, 'yyyy-MM-dd'), s));
 
         const foodCostQuery = query(
-          collection(db, "foodCostEntries"),
+          collection(db!, "foodCostEntries"),
           where("date", ">=", from),
           where("date", "<=", to)
         );
@@ -163,12 +178,12 @@ export default function DashboardClient() {
            return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate(),
+            date: (data.date instanceof Timestamp) ? data.date.toDate() : data.date,
           } as FoodCostEntry;
         });
 
         const beverageCostQuery = query(
-          collection(db, "beverageCostEntries"),
+          collection(db!, "beverageCostEntries"),
           where("date", ">=", from),
           where("date", "<=", to)
         );
@@ -178,12 +193,12 @@ export default function DashboardClient() {
           return {
             id: doc.id,
             ...data,
-            date: (data.date as Timestamp).toDate(),
+            date: (data.date instanceof Timestamp) ? data.date.toDate() : data.date,
           } as BeverageCostEntry;
         });
 
-        const daysInInterval = eachDayOfInterval({ start: dateRange.from!, end: dateRange.to! });
-        const numberOfDaysInPeriod = differenceInDays(dateRange.to!, dateRange.from!) + 1;
+        const daysInInterval = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
+        const numberOfDaysInPeriod = differenceInDays(dateRange.to, dateRange.from) + 1;
 
         let totalHotelFoodRevenue = 0;
         let totalHotelBeverageRevenue = 0;
@@ -219,7 +234,7 @@ export default function DashboardClient() {
             let outletTotalFoodRevenueSumForPct = 0;
             foodCostEntries.filter(fce => fce.outlet_id === selectedOutletId).forEach(fce => {
                 outletTotalFoodCost += fce.total_food_cost;
-                const daySummary = summariesMap.get(formatDateFn(fce.date, 'yyyy-MM-dd'));
+                const daySummary = summariesMap.get(formatDateFn(fce.date instanceof Timestamp ? fce.date.toDate() : fce.date as Date, 'yyyy-MM-dd'));
                 if (daySummary) outletTotalFoodRevenueSumForPct += daySummary.food_revenue || 0;
             });
             avgActualFoodCostPctVal = outletTotalFoodRevenueSumForPct > 0 ? (outletTotalFoodCost / outletTotalFoodRevenueSumForPct) * 100 : 0;
@@ -228,7 +243,7 @@ export default function DashboardClient() {
             let outletTotalBeverageRevenueSumForPct = 0;
              beverageCostEntries.filter(bce => bce.outlet_id === selectedOutletId).forEach(bce => {
                 outletTotalBeverageCost += bce.total_beverage_cost;
-                const daySummary = summariesMap.get(formatDateFn(bce.date, 'yyyy-MM-dd'));
+                const daySummary = summariesMap.get(formatDateFn(bce.date instanceof Timestamp ? bce.date.toDate() : bce.date as Date, 'yyyy-MM-dd'));
                 if (daySummary) outletTotalBeverageRevenueSumForPct += daySummary.beverage_revenue || 0;
             });
             avgActualBeverageCostPctVal = outletTotalBeverageRevenueSumForPct > 0 ? (outletTotalBeverageCost / outletTotalBeverageRevenueSumForPct) * 100 : 0;
@@ -239,17 +254,19 @@ export default function DashboardClient() {
             totalBeverageRevenue: parseFloat(totalHotelBeverageRevenue.toFixed(2)),
             avgFoodCostPct: parseFloat(avgActualFoodCostPctVal.toFixed(1)),
             avgBeverageCostPct: parseFloat(avgActualBeverageCostPctVal.toFixed(1)),
+            totalOrders: 0, // Added for DashboardReportData type compatibility
+            totalCustomers: 0, // Added for DashboardReportData type compatibility
         };
 
         const overviewChartDataResult: ChartDataPoint[] = daysInInterval.map(day => {
-            const dayStr = formatDateFn(day, 'yyyy-MM-dd');
-            const summary = summariesMap.get(dayStr);
+            const dayStr = formatDateFn(day, 'MMM dd');
+            const summary = summariesMap.get(formatDateFn(day, 'yyyy-MM-dd')); // Use full date for map key
             const foodRev = summary?.food_revenue || 0;
             const bevRev = summary?.beverage_revenue || 0;
             const actualFoodCost = summary?.actual_food_cost || 0;
             const actualBevCost = summary?.actual_beverage_cost || 0;
             return {
-                date: formatDateFn(day, 'MMM dd'),
+                date: dayStr,
                 foodCostPct: foodRev > 0 ? parseFloat(((actualFoodCost / foodRev) * 100).toFixed(1)) : 0,
                 beverageCostPct: bevRev > 0 ? parseFloat(((actualBevCost / bevRev) * 100).toFixed(1)) : 0,
             };
@@ -263,10 +280,10 @@ export default function DashboardClient() {
                 const foodRev = summary?.food_revenue || 0;
                 const bevRev = summary?.beverage_revenue || 0;
                 const outletDayFoodCost = foodCostEntries
-                    .filter(fce => fce.outlet_id === selectedOutletId && formatDateFn(fce.date, 'yyyy-MM-dd') === dayStr)
+                    .filter(fce => fce.outlet_id === selectedOutletId && formatDateFn(fce.date instanceof Timestamp ? fce.date.toDate() : fce.date, 'yyyy-MM-dd') === dayStr)
                     .reduce((sum, fce) => sum + fce.total_food_cost, 0);
                 const outletDayBeverageCost = beverageCostEntries
-                    .filter(bce => bce.outlet_id === selectedOutletId && formatDateFn(bce.date, 'yyyy-MM-dd') === dayStr)
+                    .filter(bce => bce.outlet_id === selectedOutletId && formatDateFn(bce.date instanceof Timestamp ? bce.date.toDate() : bce.date, 'yyyy-MM-dd') === dayStr)
                     .reduce((sum, bce) => sum + bce.total_beverage_cost, 0);
                 return {
                     date: formatDateFn(day, 'MMM dd'),
@@ -307,7 +324,7 @@ export default function DashboardClient() {
             daysInInterval.forEach(day => {
                 const dayStr = formatDateFn(day, 'yyyy-MM-dd');
                 const dailyFoodCostForOutlet = foodCostEntries
-                    .filter(fce => fce.outlet_id === outlet.id && formatDateFn(fce.date, 'yyyy-MM-dd') === dayStr)
+                    .filter(fce => fce.outlet_id === outlet.id && formatDateFn(fce.date instanceof Timestamp ? fce.date.toDate() : fce.date, 'yyyy-MM-dd') === dayStr)
                     .reduce((sum, fce) => sum + fce.total_food_cost, 0);
                 if (dailyFoodCostForOutlet > 0) {
                     totalOutletFoodCost += dailyFoodCostForOutlet;
@@ -343,7 +360,7 @@ export default function DashboardClient() {
           for (let i = 0; i < entryIds.length; i += BATCH_SIZE) {
             const batchIds = entryIds.slice(i, i + BATCH_SIZE);
             if (batchIds.length > 0) {
-              const detailsQuery = query(collection(db, collectionName), where(idFieldName, "in", batchIds));
+              const detailsQuery = query(collection(db!, collectionName), where(idFieldName, "in", batchIds));
               const snapshot = await getDocs(detailsQuery);
               snapshot.docs.forEach(doc => {
                 const data = doc.data();
@@ -530,6 +547,9 @@ export default function DashboardClient() {
 
   return (
     <div className="flex flex-col flex-grow w-full space-y-6">
+      {/* Temporary Debug Component */}
+      {/* <CategoryDebug /> */}
+      
       {/* Filters Row */}
       <Card className="shadow-sm bg-card">
         <CardContent className="p-4">

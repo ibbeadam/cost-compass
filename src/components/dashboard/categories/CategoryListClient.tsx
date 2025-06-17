@@ -1,9 +1,8 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Timestamp } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import type { Category } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -34,7 +33,7 @@ import {
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { CategoryForm } from "./CategoryForm";
-import { getPaginatedCategoriesAction } from "@/actions/categoryActions";
+import { getPaginatedCategoriesAction, initializeDefaultCategoriesAction } from "@/actions/categoryActions";
 import { useToast } from "@/hooks/use-toast";
 import { deleteCategoryAction } from "@/actions/categoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -57,6 +56,7 @@ export default function CategoryListClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
   const { toast } = useToast();
   
   const fetchAllCategories = useCallback(async () => {
@@ -78,6 +78,27 @@ export default function CategoryListClient() {
       setIsLoading(false);
     }
   }, [toast]);
+
+  const handleInitializeDefaultCategories = async () => {
+    setIsInitializing(true);
+    try {
+      const result = await initializeDefaultCategoriesAction();
+      toast({
+        title: "Categories Initialized",
+        description: `Successfully created ${result.created} default categories. Total categories: ${result.total}`,
+      });
+      await fetchAllCategories(); // Refresh the list
+    } catch (error) {
+      console.error("Error initializing categories:", error);
+      toast({
+        variant: "destructive",
+        title: "Error Initializing Categories",
+        description: (error as Error).message || "Could not initialize default categories.",
+      });
+    } finally {
+      setIsInitializing(false);
+    }
+  };
 
   useEffect(() => {
     fetchAllCategories();
@@ -200,17 +221,42 @@ export default function CategoryListClient() {
 
   return (
     <div className="w-full">
-      <div className="flex justify-end mb-4">
-        <Button onClick={handleAddNew}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
-        </Button>
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h2 className="text-2xl font-bold font-headline">Categories</h2>
+          <p className="text-muted-foreground">Manage food and beverage categories for cost tracking</p>
+        </div>
+        <div className="flex gap-2">
+          {allCategories.length === 0 && (
+            <Button 
+              onClick={handleInitializeDefaultCategories} 
+              disabled={isInitializing}
+              variant="outline"
+            >
+              {isInitializing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Initializing...
+                </>
+              ) : (
+                <>
+                  <ListChecks className="mr-2 h-4 w-4" />
+                  Initialize Default Categories
+                </>
+              )}
+            </Button>
+          )}
+          <Button onClick={handleAddNew}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
+          </Button>
+        </div>
       </div>
 
       {allCategories.length === 0 ? (
          <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
             <ListChecks className="mx-auto h-12 w-12 mb-4 text-primary" />
             <p className="text-lg font-medium">No categories found.</p>
-            <p>Click "Add New Category" to get started.</p>
+            <p className="mb-4">Click "Initialize Default Categories" to get started with pre-defined categories, or "Add New Category" to create your own.</p>
         </div>
       ) : (
         <>

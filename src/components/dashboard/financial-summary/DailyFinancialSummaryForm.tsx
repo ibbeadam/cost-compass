@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,9 +37,9 @@ const summaryFormSchema = z.object({
   
   beverage_revenue: z.coerce.number().min(0, "Beverage revenue cannot be negative."),
   budget_beverage_cost_pct: z.coerce.number().min(0, "Budget beverage cost % cannot be negative.").max(100, "Budget beverage cost % cannot exceed 100."),
-  ent_beverage: z.coerce.number().optional().default(0),
-  oc_beverage: z.coerce.number().optional().default(0),
-  other_beverage_adjustment: z.coerce.number().optional().default(0),
+  entertainment_beverage_cost: z.coerce.number().optional().default(0),
+  officer_check_comp_beverage: z.coerce.number().optional().default(0),
+  other_beverage_adjustments: z.coerce.number().optional().default(0),
   
   notes: z.string().max(500, "Notes cannot exceed 500 characters.").optional(),
 });
@@ -66,9 +65,9 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
     other_food_adjustment: initialData?.other_food_adjustment ?? 0,
     beverage_revenue: initialData?.beverage_revenue ?? 0,
     budget_beverage_cost_pct: initialData?.budget_beverage_cost_pct ?? 0,
-    ent_beverage: initialData?.ent_beverage ?? 0,
-    oc_beverage: initialData?.oc_beverage ?? 0,
-    other_beverage_adjustment: initialData?.other_beverage_adjustment ?? 0,
+    entertainment_beverage_cost: initialData?.entertainment_beverage_cost ?? 0,
+    officer_check_comp_beverage: initialData?.officer_check_comp_beverage ?? 0,
+    other_beverage_adjustments: initialData?.other_beverage_adjustments ?? 0,
     notes: initialData?.notes ?? '',
   };
 
@@ -89,9 +88,9 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
         other_food_adjustment: initialData.other_food_adjustment ?? 0,
         beverage_revenue: initialData.beverage_revenue ?? 0,
         budget_beverage_cost_pct: initialData.budget_beverage_cost_pct ?? 0,
-        ent_beverage: initialData.ent_beverage ?? 0,
-        oc_beverage: initialData.oc_beverage ?? 0,
-        other_beverage_adjustment: initialData.other_beverage_adjustment ?? 0,
+        entertainment_beverage_cost: initialData.entertainment_beverage_cost ?? 0,
+        officer_check_comp_beverage: initialData.officer_check_comp_beverage ?? 0,
+        other_beverage_adjustments: initialData.other_beverage_adjustments ?? 0,
         notes: initialData.notes ?? '',
       });
     } else {
@@ -104,9 +103,9 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
         other_food_adjustment: 0,
         beverage_revenue: 0,
         budget_beverage_cost_pct: 0,
-        ent_beverage: 0,
-        oc_beverage: 0,
-        other_beverage_adjustment: 0,
+        entertainment_beverage_cost: 0,
+        officer_check_comp_beverage: 0,
+        other_beverage_adjustments: 0,
         notes: '',
       });
     }
@@ -125,9 +124,9 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
         other_food_adjustment: data.other_food_adjustment,
         beverage_revenue: data.beverage_revenue,
         budget_beverage_cost_pct: data.budget_beverage_cost_pct,
-        ent_beverage: data.ent_beverage,
-        oc_beverage: data.oc_beverage,
-        other_beverage_adjustment: data.other_beverage_adjustment,
+        entertainment_beverage_cost: data.entertainment_beverage_cost,
+        officer_check_comp_beverage: data.officer_check_comp_beverage,
+        other_beverage_adjustments: data.other_beverage_adjustments,
         notes: data.notes,
       };
       
@@ -272,7 +271,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     />
                     <FormField
                       control={form.control}
-                      name="ent_beverage"
+                      name="entertainment_beverage_cost"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Entertainment Beverage Cost</FormLabel>
@@ -284,7 +283,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     />
                     <FormField
                       control={form.control}
-                      name="oc_beverage"
+                      name="officer_check_comp_beverage"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Officer's Check / Comp Beverage</FormLabel>
@@ -296,7 +295,7 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     />
                      <FormField
                       control={form.control}
-                      name="other_beverage_adjustment"
+                      name="other_beverage_adjustments"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Other Beverage Adjustments</FormLabel>

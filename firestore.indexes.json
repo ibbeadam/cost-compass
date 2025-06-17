@@ -1,0 +1,23 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "beverageCostEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "outlet_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+} 

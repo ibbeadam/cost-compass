@@ -7,7 +7,8 @@ import { useRouter, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getUserByEmailAction } from "@/actions/userActions";
+import { createUserAction } from "@/actions/userActions";
+import { getFirestoreUserProfileByUid } from "@/lib/firestoreUtils";
 import type { User as FirestoreUser } from "@/types";
 
 interface AuthContextType {
@@ -91,14 +92,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       
-      if (currentUser?.email) {
+      if (currentUser?.email && currentUser?.uid) {
         try {
-          // Fetch user profile from Firestore
-          const firestoreUser = await getUserByEmailAction(currentUser.email);
+          console.log("AuthContext: Attempting to fetch user profile for email:", currentUser.email, " and UID:", currentUser.uid);
+          // Fetch user profile from Firestore using the client-side utility
+          let firestoreUser = await getFirestoreUserProfileByUid(currentUser.uid);
+          
+          // If user doesn't exist in Firestore, create a default profile (still using server action)
+          if (!firestoreUser) {
+            console.warn("AuthContext: User profile not found in Firestore for", currentUser.email, ". Attempting to create default profile...");
+            try {
+              firestoreUser = await createUserAction({
+                email: currentUser.email,
+                displayName: currentUser.displayName || currentUser.email.split('@')[0],
+                role: 'user', // Default role
+                department: '',
+                phoneNumber: '',
+                permissions: [],
+              });
+              console.log("AuthContext: Default user profile created:", firestoreUser);
+            } catch (createError) {
+              console.error("AuthContext: Error creating default user profile:", createError);
+              // Continue with null profile - user will need to be created by admin
+            }
+          }
+          
           setUserProfile(firestoreUser);
           setIsAdmin(firestoreUser?.role === 'admin' || false);
         } catch (error) {
-          console.error("Error fetching user profile:", error);
+          console.error("AuthContext: Error fetching user profile during onAuthStateChanged:", error);
           setUserProfile(null);
           setIsAdmin(false);
         }

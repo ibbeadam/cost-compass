@@ -1,12 +1,11 @@
-
 "use server";
 
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp, query, orderBy, limit, startAfter, getDocs, QueryConstraint } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp, query, orderBy, limit, startAfter, getDocs, QueryConstraint, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@/types";
 
-const categoriesCol = collection(db, "categories");
+const categoriesCol = collection(db!, "categories");
 
 export async function addCategoryAction(
   name: string,
@@ -78,7 +77,7 @@ export async function updateCategoryAction(
   }
 
   try {
-    const categoryDoc = doc(db, "categories", id);
+    const categoryDoc = doc(db!, "categories", id);
     await updateDoc(categoryDoc, {
       name: trimmedName,
       description: trimmedDescription,
@@ -98,7 +97,7 @@ export async function deleteCategoryAction(id: string): Promise<void> {
     throw new Error("Category ID is required for deletion.");
   }
   try {
-    const categoryDoc = doc(db, "categories", id);
+    const categoryDoc = doc(db!, "categories", id);
     await deleteDoc(categoryDoc);
     revalidatePath("/dashboard/settings/categories"); // Keep old path for now
     revalidatePath("/dashboard/categories");
@@ -108,28 +107,30 @@ export async function deleteCategoryAction(id: string): Promise<void> {
   }
 }
 
-export async function getCategoryAction(id: string): Promise<Category | null> {
+export async function getCategoryByIdAction(id: string): Promise<Category | null> {
   if (!id) {
-    throw new Error("Category ID is required to fetch data.");
+    throw new Error("Category ID is required.");
   }
   try {
-    const categoryDocRef = doc(db, "categories", id);
-    const docSnap = await getDoc(categoryDocRef);
-
-    if (docSnap.exists()) {
-      const data = docSnap.data() as Omit<Category, 'id'>;
-      return { 
-        id: docSnap.id, 
-        ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as any),
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as any),
+    const categoryDoc = doc(db!, "categories", id);
+    const categorySnap = await getDoc(categoryDoc);
+    
+    if (categorySnap.exists()) {
+      const data = categorySnap.data();
+      return {
+        id: categorySnap.id,
+        name: data.name,
+        description: data.description,
+        type: data.type,
+        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
+        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
       } as Category;
     } else {
-      return null; 
+      return null;
     }
   } catch (error) {
-    console.error("Error fetching category: ", error);
-    throw new Error(`Failed to fetch category: ${(error as Error).message}`);
+    console.error("Error getting category by ID: ", error);
+    throw new Error(`Failed to get category: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -144,7 +145,7 @@ export async function getPaginatedCategoriesAction(
     if (!fetchAll && limitValue && limitValue > 0) {
       queryConstraints.push(limit(limitValue));
       if (lastVisibleDocId) {
-        const lastVisibleDoc = await getDoc(doc(db, "categories", lastVisibleDocId));
+        const lastVisibleDoc = await getDoc(doc(db!, "categories", lastVisibleDocId));
         if (lastVisibleDoc.exists()) {
           queryConstraints.push(startAfter(lastVisibleDoc));
         } else {
@@ -174,27 +175,90 @@ export async function getPaginatedCategoriesAction(
     let lastVisibleDocIdResult: string | null = null;
     let hasMoreResult = false;
 
-    if (!fetchAll && limitValue && limitValue > 0) {
-      lastVisibleDocIdResult = querySnapshot.docs.length > 0 ? querySnapshot.docs[querySnapshot.docs.length - 1].id : null;
-      // If fetchAll is false, 'hasMore' is true if the number of documents returned equals the limitValue,
-      // implying there might be more. This logic might need adjustment if limitValue isn't strictly adhered to for the last page.
-      // A more robust way for cursor pagination is to fetch limitValue + 1 items.
+    if (querySnapshot.docs.length > 0) {
+      const lastVisibleDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+      lastVisibleDocIdResult = lastVisibleDoc.id;
       hasMoreResult = querySnapshot.docs.length === limitValue;
-    } else if (fetchAll) {
-      // If fetching all, there are no more pages, and lastVisibleDocId is not relevant in the same way.
-      lastVisibleDocIdResult = null;
-      hasMoreResult = false;
     }
-
 
     return {
       categories,
-      hasMore: hasMoreResult,
       lastVisibleDocId: lastVisibleDocIdResult,
-      totalCount: totalCount,
+      hasMore: hasMoreResult,
+      totalCount
     };
   } catch (error) {
-    console.error("Error fetching paginated categories: ", error);
-    throw new Error(`Failed to fetch paginated categories: ${(error as Error).message}`);
+    console.error("Error getting paginated categories: ", error);
+    throw new Error(`Failed to get categories: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function initializeDefaultCategoriesAction(): Promise<{ created: number, total: number }> {
+  try {
+    if (!db) {
+      throw new Error("Firestore is not initialized");
+    }
+
+    const foodCategories = [
+      { name: "Meat & Poultry", description: "Beef, chicken, pork, lamb, etc.", type: "Food" as const },
+      { name: "Seafood", description: "Fish, shrimp, shellfish, etc.", type: "Food" as const },
+      { name: "Vegetables", description: "Fresh and frozen vegetables", type: "Food" as const },
+      { name: "Fruits", description: "Fresh and frozen fruits", type: "Food" as const },
+      { name: "Dairy & Eggs", description: "Milk, cheese, eggs, yogurt, etc.", type: "Food" as const },
+      { name: "Grains & Bread", description: "Rice, pasta, bread, flour, etc.", type: "Food" as const },
+      { name: "Herbs & Spices", description: "Fresh herbs, dried spices, seasonings", type: "Food" as const },
+      { name: "Oils & Fats", description: "Cooking oils, butter, margarine", type: "Food" as const },
+      { name: "Canned Goods", description: "Canned vegetables, fruits, beans", type: "Food" as const },
+      { name: "Frozen Foods", description: "Frozen meals, vegetables, meats", type: "Food" as const },
+      { name: "Condiments", description: "Sauces, dressings, spreads", type: "Food" as const },
+      { name: "Bakery", description: "Pastries, cakes, desserts", type: "Food" as const }
+    ];
+
+    const beverageCategories = [
+      { name: "Soft Drinks", description: "Cola, lemonade, fruit juices", type: "Beverage" as const },
+      { name: "Coffee & Tea", description: "Coffee beans, tea leaves, instant coffee", type: "Beverage" as const },
+      { name: "Alcoholic Beverages", description: "Beer, wine, spirits", type: "Beverage" as const },
+      { name: "Dairy Drinks", description: "Milk, milkshakes, smoothies", type: "Beverage" as const },
+      { name: "Energy Drinks", description: "Sports drinks, energy beverages", type: "Beverage" as const },
+      { name: "Water", description: "Bottled water, sparkling water", type: "Beverage" as const },
+      { name: "Syrups & Mixers", description: "Cocktail mixers, flavored syrups", type: "Beverage" as const }
+    ];
+
+    let createdCount = 0;
+    const allCategories = [...foodCategories, ...beverageCategories];
+
+    for (const category of allCategories) {
+      try {
+        // Check if category already exists
+        const existingQuery = query(
+          categoriesCol,
+          where("name", "==", category.name),
+          where("type", "==", category.type)
+        );
+        const existingSnapshot = await getDocs(existingQuery);
+        
+        if (existingSnapshot.empty) {
+          await addDoc(categoriesCol, {
+            ...category,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+          createdCount++;
+        }
+      } catch (error) {
+        console.error(`Failed to create ${category.name}:`, error);
+      }
+    }
+
+    // Get total count
+    const totalSnapshot = await getDocs(categoriesCol);
+    const totalCount = totalSnapshot.size;
+
+    revalidatePath("/dashboard/categories");
+    
+    return { created: createdCount, total: totalCount };
+  } catch (error) {
+    console.error("Error initializing default categories:", error);
+    throw new Error(`Failed to initialize default categories: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
