@@ -635,8 +635,10 @@ export async function getCostAnalysisByCategoryReportAction(
     console.log('=== Cost Analysis by Category Report Debug ===');
     console.log('Date range:', fromDate, 'to', toDate);
     console.log('Outlet ID:', outletId);
+    console.log('Function started successfully');
     
     const db = getFirestore();
+    console.log('Firestore instance obtained');
     
     // Get all outlets
     const outletsSnapshot = await getDocs(collection(db, 'outlets'));
@@ -902,7 +904,7 @@ export async function getCostAnalysisByCategoryReportAction(
     console.log('- Top food categories:', topFoodCategories.length);
     console.log('- Top beverage categories:', topBeverageCategories.length);
 
-    return {
+    const result = {
       dateRange: { from: fromDate, to: toDate },
       totalFoodRevenue,
       totalBeverageRevenue,
@@ -918,6 +920,11 @@ export async function getCostAnalysisByCategoryReportAction(
       topFoodCategories,
       topBeverageCategories
     };
+
+    console.log('Returning result with dateRange:', result.dateRange);
+    console.log('Function completed successfully');
+
+    return result;
 
   } catch (error) {
     console.error('Error generating cost analysis by category report:', error);

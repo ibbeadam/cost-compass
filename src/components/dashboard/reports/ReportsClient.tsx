@@ -12,8 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileSpreadsheet, FileText, Filter, Download, Info, RefreshCw, Clock, Play, Pause } from "lucide-react";
 import { getOutletsAction, getFlashFoodCostReportAction, getDetailedFoodCostReportAction, getCostAnalysisByCategoryReportAction } from "@/actions/foodCostActions";
 import { getDetailedBeverageCostReportAction } from "@/actions/beverageCostActions";
-import { getMonthlyProfitLossReportAction, getMonthlyProfitLossReportForDateRangeAction } from "@/actions/profitLossActions";
-import type { Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse, DetailedBeverageCostReportResponse, MonthlyProfitLossReport, CostAnalysisByCategoryReport } from "@/types";
+import { getMonthlyProfitLossReportAction, getMonthlyProfitLossReportForDateRangeAction, getBudgetVsActualsReportAction, getDailyRevenueTrendsReportAction } from "@/actions/profitLossActions";
+import type { Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse, DetailedBeverageCostReportResponse, MonthlyProfitLossReport, CostAnalysisByCategoryReport, BudgetVsActualsReport, DailyRevenueTrendsReport } from "@/types";
 import { FlashFoodCostReportTable } from "../../ui/flash-food-cost-report-table";
 import { DetailedFoodCostReportTable } from "../../ui/detailed-food-cost-report-table";
 import { CombinedFoodCostReportTable } from "../../ui/combined-food-cost-report-table";
@@ -21,6 +21,8 @@ import { DetailedBeverageCostReportTable } from "../../ui/detailed-beverage-cost
 import { CombinedBeverageCostReportTable } from "../../ui/combined-beverage-cost-report-table";
 import { MonthlyProfitLossReportTable } from "../../ui/MonthlyProfitLossReportTable";
 import { CostAnalysisByCategoryReportTable } from "../../ui/cost-analysis-by-category-report-table";
+import { BudgetVsActualsReportTable } from "../../ui/budget-vs-actuals-report-table";
+import { DailyRevenueTrendsReportTable } from "../../ui/daily-revenue-trends-report-table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import * as XLSX from "xlsx"; // Import the xlsx library
 import { jsPDF } from "jspdf"; // Import jsPDF
@@ -46,7 +48,7 @@ export default function ReportsClient() {
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>("all");
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
-  const [reportData, setReportData] = useState<DetailedFoodCostReportResponse | DetailedBeverageCostReportResponse | MonthlyProfitLossReport | CostAnalysisByCategoryReport | null>(null);
+  const [reportData, setReportData] = useState<DetailedFoodCostReportResponse | DetailedBeverageCostReportResponse | MonthlyProfitLossReport | CostAnalysisByCategoryReport | BudgetVsActualsReport | DailyRevenueTrendsReport | null>(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -71,6 +73,8 @@ export default function ReportsClient() {
     if (selectedReport === "detailed_food_cost" || selectedReport === "detailed_beverage_cost") {
       setSelectedOutletId("all");
     }
+    // Clear report data when switching report types to prevent wrong data being passed to components
+    setReportData(null);
   }, [selectedReport]);
 
   useEffect(() => {
@@ -129,10 +133,39 @@ export default function ReportsClient() {
         // For Monthly Profit/Loss Report, we'll use the entire date range
         // but we need to create a new action that accepts date range instead of year/month
         const data = await getMonthlyProfitLossReportForDateRangeAction(dateRange.from, dateRange.to);
+        console.log("Monthly Profit/Loss Report data:", data);
+        console.log("incomeItems:", data.incomeItems);
+        console.log("expenseItems:", data.expenseItems);
         setReportData(data);
       } else if (selectedReport === "cost_analysis_by_category") {
         console.log("Calling getCostAnalysisByCategoryReportAction from client...");
         const data = await getCostAnalysisByCategoryReportAction(dateRange.from, dateRange.to, selectedOutletId);
+        console.log("Cost Analysis by Category Report data:", data);
+        console.log("dateRange:", data.dateRange);
+        setReportData(data);
+      } else if (selectedReport === "budget_vs_actuals") {
+        console.log("Calling getBudgetVsActualsReportAction from client...");
+        const data = await getBudgetVsActualsReportAction(dateRange.from, dateRange.to, selectedOutletId);
+        console.log("Budget vs. Actuals Report data:", data);
+        console.log("Data structure check:", {
+          hasFoodBudget: !!data.foodBudget,
+          hasFoodActual: !!data.foodActual,
+          hasFoodVariance: !!data.foodVariance,
+          hasBeverageBudget: !!data.beverageBudget,
+          hasBeverageActual: !!data.beverageActual,
+          hasBeverageVariance: !!data.beverageVariance,
+          hasCombinedBudget: !!data.combinedBudget,
+          hasCombinedActual: !!data.combinedActual,
+          hasCombinedVariance: !!data.combinedVariance,
+          hasDailyBreakdown: !!data.dailyBreakdown,
+          hasPerformanceIndicators: !!data.performanceIndicators,
+          dailyBreakdownLength: data.dailyBreakdown?.length || 0
+        });
+        setReportData(data);
+      } else if (selectedReport === "daily_revenue_trends") {
+        console.log("Calling getDailyRevenueTrendsReportAction from client...");
+        const data = await getDailyRevenueTrendsReportAction(dateRange.from, dateRange.to, selectedOutletId);
+        console.log("Daily Revenue Trends Report data:", data);
         setReportData(data);
       } else {
         // Fallback for other reports not yet implemented
@@ -362,6 +395,103 @@ export default function ReportsClient() {
       
       toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
       return; // Exit early to avoid creating duplicate files
+    } else if (selectedReport === "budget_vs_actuals" && 'foodBudget' in reportData) {
+      const budgetVsActualsReport = reportData as BudgetVsActualsReport;
+      ws_data.push(["Budget vs. Actuals Report"]);
+      ws_data.push([`Date Range: ${formatDateFn(budgetVsActualsReport.dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(budgetVsActualsReport.dateRange.to, "MMM dd, yyyy")}`]);
+      if (budgetVsActualsReport.outletName) {
+        ws_data.push([`Outlet: ${budgetVsActualsReport.outletName}`]);
+      }
+      ws_data.push([]);
+      
+      // Food section
+      ws_data.push(["Food Budget vs Actuals"]);
+      ws_data.push(["Metric", "Budget", "Actual", "Variance", "Variance %"]);
+      ws_data.push(["Revenue", budgetVsActualsReport.foodBudget.budgetedRevenue, budgetVsActualsReport.foodActual.actualRevenue, budgetVsActualsReport.foodVariance.revenueVariance, budgetVsActualsReport.foodVariance.revenueVariancePercentage]);
+      ws_data.push(["Cost", budgetVsActualsReport.foodBudget.budgetedCost, budgetVsActualsReport.foodActual.actualCost, budgetVsActualsReport.foodVariance.costVariance, budgetVsActualsReport.foodVariance.costVariancePercentage]);
+      ws_data.push(["Cost %", budgetVsActualsReport.foodBudget.budgetedCostPercentage, budgetVsActualsReport.foodActual.actualCostPercentage, budgetVsActualsReport.foodVariance.costPercentageVariance, ""]);
+      ws_data.push([]);
+      
+      // Beverage section
+      ws_data.push(["Beverage Budget vs Actuals"]);
+      ws_data.push(["Metric", "Budget", "Actual", "Variance", "Variance %"]);
+      ws_data.push(["Revenue", budgetVsActualsReport.beverageBudget.budgetedRevenue, budgetVsActualsReport.beverageActual.actualRevenue, budgetVsActualsReport.beverageVariance.revenueVariance, budgetVsActualsReport.beverageVariance.revenueVariancePercentage]);
+      ws_data.push(["Cost", budgetVsActualsReport.beverageBudget.budgetedCost, budgetVsActualsReport.beverageActual.actualCost, budgetVsActualsReport.beverageVariance.costVariance, budgetVsActualsReport.beverageVariance.costVariancePercentage]);
+      ws_data.push(["Cost %", budgetVsActualsReport.beverageBudget.budgetedCostPercentage, budgetVsActualsReport.beverageActual.actualCostPercentage, budgetVsActualsReport.beverageVariance.costPercentageVariance, ""]);
+      ws_data.push([]);
+      
+      // Combined section
+      ws_data.push(["Combined F&B Budget vs Actuals"]);
+      ws_data.push(["Metric", "Budget", "Actual", "Variance", "Variance %"]);
+      ws_data.push(["Revenue", budgetVsActualsReport.combinedBudget.budgetedRevenue, budgetVsActualsReport.combinedActual.actualRevenue, budgetVsActualsReport.combinedVariance.revenueVariance, budgetVsActualsReport.combinedVariance.revenueVariancePercentage]);
+      ws_data.push(["Cost", budgetVsActualsReport.combinedBudget.budgetedCost, budgetVsActualsReport.combinedActual.actualCost, budgetVsActualsReport.combinedVariance.costVariance, budgetVsActualsReport.combinedVariance.costVariancePercentage]);
+      ws_data.push(["Cost %", budgetVsActualsReport.combinedBudget.budgetedCostPercentage, budgetVsActualsReport.combinedActual.actualCostPercentage, budgetVsActualsReport.combinedVariance.costPercentageVariance, ""]);
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Budget vs. Actuals Report");
+      XLSX.writeFile(wb, `Budget_vs_Actuals_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.xlsx`);
+
+      toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
+    } else if (selectedReport === "daily_revenue_trends" && 'summary' in reportData) {
+      const dailyRevenueTrendsReport = reportData as DailyRevenueTrendsReport;
+      ws_data.push(["Daily Revenue Trends Report"]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      if (dailyRevenueTrendsReport.outletName) {
+        ws_data.push([`Outlet: ${dailyRevenueTrendsReport.outletName}`]);
+      }
+      ws_data.push([]);
+      
+      // Summary section
+      ws_data.push(["Summary"]);
+      ws_data.push(["Metric", "Value"]);
+      ws_data.push(["Total Food Revenue", formatNumber(dailyRevenueTrendsReport.summary.totalFoodRevenue)]);
+      ws_data.push(["Total Beverage Revenue", formatNumber(dailyRevenueTrendsReport.summary.totalBeverageRevenue)]);
+      ws_data.push(["Total Revenue", formatNumber(dailyRevenueTrendsReport.summary.totalRevenue)]);
+      ws_data.push(["Average Daily Food Revenue", formatNumber(dailyRevenueTrendsReport.summary.averageDailyFoodRevenue)]);
+      ws_data.push(["Average Daily Beverage Revenue", formatNumber(dailyRevenueTrendsReport.summary.averageDailyBeverageRevenue)]);
+      ws_data.push(["Average Daily Total Revenue", formatNumber(dailyRevenueTrendsReport.summary.averageDailyTotalRevenue)]);
+      ws_data.push(["Total Days", dailyRevenueTrendsReport.summary.totalDays]);
+      ws_data.push([]);
+      
+      // Daily trends section
+      ws_data.push(["Daily Trends"]);
+      ws_data.push(["Date", "Food Revenue", "Beverage Revenue", "Total Revenue", "Food Change %", "Beverage Change %", "Total Change %"]);
+      dailyRevenueTrendsReport.dailyTrends.forEach(trend => {
+        ws_data.push([
+          formatDateFn(trend.date, "MMM dd, yyyy"),
+          formatNumber(trend.foodRevenue),
+          formatNumber(trend.beverageRevenue),
+          formatNumber(trend.totalRevenue),
+          formatNumber(trend.foodRevenueChangePercentage),
+          formatNumber(trend.beverageRevenueChangePercentage),
+          formatNumber(trend.totalRevenueChangePercentage)
+        ]);
+      });
+      ws_data.push([]);
+      
+      // Weekly trends section
+      ws_data.push(["Weekly Trends"]);
+      ws_data.push(["Week", "Total Food Revenue", "Total Beverage Revenue", "Total Revenue", "Avg Daily Food", "Avg Daily Beverage", "Avg Daily Total", "Days"]);
+      dailyRevenueTrendsReport.weeklyTrends.forEach(week => {
+        ws_data.push([
+          `${formatDateFn(week.weekStart, "MMM dd")} - ${formatDateFn(week.weekEnd, "MMM dd")}`,
+          formatNumber(week.totalFoodRevenue),
+          formatNumber(week.totalBeverageRevenue),
+          formatNumber(week.totalRevenue),
+          formatNumber(week.averageDailyFoodRevenue),
+          formatNumber(week.averageDailyBeverageRevenue),
+          formatNumber(week.averageDailyTotalRevenue),
+          week.daysInWeek
+        ]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Daily Revenue Trends Report");
+      XLSX.writeFile(wb, `Daily_Revenue_Trends_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.xlsx`);
+
+      toast({ title: "Export to Excel", description: "Report successfully exported to Excel." });
     }
 
     // Only create Excel files for food and beverage reports (monthly profit/loss handled above)
@@ -782,6 +912,108 @@ export default function ReportsClient() {
       });
 
       doc.save(`Cost_Analysis_by_Category_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.pdf`);
+    } else if (selectedReport === "budget_vs_actuals" && 'foodBudget' in reportData) {
+      const budgetVsActualsReport = reportData as BudgetVsActualsReport;
+      doc.setFontSize(18);
+      doc.text("Budget vs. Actuals Report", 14, yPos);
+      yPos += 10;
+      doc.setFontSize(10);
+      doc.text(`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`, 14, yPos);
+      yPos += 15;
+
+      // Food section
+      doc.setFontSize(14);
+      doc.text("Food Budget vs Actuals", 14, yPos);
+      yPos += 6;
+      const foodHeaders = [["Metric", "Budget", "Actual", "Variance", "Variance %"]];
+      const foodData = [
+        ["Revenue", renderCurrency(budgetVsActualsReport.foodBudget.budgetedRevenue), renderCurrency(budgetVsActualsReport.foodActual.actualRevenue), renderCurrency(budgetVsActualsReport.foodVariance.revenueVariance), renderPercentage(budgetVsActualsReport.foodVariance.revenueVariancePercentage)],
+        ["Cost", renderCurrency(budgetVsActualsReport.foodBudget.budgetedCost), renderCurrency(budgetVsActualsReport.foodActual.actualCost), renderCurrency(budgetVsActualsReport.foodVariance.costVariance), renderPercentage(budgetVsActualsReport.foodVariance.costVariancePercentage)],
+        ["Cost %", renderPercentage(budgetVsActualsReport.foodBudget.budgetedCostPercentage), renderPercentage(budgetVsActualsReport.foodActual.actualCostPercentage), renderPercentage(budgetVsActualsReport.foodVariance.costPercentageVariance), ""]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: foodHeaders,
+        body: foodData,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 1.5 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+
+      yPos += 20;
+
+      // Beverage section
+      doc.setFontSize(14);
+      doc.text("Beverage Budget vs Actuals", 14, yPos);
+      yPos += 6;
+      const beverageHeaders = [["Metric", "Budget", "Actual", "Variance", "Variance %"]];
+      const beverageData = [
+        ["Revenue", renderCurrency(budgetVsActualsReport.beverageBudget.budgetedRevenue), renderCurrency(budgetVsActualsReport.beverageActual.actualRevenue), renderCurrency(budgetVsActualsReport.beverageVariance.revenueVariance), renderPercentage(budgetVsActualsReport.beverageVariance.revenueVariancePercentage)],
+        ["Cost", renderCurrency(budgetVsActualsReport.beverageBudget.budgetedCost), renderCurrency(budgetVsActualsReport.beverageActual.actualCost), renderCurrency(budgetVsActualsReport.beverageVariance.costVariance), renderPercentage(budgetVsActualsReport.beverageVariance.costVariancePercentage)],
+        ["Cost %", renderPercentage(budgetVsActualsReport.beverageBudget.budgetedCostPercentage), renderPercentage(budgetVsActualsReport.beverageActual.actualCostPercentage), renderPercentage(budgetVsActualsReport.beverageVariance.costPercentageVariance), ""]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: beverageHeaders,
+        body: beverageData,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 9, cellPadding: 1.5 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+
+      doc.save(`Budget_vs_Actuals_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.pdf`);
+    } else if (selectedReport === "daily_revenue_trends" && 'summary' in reportData) {
+      const dailyRevenueTrendsReport = reportData as DailyRevenueTrendsReport;
+      doc.setFontSize(18);
+      doc.text("Daily Revenue Trends Report", 14, yPos);
+      yPos += 10;
+      doc.setFontSize(10);
+      doc.text(`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`, 14, yPos);
+      yPos += 15;
+
+      // Summary section
+      doc.setFontSize(14);
+      doc.text("Summary", 14, yPos);
+      yPos += 6;
+      const summaryHeaders = [["Metric", "Value"]];
+      const summaryData = [
+        ["Total Food Revenue", renderCurrency(dailyRevenueTrendsReport.summary.totalFoodRevenue)],
+        ["Total Beverage Revenue", renderCurrency(dailyRevenueTrendsReport.summary.totalBeverageRevenue)],
+        ["Total Revenue", renderCurrency(dailyRevenueTrendsReport.summary.totalRevenue)],
+        ["Average Daily Food Revenue", renderCurrency(dailyRevenueTrendsReport.summary.averageDailyFoodRevenue)],
+        ["Average Daily Beverage Revenue", renderCurrency(dailyRevenueTrendsReport.summary.averageDailyBeverageRevenue)],
+        ["Average Daily Total Revenue", renderCurrency(dailyRevenueTrendsReport.summary.averageDailyTotalRevenue)],
+        ["Total Days", dailyRevenueTrendsReport.summary.totalDays]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: summaryHeaders,
+        body: summaryData,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: 'right' } },
+        didDrawPage: function (data) { yPos = data.cursor?.y || yPos; },
+      });
+      yPos += 15;
+
+      // Daily trends section
+      doc.setFontSize(14);
+      doc.text("Daily Trends", 14, yPos);
+      yPos += 6;
+      dailyRevenueTrendsReport.dailyTrends.forEach(trend => {
+        doc.text(`${formatDateFn(trend.date, "MMM dd, yyyy")}: ${renderCurrency(trend.foodRevenue)}`, 14, yPos);
+        yPos += 5;
+      });
+
+      doc.save(`Daily_Revenue_Trends_Report_${formatDateFn(dateRange.from, 'yyyyMMdd')}_to_${formatDateFn(dateRange.to, 'yyyyMMdd')}.pdf`);
     }
 
     toast({ title: "Export to PDF", description: "Report successfully exported to PDF." });
@@ -929,22 +1161,22 @@ export default function ReportsClient() {
         <CardContent>
           {isLoadingReport && <p className="text-center text-muted-foreground">Generating report...</p>}
           {!isLoadingReport && !reportData && <p className="text-center text-muted-foreground">Select a report type and click Apply Filters to generate the report</p>}
-          {!isLoadingReport && reportData && selectedReport === "detailed_food_cost" && (
+          {!isLoadingReport && reportData && selectedReport === "detailed_food_cost" && 'overallSummaryReport' in reportData && (
             <div className="space-y-6">
               <CombinedFoodCostReportTable data={reportData as DetailedFoodCostReportResponse} />
             </div>
           )}
-          {!isLoadingReport && reportData && selectedReport === "detailed_beverage_cost" && (
+          {!isLoadingReport && reportData && selectedReport === "detailed_beverage_cost" && 'overallSummaryReport' in reportData && (
             <div className="space-y-6">
               <CombinedBeverageCostReportTable reportData={reportData as DetailedBeverageCostReportResponse} />
             </div>
           )}
-          {!isLoadingReport && reportData && selectedReport === "monthly_profit_loss" && (
+          {!isLoadingReport && reportData && selectedReport === "monthly_profit_loss" && 'monthYear' in reportData && (
             <div className="space-y-6">
               <MonthlyProfitLossReportTable data={reportData as MonthlyProfitLossReport} />
             </div>
           )}
-          {!isLoadingReport && reportData && selectedReport === "cost_analysis_by_category" && (
+          {!isLoadingReport && reportData && selectedReport === "cost_analysis_by_category" && 'foodCategories' in reportData && (
             <div className="space-y-6">
               <CostAnalysisByCategoryReportTable 
                 data={reportData as CostAnalysisByCategoryReport} 
@@ -954,7 +1186,21 @@ export default function ReportsClient() {
               />
             </div>
           )}
-          {!isLoadingReport && reportData && selectedReport !== "detailed_food_cost" && selectedReport !== "detailed_beverage_cost" && selectedReport !== "monthly_profit_loss" && selectedReport !== "cost_analysis_by_category" && (
+          {!isLoadingReport && reportData && selectedReport === "budget_vs_actuals" && 'foodBudget' in reportData && (
+            <div className="space-y-6">
+              <BudgetVsActualsReportTable 
+                reportData={reportData as BudgetVsActualsReport} 
+              />
+            </div>
+          )}
+          {!isLoadingReport && reportData && selectedReport === "daily_revenue_trends" && 'summary' in reportData && (
+            <div className="space-y-6">
+              <DailyRevenueTrendsReportTable 
+                reportData={reportData as DailyRevenueTrendsReport} 
+              />
+            </div>
+          )}
+          {!isLoadingReport && reportData && selectedReport !== "detailed_food_cost" && selectedReport !== "detailed_beverage_cost" && selectedReport !== "monthly_profit_loss" && selectedReport !== "cost_analysis_by_category" && selectedReport !== "budget_vs_actuals" && selectedReport !== "daily_revenue_trends" && (
             <div className="border p-4 rounded-lg bg-secondary/10">
               <h3 className="text-lg font-semibold mb-2">Report Output:</h3>
               <pre className="whitespace-pre-wrap text-sm text-foreground/80">{JSON.stringify(reportData, null, 2)}</pre>

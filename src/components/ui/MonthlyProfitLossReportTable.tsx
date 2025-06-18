@@ -75,6 +75,11 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
     return <p className="text-center text-muted-foreground">No monthly profit/loss data available for the selected period.</p>;
   }
 
+  // Safety check for required arrays
+  if (!data.incomeItems || !data.expenseItems) {
+    return <p className="text-center text-muted-foreground">Report data is incomplete. Please try generating the report again.</p>;
+  }
+
   const [taxRate, setTaxRate] = useState<number>(0);
 
   const renderCurrency = (value: number | null | undefined) => {
@@ -153,7 +158,7 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.incomeItems.map((item, index) => (
+                {data.incomeItems?.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell className="font-mono">{item.referenceId}</TableCell>
                     <TableCell>{item.description}</TableCell>
@@ -183,7 +188,7 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.expenseItems.map((item, index) => (
+                {data.expenseItems?.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell className="font-mono">{item.referenceId}</TableCell>
                     <TableCell>{item.description}</TableCell>

@@ -401,6 +401,172 @@ export interface CostAnalysisByCategoryReport {
   }[];
 }
 
+export interface BudgetVsActualsReport {
+  dateRange: { from: Date; to: Date };
+  outletId?: string;
+  outletName?: string;
+  
+  // Food Budget vs Actuals
+  foodBudget: {
+    budgetedRevenue: number;
+    budgetedCostPercentage: number;
+    budgetedCost: number;
+  };
+  foodActual: {
+    actualRevenue: number;
+    actualCost: number;
+    actualCostPercentage: number;
+  };
+  foodVariance: {
+    revenueVariance: number;
+    revenueVariancePercentage: number;
+    costVariance: number;
+    costVariancePercentage: number;
+    costPercentageVariance: number;
+  };
+  
+  // Beverage Budget vs Actuals
+  beverageBudget: {
+    budgetedRevenue: number;
+    budgetedCostPercentage: number;
+    budgetedCost: number;
+  };
+  beverageActual: {
+    actualRevenue: number;
+    actualCost: number;
+    actualCostPercentage: number;
+  };
+  beverageVariance: {
+    revenueVariance: number;
+    revenueVariancePercentage: number;
+    costVariance: number;
+    costVariancePercentage: number;
+    costPercentageVariance: number;
+  };
+  
+  // Combined F&B Summary
+  combinedBudget: {
+    budgetedRevenue: number;
+    budgetedCost: number;
+    budgetedCostPercentage: number;
+  };
+  combinedActual: {
+    actualRevenue: number;
+    actualCost: number;
+    actualCostPercentage: number;
+  };
+  combinedVariance: {
+    revenueVariance: number;
+    revenueVariancePercentage: number;
+    costVariance: number;
+    costVariancePercentage: number;
+    costPercentageVariance: number;
+  };
+  
+  // Daily breakdown for trend analysis
+  dailyBreakdown: {
+    date: Date;
+    foodBudgetedRevenue: number;
+    foodActualRevenue: number;
+    foodBudgetedCost: number;
+    foodActualCost: number;
+    beverageBudgetedRevenue: number;
+    beverageActualRevenue: number;
+    beverageBudgetedCost: number;
+    beverageActualCost: number;
+  }[];
+  
+  // Performance indicators
+  performanceIndicators: {
+    foodRevenueAchievement: number; // Percentage of budget achieved
+    beverageRevenueAchievement: number;
+    foodCostControl: number; // Lower is better (actual vs budget percentage)
+    beverageCostControl: number;
+    overallPerformance: number; // Combined performance score
+  };
+}
+
+export interface DailyRevenueTrendsReport {
+  dateRange: { from: Date; to: Date };
+  outletId?: string;
+  outletName?: string;
+  
+  // Summary statistics
+  summary: {
+    totalFoodRevenue: number;
+    totalBeverageRevenue: number;
+    totalRevenue: number;
+    averageDailyFoodRevenue: number;
+    averageDailyBeverageRevenue: number;
+    averageDailyTotalRevenue: number;
+    totalDays: number;
+    highestRevenueDay: {
+      date: Date;
+      foodRevenue: number;
+      beverageRevenue: number;
+      totalRevenue: number;
+    };
+    lowestRevenueDay: {
+      date: Date;
+      foodRevenue: number;
+      beverageRevenue: number;
+      totalRevenue: number;
+    };
+  };
+  
+  // Daily trends data
+  dailyTrends: {
+    date: Date;
+    foodRevenue: number;
+    beverageRevenue: number;
+    totalRevenue: number;
+    foodRevenueChange: number; // Change from previous day
+    beverageRevenueChange: number;
+    totalRevenueChange: number;
+    foodRevenueChangePercentage: number;
+    beverageRevenueChangePercentage: number;
+    totalRevenueChangePercentage: number;
+  }[];
+  
+  // Weekly aggregation
+  weeklyTrends: {
+    weekStart: Date;
+    weekEnd: Date;
+    weekNumber: number;
+    totalFoodRevenue: number;
+    totalBeverageRevenue: number;
+    totalRevenue: number;
+    averageDailyFoodRevenue: number;
+    averageDailyBeverageRevenue: number;
+    averageDailyTotalRevenue: number;
+    daysInWeek: number;
+  }[];
+  
+  // Performance metrics
+  performanceMetrics: {
+    foodRevenueGrowth: number; // Overall growth rate
+    beverageRevenueGrowth: number;
+    totalRevenueGrowth: number;
+    foodRevenueVolatility: number; // Standard deviation
+    beverageRevenueVolatility: number;
+    totalRevenueVolatility: number;
+    bestPerformingDay: string; // Day of week
+    worstPerformingDay: string;
+    revenueConsistency: number; // How consistent revenue is (0-100)
+  };
+  
+  // Trend analysis
+  trendAnalysis: {
+    overallTrend: 'increasing' | 'decreasing' | 'stable';
+    foodTrend: 'increasing' | 'decreasing' | 'stable';
+    beverageTrend: 'increasing' | 'decreasing' | 'stable';
+    trendStrength: number; // 0-100, how strong the trend is
+    seasonalityDetected: boolean;
+    peakDays: string[]; // Days with consistently higher revenue
+    slowDays: string[]; // Days with consistently lower revenue
+  };
+}
+
 export interface DashboardReportData {
   summaryStats: {
     totalFoodRevenue: number;
@@ -417,6 +583,8 @@ export interface DashboardReportData {
   topFoodCategories?: TopCategoryDataPoint[];
   topBeverageCategories?: TopCategoryDataPoint[];
   costAnalysisByCategoryReport: CostAnalysisByCategoryReport;
+  budgetVsActualsReport: BudgetVsActualsReport;
+  dailyRevenueTrendsReport: DailyRevenueTrendsReport;
 }
 
 // Type for Managed User (placeholder)

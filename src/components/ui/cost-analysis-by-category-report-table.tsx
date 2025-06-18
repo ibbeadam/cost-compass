@@ -140,6 +140,28 @@ export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, 
     );
   }
 
+  // Safety check for required properties
+  if (!data.dateRange || !data.dateRange.from || !data.dateRange.to) {
+    return (
+      <div className="text-center py-12">
+        <Activity className="mx-auto h-12 w-12 text-muted-foreground mb-4 animate-pulse" />
+        <p className="text-muted-foreground">Report data is incomplete. Please try generating the report again.</p>
+        <p className="text-xs text-muted-foreground mt-2">Debug: dateRange is missing or invalid</p>
+      </div>
+    );
+  }
+
+  // Safety check for other required arrays
+  if (!data.foodCategories || !data.beverageCategories || !data.topFoodCategories || !data.topBeverageCategories) {
+    return (
+      <div className="text-center py-12">
+        <Activity className="mx-auto h-12 w-12 text-muted-foreground mb-4 animate-pulse" />
+        <p className="text-muted-foreground">Report data is incomplete. Please try generating the report again.</p>
+        <p className="text-xs text-muted-foreground mt-2">Debug: category arrays are missing</p>
+      </div>
+    );
+  }
+
   const renderCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
     return `$${formatNumber(value)}`;
