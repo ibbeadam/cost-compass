@@ -29,13 +29,17 @@ const summaryFormSchema = z.object({
   date: z.date({
     required_error: "A date is required.",
   }),
-  food_revenue: z.coerce.number().min(0, "Food revenue cannot be negative."),
+  actual_food_revenue: z.coerce.number().min(0, "Actual food revenue cannot be negative."),
+  budget_food_revenue: z.coerce.number().min(0, "Budget food revenue cannot be negative."),
+  budget_food_cost: z.coerce.number().min(0, "Budget food cost cannot be negative."),
   budget_food_cost_pct: z.coerce.number().min(0, "Budget food cost % cannot be negative.").max(100, "Budget food cost % cannot exceed 100."),
   ent_food: z.coerce.number().optional().default(0),
   oc_food: z.coerce.number().optional().default(0),
   other_food_adjustment: z.coerce.number().optional().default(0),
   
-  beverage_revenue: z.coerce.number().min(0, "Beverage revenue cannot be negative."),
+  actual_beverage_revenue: z.coerce.number().min(0, "Actual beverage revenue cannot be negative."),
+  budget_beverage_revenue: z.coerce.number().min(0, "Budget beverage revenue cannot be negative."),
+  budget_beverage_cost: z.coerce.number().min(0, "Budget beverage cost cannot be negative."),
   budget_beverage_cost_pct: z.coerce.number().min(0, "Budget beverage cost % cannot be negative.").max(100, "Budget beverage cost % cannot exceed 100."),
   entertainment_beverage_cost: z.coerce.number().optional().default(0),
   officer_check_comp_beverage: z.coerce.number().optional().default(0),
@@ -58,12 +62,16 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
 
   const defaultValues: FormValues = {
     date: initialData?.date instanceof Timestamp ? initialData.date.toDate() : (initialData?.date ? new Date(initialData.date) : new Date()),
-    food_revenue: initialData?.food_revenue ?? 0,
+    actual_food_revenue: initialData?.actual_food_revenue ?? 0,
+    budget_food_revenue: initialData?.budget_food_revenue ?? 0,
+    budget_food_cost: initialData?.budget_food_cost ?? 0,
     budget_food_cost_pct: initialData?.budget_food_cost_pct ?? 0,
     ent_food: initialData?.ent_food ?? 0,
     oc_food: initialData?.oc_food ?? 0,
     other_food_adjustment: initialData?.other_food_adjustment ?? 0,
-    beverage_revenue: initialData?.beverage_revenue ?? 0,
+    actual_beverage_revenue: initialData?.actual_beverage_revenue ?? 0,
+    budget_beverage_revenue: initialData?.budget_beverage_revenue ?? 0,
+    budget_beverage_cost: initialData?.budget_beverage_cost ?? 0,
     budget_beverage_cost_pct: initialData?.budget_beverage_cost_pct ?? 0,
     entertainment_beverage_cost: initialData?.entertainment_beverage_cost ?? 0,
     officer_check_comp_beverage: initialData?.officer_check_comp_beverage ?? 0,
@@ -81,12 +89,16 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
     if (initialData) {
       form.reset({
         date: initialData.date instanceof Timestamp ? initialData.date.toDate() : (isValid(new Date(initialData.date)) ? new Date(initialData.date) : new Date()),
-        food_revenue: initialData.food_revenue ?? 0,
+        actual_food_revenue: initialData.actual_food_revenue ?? 0,
+        budget_food_revenue: initialData.budget_food_revenue ?? 0,
+        budget_food_cost: initialData.budget_food_cost ?? 0,
         budget_food_cost_pct: initialData.budget_food_cost_pct ?? 0,
         ent_food: initialData.ent_food ?? 0,
         oc_food: initialData.oc_food ?? 0,
         other_food_adjustment: initialData.other_food_adjustment ?? 0,
-        beverage_revenue: initialData.beverage_revenue ?? 0,
+        actual_beverage_revenue: initialData.actual_beverage_revenue ?? 0,
+        budget_beverage_revenue: initialData.budget_beverage_revenue ?? 0,
+        budget_beverage_cost: initialData.budget_beverage_cost ?? 0,
         budget_beverage_cost_pct: initialData.budget_beverage_cost_pct ?? 0,
         entertainment_beverage_cost: initialData.entertainment_beverage_cost ?? 0,
         officer_check_comp_beverage: initialData.officer_check_comp_beverage ?? 0,
@@ -96,12 +108,16 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
     } else {
       form.reset({
         date: new Date(), 
-        food_revenue: 0,
+        actual_food_revenue: 0,
+        budget_food_revenue: 0,
+        budget_food_cost: 0,
         budget_food_cost_pct: 0,
         ent_food: 0,
         oc_food: 0,
         other_food_adjustment: 0,
-        beverage_revenue: 0,
+        actual_beverage_revenue: 0,
+        budget_beverage_revenue: 0,
+        budget_beverage_cost: 0,
         budget_beverage_cost_pct: 0,
         entertainment_beverage_cost: 0,
         officer_check_comp_beverage: 0,
@@ -117,12 +133,16 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
     try {
       const summaryDataPayload: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date } = {
         date: data.date,
-        food_revenue: data.food_revenue,
+        actual_food_revenue: data.actual_food_revenue,
+        budget_food_revenue: data.budget_food_revenue,
+        budget_food_cost: data.budget_food_cost,
         budget_food_cost_pct: data.budget_food_cost_pct,
         ent_food: data.ent_food,
         oc_food: data.oc_food,
         other_food_adjustment: data.other_food_adjustment,
-        beverage_revenue: data.beverage_revenue,
+        actual_beverage_revenue: data.actual_beverage_revenue,
+        budget_beverage_revenue: data.budget_beverage_revenue,
+        budget_beverage_cost: data.budget_beverage_cost,
         budget_beverage_cost_pct: data.budget_beverage_cost_pct,
         entertainment_beverage_cost: data.entertainment_beverage_cost,
         officer_check_comp_beverage: data.officer_check_comp_beverage,
@@ -186,11 +206,33 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     <h3 className="text-lg font-medium border-b pb-2 text-primary">Food Section</h3>
                     <FormField
                       control={form.control}
-                      name="food_revenue"
+                      name="actual_food_revenue"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Food Revenue</FormLabel>
+                          <FormLabel>Actual Food Revenue</FormLabel>
                           <FormControl><Input type="number" placeholder="e.g., 12000" {...field} step="0.01" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="budget_food_revenue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Budget Food Revenue</FormLabel>
+                          <FormControl><Input type="number" placeholder="e.g., 12000" {...field} step="0.01" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="budget_food_cost"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Budget Food Cost</FormLabel>
+                          <FormControl><Input type="number" placeholder="e.g., 3000" {...field} step="0.01" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -249,11 +291,33 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
                     <h3 className="text-lg font-medium border-b pb-2 text-primary">Beverage Section</h3>
                     <FormField
                       control={form.control}
-                      name="beverage_revenue"
+                      name="actual_beverage_revenue"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Beverage Revenue</FormLabel>
+                          <FormLabel>Actual Beverage Revenue</FormLabel>
                           <FormControl><Input type="number" placeholder="e.g., 8000" {...field} step="0.01" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="budget_beverage_revenue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Budget Beverage Revenue</FormLabel>
+                          <FormControl><Input type="number" placeholder="e.g., 8000" {...field} step="0.01" /></FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="budget_beverage_cost"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Budget Beverage Cost</FormLabel>
+                          <FormControl><Input type="number" placeholder="e.g., 3000" {...field} step="0.01" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )}

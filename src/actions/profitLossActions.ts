@@ -45,8 +45,8 @@ export async function getMonthlyProfitLossReportAction(
 
   querySnapshot.forEach((doc) => {
     const data = doc.data() as DailyFinancialSummary;
-    totalFoodRevenue += data.food_revenue || 0;
-    totalBeverageRevenue += data.beverage_revenue || 0;
+    totalFoodRevenue += data.actual_food_revenue || 0;
+    totalBeverageRevenue += data.actual_beverage_revenue || 0;
     totalActualFoodCost += data.actual_food_cost || 0;
     totalActualBeverageCost += data.actual_beverage_cost || 0;
 
@@ -71,34 +71,26 @@ export async function getMonthlyProfitLossReportAction(
   const averageBudgetFoodCostPct = budgetFoodCostPctCount > 0 ? totalBudgetFoodCostPct / budgetFoodCostPctCount : 0;
   const averageBudgetBeverageCostPct = budgetBeverageCostPctCount > 0 ? totalBudgetBeverageCostPct / budgetBeverageCostPctCount : 0;
 
-  // Placeholder for detailed P&L. Actual values would come from more comprehensive data sources.
+  // Calculate income items based on actual data
   const incomeItems: PLStatementItem[] = [
-    { referenceId: "A1111-4267", description: "Guest Reservations", amount: totalRevenue },
-    { referenceId: "A1111-4268", description: "Food Purchases", amount: totalFoodRevenue }, // Interpreted as Food Revenue/Sales
-    { referenceId: "A1111-4269", description: "Events", amount: 151000 }, // Placeholder
-    { referenceId: "A1111-4270", description: "Other", amount: 48750 },   // Placeholder
+    { referenceId: "A1111-4267", description: "Food Revenue", amount: totalFoodRevenue },
+    { referenceId: "A1111-4268", description: "Beverage Revenue", amount: totalBeverageRevenue },
   ];
-  const salesReturnsAllowances = -7562; // Placeholder, as a negative amount
+  const salesReturnsAllowances = 0; // No returns/allowances data available
 
   const totalIncome = incomeItems.reduce((sum, item) => sum + item.amount, 0);
   const totalRevenuePL = totalIncome + salesReturnsAllowances;
 
+  // Calculate expense items based on actual cost data
   const expenseItems: PLStatementItem[] = [
-    { referenceId: "R4444-5345", description: "Utilities", amount: 21500 }, // Placeholder
-    { referenceId: "R4444-5346", description: "Maintenance", amount: 17640 }, // Placeholder
-    { referenceId: "R4444-5347", description: "Depreciation", amount: 29500 }, // Placeholder
-    { referenceId: "R4444-5348", description: "Staff Wages", amount: 250400 }, // Placeholder
-    { referenceId: "R4444-5349", description: "Insurance", amount: 16500 }, // Placeholder
-    { referenceId: "R4444-5350", description: "Legal Fees", amount: 7800 }, // Placeholder
-    { referenceId: "R4444-5351", description: "Advertising", amount: 18500 }, // Placeholder
-    { referenceId: "R4444-5352", description: "Supplies", amount: 4750 }, // Placeholder
-    { referenceId: "R4444-5353", description: "Other", amount: 8500 }, // Placeholder
+    { referenceId: "R4444-5345", description: "Food Cost", amount: totalActualFoodCost },
+    { referenceId: "R4444-5346", description: "Beverage Cost", amount: totalActualBeverageCost },
   ];
   const totalExpenses = expenseItems.reduce((sum, item) => sum + item.amount, 0);
 
   const netIncomeBeforeTaxes = totalRevenuePL - totalExpenses;
-  const taxRate = 0.0953; // Placeholder for 9.53%
-  const incomeTaxExpense = netIncomeBeforeTaxes * taxRate;
+  const taxRate = 0; // No tax data available
+  const incomeTaxExpense = 0;
   const netIncome = netIncomeBeforeTaxes - incomeTaxExpense;
 
   return {
@@ -167,8 +159,8 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
 
   summarySnapshot.forEach((doc) => {
     const data = doc.data() as DailyFinancialSummary;
-    totalFoodRevenue += data.food_revenue || 0;
-    totalBeverageRevenue += data.beverage_revenue || 0;
+    totalFoodRevenue += data.actual_food_revenue || 0;
+    totalBeverageRevenue += data.actual_beverage_revenue || 0;
     totalActualFoodCost += data.actual_food_cost || 0;
     totalActualBeverageCost += data.actual_beverage_cost || 0;
     if (data.budget_food_cost_pct != null) {
@@ -395,37 +387,39 @@ export async function getBudgetVsActualsReportAction(
     const data = doc.data() as DailyFinancialSummary;
     const date = data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as any);
     
-    // Food calculations
-    const foodRevenue = data.food_revenue || 0;
-    const foodBudgetPct = data.budget_food_cost_pct || 0;
+    // Food calculations - using new field names
+    const foodActualRevenue = data.actual_food_revenue || 0;
+    const foodBudgetedRevenue = data.budget_food_revenue || 0;
+    const foodBudgetedCost = data.budget_food_cost || 0;
     const foodActualCost = data.actual_food_cost || 0;
-    const foodBudgetedCost = foodRevenue * (foodBudgetPct / 100);
+    const foodBudgetPct = data.budget_food_cost_pct || 0;
     
-    totalFoodBudgetedRevenue += foodRevenue;
-    totalFoodActualRevenue += foodRevenue;
+    totalFoodBudgetedRevenue += foodBudgetedRevenue;
+    totalFoodActualRevenue += foodActualRevenue;
     totalFoodBudgetedCost += foodBudgetedCost;
     totalFoodActualCost += foodActualCost;
     
-    // Beverage calculations
-    const beverageRevenue = data.beverage_revenue || 0;
-    const beverageBudgetPct = data.budget_beverage_cost_pct || 0;
+    // Beverage calculations - using new field names
+    const beverageActualRevenue = data.actual_beverage_revenue || 0;
+    const beverageBudgetedRevenue = data.budget_beverage_revenue || 0;
+    const beverageBudgetedCost = data.budget_beverage_cost || 0;
     const beverageActualCost = data.actual_beverage_cost || 0;
-    const beverageBudgetedCost = beverageRevenue * (beverageBudgetPct / 100);
+    const beverageBudgetPct = data.budget_beverage_cost_pct || 0;
     
-    totalBeverageBudgetedRevenue += beverageRevenue;
-    totalBeverageActualRevenue += beverageRevenue;
+    totalBeverageBudgetedRevenue += beverageBudgetedRevenue;
+    totalBeverageActualRevenue += beverageActualRevenue;
     totalBeverageBudgetedCost += beverageBudgetedCost;
     totalBeverageActualCost += beverageActualCost;
     
     // Daily breakdown
     dailyBreakdown.push({
       date,
-      foodBudgetedRevenue: foodRevenue,
-      foodActualRevenue: foodRevenue,
+      foodBudgetedRevenue,
+      foodActualRevenue,
       foodBudgetedCost,
       foodActualCost,
-      beverageBudgetedRevenue: beverageRevenue,
-      beverageActualRevenue: beverageRevenue,
+      beverageBudgetedRevenue,
+      beverageActualRevenue,
       beverageBudgetedCost,
       beverageActualCost,
     });
@@ -672,8 +666,8 @@ export async function getDailyRevenueTrendsReportAction(
       const data = doc.data() as DailyFinancialSummary;
       const date = data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as any);
       
-      const foodRevenue = data.food_revenue || 0;
-      const beverageRevenue = data.beverage_revenue || 0;
+      const foodRevenue = data.actual_food_revenue || 0;
+      const beverageRevenue = data.actual_beverage_revenue || 0;
       const totalRevenue = foodRevenue + beverageRevenue;
       
       dailyData.push({

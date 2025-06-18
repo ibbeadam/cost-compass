@@ -1108,7 +1108,7 @@ export default function ReportsClient() {
       <Card className="w-full shadow-md bg-card">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
           <div className="flex items-center gap-4">
-            <CardTitle className="font-headline text-xl">Report Display</CardTitle>
+          <CardTitle className="font-headline text-xl">Report Display</CardTitle>
             {lastRefreshTime && (
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />

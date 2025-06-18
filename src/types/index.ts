@@ -149,8 +149,16 @@ export interface DailyFinancialSummary {
   date: Timestamp | Date; // Firestore Timestamp or JS Date
   outlet_id: string;
   
-  food_revenue: number; // Total revenue for the day (changed from 'revenue')
-  beverage_revenue: number; // Total beverage revenue for the day
+  // Renamed revenue fields
+  actual_food_revenue: number; // Renamed from 'food_revenue' - Actual food revenue for the day
+  actual_beverage_revenue: number; // Renamed from 'beverage_revenue' - Actual beverage revenue for the day
+  
+  // New budget fields
+  budget_food_revenue: number; // Budgeted food revenue for the day
+  budget_beverage_revenue: number; // Budgeted beverage revenue for the day
+  budget_food_cost: number; // Budgeted food cost for the day
+  budget_beverage_cost: number; // Budgeted beverage cost for the day
+  
   gross_food_cost: number; // Sum of all FoodCostEntry.total_food_cost for the day
   gross_beverage_cost: number; // Sum of all BeverageCostEntry.total_beverage_cost for the day
   net_food_cost: number; // gross_food_cost - ent_food - oc_food - other_food_adjustment
@@ -158,7 +166,7 @@ export interface DailyFinancialSummary {
   total_adjusted_food_cost: number; // Adjusted for transfers, credits etc.
   total_adjusted_beverage_cost: number; // Adjusted for transfers, credits etc.
   total_covers: number; // Total number of customers/guests served
-  average_check: number; // food_revenue / total_covers
+  average_check: number; // actual_food_revenue / total_covers
 
   budget_food_cost_pct: number; // Budgeted food cost percentage
   budget_beverage_cost_pct: number; // Budgeted beverage cost percentage
@@ -568,6 +576,7 @@ export interface DailyRevenueTrendsReport {
 }
 
 export interface DashboardReportData {
+  outletMetrics: any;
   summaryStats: {
     totalFoodRevenue: number;
     totalBeverageRevenue: number;
@@ -582,9 +591,9 @@ export interface DashboardReportData {
   outletPerformanceData: OutletPerformanceDataPoint[];
   topFoodCategories?: TopCategoryDataPoint[];
   topBeverageCategories?: TopCategoryDataPoint[];
-  costAnalysisByCategoryReport: CostAnalysisByCategoryReport;
-  budgetVsActualsReport: BudgetVsActualsReport;
-  dailyRevenueTrendsReport: DailyRevenueTrendsReport;
+  costAnalysisByCategoryReport?: CostAnalysisByCategoryReport;
+  budgetVsActualsReport?: BudgetVsActualsReport;
+  dailyRevenueTrendsReport?: DailyRevenueTrendsReport;
 }
 
 // Type for Managed User (placeholder)

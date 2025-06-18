@@ -58,12 +58,16 @@ const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialS
 // Excel import interface
 interface ExcelRow {
   date: string;
-  food_revenue: number;
+  actual_food_revenue: number;
+  budget_food_revenue: number;
+  budget_food_cost: number;
   budget_food_cost_pct: number;
   ent_food?: number;
   oc_food?: number;
   other_food_adjustment?: number;
-  beverage_revenue: number;
+  actual_beverage_revenue: number;
+  budget_beverage_revenue: number;
+  budget_beverage_cost: number;
   budget_beverage_cost_pct: number;
   entertainment_beverage_cost?: number;
   officer_check_comp_beverage?: number;
@@ -193,8 +197,8 @@ export default function DailyFinancialSummaryListClient() {
 
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i] as any[];
-          if (!row || row.length < 11) {
-            errors.push(`Row ${i + 1}: Insufficient number of columns. Expected at least 11, got ${row?.length || 0}.`);
+          if (!row || row.length < 15) {
+            errors.push(`Row ${i + 1}: Insufficient number of columns. Expected at least 15, got ${row?.length || 0}.`);
             continue;
           }
 
@@ -209,17 +213,21 @@ export default function DailyFinancialSummaryListClient() {
 
             const excelRow: ExcelRow = {
               date: date.toISOString().split('T')[0], // YYYY-MM-DD format
-              food_revenue: parseFloat(row[1]) || 0,
-              budget_food_cost_pct: parseFloat(row[2]) || 0,
-              ent_food: parseFloat(row[3]) || 0,
-              oc_food: parseFloat(row[4]) || 0,
-              other_food_adjustment: parseFloat(row[5]) || 0,
-              beverage_revenue: parseFloat(row[6]) || 0,
-              budget_beverage_cost_pct: parseFloat(row[7]) || 0,
-              entertainment_beverage_cost: parseFloat(row[8]) || 0,
-              officer_check_comp_beverage: parseFloat(row[9]) || 0,
-              other_beverage_adjustments: parseFloat(row[10]) || 0,
-              notes: row[11] ? String(row[11]) : undefined,
+              actual_food_revenue: parseFloat(row[1]) || 0,
+              budget_food_revenue: parseFloat(row[2]) || 0,
+              budget_food_cost: parseFloat(row[3]) || 0,
+              budget_food_cost_pct: parseFloat(row[4]) || 0,
+              ent_food: parseFloat(row[5]) || 0,
+              oc_food: parseFloat(row[6]) || 0,
+              other_food_adjustment: parseFloat(row[7]) || 0,
+              actual_beverage_revenue: parseFloat(row[8]) || 0,
+              budget_beverage_revenue: parseFloat(row[9]) || 0,
+              budget_beverage_cost: parseFloat(row[10]) || 0,
+              budget_beverage_cost_pct: parseFloat(row[11]) || 0,
+              entertainment_beverage_cost: parseFloat(row[12]) || 0,
+              officer_check_comp_beverage: parseFloat(row[13]) || 0,
+              other_beverage_adjustments: parseFloat(row[14]) || 0,
+              notes: row[15] ? String(row[15]) : undefined,
             };
 
             processedData.push(excelRow);
@@ -254,12 +262,16 @@ export default function DailyFinancialSummaryListClient() {
         try {
           const summaryData = {
             date: new Date(row.date),
-            food_revenue: row.food_revenue,
+            actual_food_revenue: row.actual_food_revenue,
+            budget_food_revenue: row.budget_food_revenue,
+            budget_food_cost: row.budget_food_cost,
             budget_food_cost_pct: row.budget_food_cost_pct,
             ent_food: row.ent_food,
             oc_food: row.oc_food,
             other_food_adjustment: row.other_food_adjustment,
-            beverage_revenue: row.beverage_revenue,
+            actual_beverage_revenue: row.actual_beverage_revenue,
+            budget_beverage_revenue: row.budget_beverage_revenue,
+            budget_beverage_cost: row.budget_beverage_cost,
             budget_beverage_cost_pct: row.budget_beverage_cost_pct,
             entertainment_beverage_cost: row.entertainment_beverage_cost,
             officer_check_comp_beverage: row.officer_check_comp_beverage,
@@ -316,9 +328,9 @@ export default function DailyFinancialSummaryListClient() {
 
   const downloadTemplate = () => {
     const template = [
-      ['Date', 'Food Revenue', 'Budget Food Cost %', 'Entertainment Food Cost', 'Officer\'s Check / Comp Food', 'Other Food Adjustments', 'Beverage Revenue', 'Budget Beverage Cost %', 'Entertainment Beverage Cost', 'Officer\'s Check / Comp Beverage', 'Other Beverage Adjustments', 'Notes'],
-      ['2024-01-01', 5000, 30, 100, 50, 20, 2000, 25, 60, 30, 10, 'Sample data for all fields'],
-      ['2024-01-02', 5500, 30, 120, 60, 25, 2200, 25, 70, 35, 12, 'Another sample row'],
+      ['Date', 'Actual Food Revenue', 'Budget Food Revenue', 'Budget Food Cost', 'Budget Food Cost %', 'Entertainment Food Cost', 'Officer\'s Check / Comp Food', 'Other Food Adjustments', 'Actual Beverage Revenue', 'Budget Beverage Revenue', 'Budget Beverage Cost', 'Budget Beverage Cost %', 'Entertainment Beverage Cost', 'Officer\'s Check / Comp Beverage', 'Other Beverage Adjustments', 'Notes'],
+      ['2024-01-01', 5000, 4800, 1500, 30, 100, 50, 20, 2000, 1900, 500, 25, 60, 30, 10, 'Sample data for all fields'],
+      ['2024-01-02', 5500, 5200, 1650, 30, 120, 60, 25, 2200, 2100, 550, 25, 70, 35, 12, 'Another sample row'],
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(template);
@@ -452,14 +464,14 @@ export default function DailyFinancialSummaryListClient() {
 
   return (
     <div className="w-full flex flex-col">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex gap-2">
-          <Button onClick={downloadTemplate} variant="outline">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={downloadTemplate} variant="outline" size="sm" className="text-xs sm:text-sm">
             <FileSpreadsheet className="mr-2 h-4 w-4" />
             Download Template
           </Button>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -470,11 +482,13 @@ export default function DailyFinancialSummaryListClient() {
           <Button 
             onClick={() => fileInputRef.current?.click()} 
             variant="outline"
+            size="sm"
+            className="text-xs sm:text-sm"
           >
             <Upload className="mr-2 h-4 w-4" />
             Import Excel
           </Button>
-          <Button onClick={handleAddNew}> 
+          <Button onClick={handleAddNew} size="sm" className="text-xs sm:text-sm"> 
             <PlusCircle className="mr-2 h-4 w-4" /> 
             Add New Daily Summary 
           </Button>
@@ -490,90 +504,82 @@ export default function DailyFinancialSummaryListClient() {
       ) : (
         <div className="w-full border rounded-lg shadow-md bg-card">
           <div className="overflow-x-auto w-full">
-            <Table className="min-w-[1200px] w-full text-sm text-left border-collapse devide-y devide-border">
+            <Table className="min-w-[1000px] w-full text-sm text-left border-collapse devide-y devide-border">
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>
+                  <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap px-2 py-3" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>
                     Date
                   </TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Food Rev.</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Bud. Food %</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Food Cost</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Food %</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Food Var. %</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Bev Rev.</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Bud. Bev %</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Bev Cost</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Act. Bev %</TableHead>
-                  <TableHead className="font-headline text-right whitespace-nowrap">Bev Var. %</TableHead>
-                  <TableHead className="font-headline w-[100px] text-right whitespace-nowrap">Actions</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food Rev.</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food Cost</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Food Var. %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Bev Rev.</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Bev Cost</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Bev %</TableHead>
+                  <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Bev Var. %</TableHead>
+                  <TableHead className="font-headline w-[100px] text-right whitespace-nowrap px-2 py-3">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {currentItems.map((summary) => (
                   <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
-                    <TableCell className="font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}> 
-                      {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id} 
+                    <TableCell className="font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
+                      {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}
                     </TableCell>
-                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
-                      {renderCurrency(summary.food_revenue)}
+                    <TableCell className="text-right font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
+                      {renderCurrency(summary.actual_food_revenue)}
                     </TableCell>
-                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
-                      {renderPercentage(summary.budget_food_cost_pct)}
-                    </TableCell>
-                    <TableCell className="text-right font-code font-semibold whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                    <TableCell className="text-right font-code font-semibold whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
                       {renderCurrency(summary.actual_food_cost)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getActualCostColor(summary.actual_food_cost_pct, summary.budget_food_cost_pct))} onClick={() => handleViewDetails(summary)}> 
-                      {renderPercentage(summary.actual_food_cost_pct)} 
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getActualCostColor(summary.actual_food_cost_pct, summary.budget_food_cost_pct))} onClick={() => handleViewDetails(summary)}>
+                      {renderPercentage(summary.actual_food_cost_pct)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getVarianceColor(summary.food_variance_pct))} onClick={() => handleViewDetails(summary)}>
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getVarianceColor(summary.food_variance_pct))} onClick={() => handleViewDetails(summary)}>
                       {summary.food_variance_pct != null && summary.food_variance_pct !== 0 ? (summary.food_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
                       {renderPercentage(summary.food_variance_pct)}
                     </TableCell>
-                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
-                      {renderCurrency(summary.beverage_revenue)}
+                    <TableCell className="text-right font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
+                      {renderCurrency(summary.actual_beverage_revenue)}
                     </TableCell>
-                    <TableCell className="text-right font-code whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
-                      {renderPercentage(summary.budget_beverage_cost_pct)}
-                    </TableCell>
-                    <TableCell className="text-right font-code font-semibold whitespace-nowrap" onClick={() => handleViewDetails(summary)}>
+                    <TableCell className="text-right font-code font-semibold whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
                       {renderCurrency(summary.actual_beverage_cost)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getActualCostColor(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))} onClick={() => handleViewDetails(summary)}> 
-                      {renderPercentage(summary.actual_beverage_cost_pct)} 
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getActualCostColor(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))} onClick={() => handleViewDetails(summary)}>
+                      {renderPercentage(summary.actual_beverage_cost_pct)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap", getVarianceColor(summary.beverage_variance_pct))} onClick={() => handleViewDetails(summary)}>
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getVarianceColor(summary.beverage_variance_pct))} onClick={() => handleViewDetails(summary)}>
                       {summary.beverage_variance_pct != null && summary.beverage_variance_pct !== 0 ? (summary.beverage_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
                       {renderPercentage(summary.beverage_variance_pct)}
                     </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9"> 
+                    <TableCell className="text-right whitespace-nowrap px-2 py-3">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9">
                         <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit</span> 
+                        <span className="sr-only">Edit</span>
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9"> 
+                          <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9">
                             <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete</span> 
+                            <span className="sr-only">Delete</span>
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
-                          <AlertDialogHeader> 
+                          <AlertDialogHeader>
                             <AlertDialogTitle className="flex items-center">
                               <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
                               Are you sure?
-                            </AlertDialogTitle> 
-                            <AlertDialogDescription> 
-                              This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}. 
-                            </AlertDialogDescription> 
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}.
+                            </AlertDialogDescription>
                           </AlertDialogHeader>
-                          <AlertDialogFooter> 
-                            <AlertDialogCancel>Cancel</AlertDialogCancel> 
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction onClick={() => handleDelete(summary.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                               Delete
-                            </AlertDialogAction> 
+                            </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -587,15 +593,15 @@ export default function DailyFinancialSummaryListClient() {
       )}
 
       {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-4 px-2">
-          <div className="text-sm text-muted-foreground">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 px-2">
+          <div className="text-sm text-muted-foreground text-center sm:text-left">
             Showing {startIndexDisplay} to {endIndexDisplay} of {totalSummaries} results
           </div>
           <div className="flex items-center space-x-1">
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9"
+              className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1 || isLoading}
             >
@@ -606,7 +612,7 @@ export default function DailyFinancialSummaryListClient() {
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9"
+              className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages || isLoading}
             >
@@ -693,10 +699,10 @@ export default function DailyFinancialSummaryListClient() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Date</TableHead>
-                          <TableHead className="text-right">Food Revenue</TableHead>
-                          <TableHead className="text-right">Budget Food %</TableHead>
-                          <TableHead className="text-right">Beverage Revenue</TableHead>
-                          <TableHead className="text-right">Budget Bev %</TableHead>
+                          <TableHead className="text-right">Act. Food Rev.</TableHead>
+                          <TableHead className="text-right">Bud. Food Rev.</TableHead>
+                          <TableHead className="text-right">Act. Bev Rev.</TableHead>
+                          <TableHead className="text-right">Bud. Bev Rev.</TableHead>
                           <TableHead>Notes</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -704,10 +710,10 @@ export default function DailyFinancialSummaryListClient() {
                         {importedData.slice(0, 10).map((row, index) => (
                           <TableRow key={index}>
                             <TableCell className="font-code">{row.date}</TableCell>
-                            <TableCell className="text-right font-code">${row.food_revenue.toFixed(2)}</TableCell>
-                            <TableCell className="text-right font-code">{row.budget_food_cost_pct.toFixed(2)}%</TableCell>
-                            <TableCell className="text-right font-code">${row.beverage_revenue.toFixed(2)}</TableCell>
-                            <TableCell className="text-right font-code">{row.budget_beverage_cost_pct.toFixed(2)}%</TableCell>
+                            <TableCell className="text-right font-code">${row.actual_food_revenue.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-code">${row.budget_food_revenue.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-code">${row.actual_beverage_revenue.toFixed(2)}</TableCell>
+                            <TableCell className="text-right font-code">${row.budget_beverage_revenue.toFixed(2)}</TableCell>
                             <TableCell className="max-w-[200px] truncate">{row.notes || '-'}</TableCell>
                           </TableRow>
                         ))}

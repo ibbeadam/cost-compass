@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
@@ -14,21 +13,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, ShieldAlert, Edit, Trash2, UserX, UserCheck } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Edit, Trash2, UserX, UserCheck, Users } from "lucide-react";
 import type { ManagedUser } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ITEMS_PER_PAGE = 10;
-
-// Mock data - in a real app, this would come from a backend API call
-const mockUsers: ManagedUser[] = [
-  { uid: "user1", email: "testuser1@example.com", displayName: "Test User One", role: "user", disabled: false, creationTime: "2023-01-15", lastSignInTime: "2024-05-20" },
-  { uid: "adminUser", email: "admin@example.com", displayName: "Admin User", role: "admin", disabled: false, creationTime: "2023-01-10", lastSignInTime: "2024-05-21" },
-  { uid: "user2", email: "another.user@example.com", displayName: "Another User", role: "user", disabled: true, creationTime: "2023-02-20", lastSignInTime: "2024-04-10" },
-  { uid: "user3", email: "jane.doe@example.com", displayName: "Jane Doe", role: "user", disabled: false, creationTime: "2023-03-01", lastSignInTime: "2024-05-19" },
-];
-
 
 export default function UserListClient() {
   const { user, isAdmin, loading: authLoading } = useAuth();
@@ -40,11 +30,10 @@ export default function UserListClient() {
   useEffect(() => {
     if (!authLoading) {
       if (isAdmin) {
-        // Simulate fetching users
-        setTimeout(() => {
-          setUsers(mockUsers);
-          setIsLoading(false);
-        }, 1000);
+        // TODO: Implement real user fetching from Firebase Admin SDK
+        // For now, show empty state
+        setUsers([]);
+        setIsLoading(false);
       } else {
         setIsLoading(false);
       }
@@ -69,7 +58,6 @@ export default function UserListClient() {
   const handleDeleteUser = (userId: string) => {
     toast({ title: "Action Required", description: "Deleting users requires backend implementation with Firebase Functions." });
   };
-
 
   if (authLoading || isLoading) {
     return (
@@ -112,66 +100,24 @@ export default function UserListClient() {
     <div className="w-full">
       <Alert className="mb-6 bg-accent/50 border-accent">
         <AlertTriangle className="h-5 w-5 text-accent-foreground" />
-        <AlertTitle className="text-accent-foreground">Developer Note</AlertTitle>
+        <AlertTitle className="text-accent-foreground">User Management</AlertTitle>
         <AlertDescription className="text-accent-foreground/80">
-          This user management interface is a placeholder. Listing all Firebase users and performing administrative actions
-          (like changing roles, disabling, or deleting users) requires backend logic using the Firebase Admin SDK
-          (e.g., via Firebase Cloud Functions) for security and proper functionality. The data shown here is mock data.
+          User management functionality requires backend implementation using Firebase Admin SDK. 
+          This interface is ready for integration with Firebase Cloud Functions for secure user operations.
         </AlertDescription>
       </Alert>
 
-      {currentUsers.length === 0 ? (
-        <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
-          <Users className="mx-auto h-12 w-12 mb-4 text-primary" />
-          <p className="text-lg font-medium">No users to display.</p>
-          <p>(Mock data is empty or filtered out)</p>
+      <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
+        <Users className="mx-auto h-12 w-12 mb-4 text-primary" />
+        <p className="text-lg font-medium">User Management</p>
+        <p className="text-sm">Connect to Firebase Admin SDK to view and manage users.</p>
+        <div className="mt-4 space-y-2 text-xs text-muted-foreground">
+          <p>• List all Firebase users</p>
+          <p>• Manage user roles and permissions</p>
+          <p>• Enable/disable user accounts</p>
+          <p>• Delete user accounts</p>
         </div>
-      ) : (
-        <div className="rounded-lg border overflow-hidden shadow-md bg-card">
-          <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="font-headline">Display Name</TableHead>
-                <TableHead className="font-headline">Email</TableHead>
-                <TableHead className="font-headline">Role</TableHead>
-                <TableHead className="font-headline">Status</TableHead>
-                <TableHead className="font-headline text-right w-[150px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentUsers.map((managedUser) => (
-                <TableRow key={managedUser.uid}>
-                  <TableCell>{managedUser.displayName || "-"}</TableCell>
-                  <TableCell className="font-code">{managedUser.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={managedUser.role === 'admin' ? "destructive" : "secondary"} className="capitalize">
-                      {managedUser.role || "user"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={managedUser.disabled ? "outline" : "default"} className={managedUser.disabled ? "border-destructive text-destructive" : "bg-green-600 hover:bg-green-700"}>
-                      {managedUser.disabled ? <UserX className="h-3.5 w-3.5 mr-1.5" /> : <UserCheck className="h-3.5 w-3.5 mr-1.5" />}
-                      {managedUser.disabled ? "Disabled" : "Enabled"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEditUser(managedUser.uid)} className="mr-1 hover:text-primary" title="Edit Role (Placeholder)">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleToggleDisableUser(managedUser.uid, managedUser.disabled)} className="mr-1 hover:text-orange-500" title={managedUser.disabled ? "Enable User (Placeholder)" : "Disable User (Placeholder)"}>
-                      {managedUser.disabled ? <UserCheck className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteUser(managedUser.uid)} className="hover:text-destructive" title="Delete User (Placeholder)">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {/* Pagination would go here if implemented for real data */}
+      </div>
     </div>
   );
 }

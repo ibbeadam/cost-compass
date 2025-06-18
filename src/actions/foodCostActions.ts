@@ -352,8 +352,12 @@ export async function getFlashFoodCostReportAction(
         id: doc.id,
         date: data.date instanceof Timestamp ? data.date.toDate() : data.date,
         outlet_id: data.outlet_id,
-        food_revenue: data.food_revenue || 0,
-        beverage_revenue: data.beverage_revenue || 0,
+        actual_food_revenue: data.actual_food_revenue || 0,
+        actual_beverage_revenue: data.actual_beverage_revenue || 0,
+        budget_food_revenue: data.budget_food_revenue || 0,
+        budget_beverage_revenue: data.budget_beverage_revenue || 0,
+        budget_food_cost: data.budget_food_cost || 0,
+        budget_beverage_cost: data.budget_beverage_cost || 0,
         gross_food_cost: data.gross_food_cost || 0,
         gross_beverage_cost: data.gross_beverage_cost || 0,
         net_food_cost: data.net_food_cost || 0,
@@ -468,7 +472,7 @@ export async function getDetailedFoodCostReportAction(
 
       summarySnapshot.forEach(doc => {
         const data = doc.data() as DailyFinancialSummary;
-        totalFoodRevenue += data.food_revenue || 0;
+        totalFoodRevenue += data.actual_food_revenue || 0;
         totalEntertainmentFoodCost += data.ent_food || 0;
         totalOcFoodCost += data.oc_food || 0;
         totalOtherFoodAdjustments += data.other_food_adjustment || 0;
@@ -532,7 +536,7 @@ export async function getDetailedFoodCostReportAction(
 
       overallSummarySnapshot.forEach(doc => {
         const data = doc.data() as DailyFinancialSummary;
-        totalOverallFoodRevenue += data.food_revenue || 0;
+        totalOverallFoodRevenue += data.actual_food_revenue || 0;
         totalOverallEntertainmentFoodCost += data.ent_food || 0;
         totalOverallOcFoodCost += data.oc_food || 0;
         totalOverallOtherFoodAdjustments += data.other_food_adjustment || 0;
@@ -732,8 +736,8 @@ export async function getCostAnalysisByCategoryReportAction(
     dailySummariesSnapshot.docs.forEach(doc => {
       const data = doc.data();
       if (!outletId || outletId === "all" || data.outlet_id === outletId) {
-        totalFoodRevenue += data.food_revenue || 0;
-        totalBeverageRevenue += data.beverage_revenue || 0;
+        totalFoodRevenue += data.actual_food_revenue || 0;
+        totalBeverageRevenue += data.actual_beverage_revenue || 0;
       }
     });
     const totalRevenue = totalFoodRevenue + totalBeverageRevenue;

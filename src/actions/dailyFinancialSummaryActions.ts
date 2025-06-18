@@ -27,8 +27,12 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
       id: summaryId,
       date: dateTimestampForQuery,
       outlet_id: "", 
-      food_revenue: 0,
-      beverage_revenue: 0,
+      actual_food_revenue: 0,
+      actual_beverage_revenue: 0,
+      budget_food_revenue: 0,
+      budget_beverage_revenue: 0,
+      budget_food_cost: 0,
+      budget_beverage_cost: 0,
       gross_food_cost: 0,
       gross_beverage_cost: 0,
       net_food_cost: 0,
@@ -81,9 +85,9 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
   const otherFoodAdjustment = summaryData.other_food_adjustment || 0; 
   const actual_food_cost = grossFoodCost - entFood - ocFood + otherFoodAdjustment;
   let actual_food_cost_pct: number | null = null;
-  if (summaryData.food_revenue != null && summaryData.food_revenue > 0) {
-    actual_food_cost_pct = (actual_food_cost / summaryData.food_revenue) * 100;
-  } else if (summaryData.food_revenue === 0 && actual_food_cost > 0) {
+  if (summaryData.actual_food_revenue != null && summaryData.actual_food_revenue > 0) {
+    actual_food_cost_pct = (actual_food_cost / summaryData.actual_food_revenue) * 100;
+  } else if (summaryData.actual_food_revenue === 0 && actual_food_cost > 0) {
     actual_food_cost_pct = null; 
   } else {
     actual_food_cost_pct = 0; 
@@ -109,9 +113,9 @@ export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promi
   const otherBeverageAdjustment = summaryData.other_beverage_adjustments || 0;
   const actual_beverage_cost = grossBeverageCost - entBeverage - ocBeverage + otherBeverageAdjustment;
   let actual_beverage_cost_pct: number | null = null;
-  if (summaryData.food_revenue != null && summaryData.food_revenue > 0) {
-    actual_beverage_cost_pct = (actual_beverage_cost / summaryData.food_revenue) * 100;
-  } else if (summaryData.food_revenue === 0 && actual_beverage_cost > 0) {
+  if (summaryData.actual_beverage_revenue != null && summaryData.actual_beverage_revenue > 0) {
+    actual_beverage_cost_pct = (actual_beverage_cost / summaryData.actual_beverage_revenue) * 100;
+  } else if (summaryData.actual_beverage_revenue === 0 && actual_beverage_cost > 0) {
      actual_beverage_cost_pct = null;
   } else {
     actual_beverage_cost_pct = 0;
@@ -170,8 +174,12 @@ export async function saveDailyFinancialSummaryAction(
     // delete (dataToSave as any).beverage_variance_pct;
 
     const defaultsForNewEntry: Partial<DailyFinancialSummary> = {
-        food_revenue: 0,
-        beverage_revenue: 0,
+        actual_food_revenue: 0,
+        actual_beverage_revenue: 0,
+        budget_food_revenue: 0,
+        budget_beverage_revenue: 0,
+        budget_food_cost: 0,
+        budget_beverage_cost: 0,
         budget_food_cost_pct: 0, 
         ent_food: 0,
         oc_food: 0,

@@ -349,7 +349,7 @@ export async function getDetailedBeverageCostReportAction(
 
       summarySnapshot.forEach(doc => {
         const data = doc.data() as DailyFinancialSummary;
-        totalBeverageRevenue += data.beverage_revenue || 0;
+        totalBeverageRevenue += data.actual_beverage_revenue || 0;
         totalEntertainmentBeverageCost += data.entertainment_beverage_cost || 0;
         totalOcBeverageCost += data.officer_check_comp_beverage || 0;
         totalOtherBeverageAdjustments += data.other_beverage_adjustments || 0;
@@ -413,7 +413,7 @@ export async function getDetailedBeverageCostReportAction(
 
       overallSummarySnapshot.forEach(doc => {
         const data = doc.data() as DailyFinancialSummary;
-        totalOverallBeverageRevenue += data.beverage_revenue || 0;
+        totalOverallBeverageRevenue += data.actual_beverage_revenue || 0;
         totalOverallEntertainmentBeverageCost += data.entertainment_beverage_cost || 0;
         totalOverallOcBeverageCost += data.officer_check_comp_beverage || 0;
         totalOverallOtherBeverageAdjustments += data.other_beverage_adjustments || 0;

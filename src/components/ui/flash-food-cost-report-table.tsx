@@ -50,7 +50,7 @@ export function FlashFoodCostReportTable({ data }: FlashFoodCostReportTableProps
             <TableRow key={summary.id}>
               <TableCell className="font-medium">{formatDateFn(summary.date instanceof Date ? summary.date : summary.date.toDate(), "MMM dd, yyyy")}</TableCell>
               <TableCell>{summary.outlet_id}</TableCell>
-              <TableCell className="text-right">{formatNumber(summary.food_revenue)}</TableCell>
+              <TableCell className="text-right">{formatNumber(summary.actual_food_revenue)}</TableCell>
               <TableCell className="text-right">{formatNumber(summary.actual_food_cost)}</TableCell>
               <TableCell className="text-right">{formatNumber(summary.net_food_cost)}</TableCell>
               <TableCell className="text-right">{formatNumber(summary.total_adjusted_food_cost)}</TableCell>

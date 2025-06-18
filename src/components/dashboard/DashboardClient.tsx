@@ -210,8 +210,8 @@ export default function DashboardClient() {
         let countBudgetBeverageCostPct = 0;
 
         dailySummaries.forEach(summary => {
-            totalHotelFoodRevenue += summary.food_revenue || 0;
-            totalHotelBeverageRevenue += summary.beverage_revenue || 0;
+            totalHotelFoodRevenue += summary.actual_food_revenue || 0;
+            totalHotelBeverageRevenue += summary.actual_beverage_revenue || 0;
             totalHotelActualFoodCost += summary.actual_food_cost || 0;
             totalHotelActualBeverageCost += summary.actual_beverage_cost || 0;
             if (summary.budget_food_cost_pct != null) {
@@ -235,7 +235,7 @@ export default function DashboardClient() {
             foodCostEntries.filter(fce => fce.outlet_id === selectedOutletId).forEach(fce => {
                 outletTotalFoodCost += fce.total_food_cost;
                 const daySummary = summariesMap.get(formatDateFn(fce.date instanceof Timestamp ? fce.date.toDate() : fce.date as Date, 'yyyy-MM-dd'));
-                if (daySummary) outletTotalFoodRevenueSumForPct += daySummary.food_revenue || 0;
+                if (daySummary) outletTotalFoodRevenueSumForPct += daySummary.actual_food_revenue || 0;
             });
             avgActualFoodCostPctVal = outletTotalFoodRevenueSumForPct > 0 ? (outletTotalFoodCost / outletTotalFoodRevenueSumForPct) * 100 : 0;
             
@@ -244,7 +244,7 @@ export default function DashboardClient() {
              beverageCostEntries.filter(bce => bce.outlet_id === selectedOutletId).forEach(bce => {
                 outletTotalBeverageCost += bce.total_beverage_cost;
                 const daySummary = summariesMap.get(formatDateFn(bce.date instanceof Timestamp ? bce.date.toDate() : bce.date as Date, 'yyyy-MM-dd'));
-                if (daySummary) outletTotalBeverageRevenueSumForPct += daySummary.beverage_revenue || 0;
+                if (daySummary) outletTotalBeverageRevenueSumForPct += daySummary.actual_beverage_revenue || 0;
             });
             avgActualBeverageCostPctVal = outletTotalBeverageRevenueSumForPct > 0 ? (outletTotalBeverageCost / outletTotalBeverageRevenueSumForPct) * 100 : 0;
         }
@@ -261,8 +261,8 @@ export default function DashboardClient() {
         const overviewChartDataResult: ChartDataPoint[] = daysInInterval.map(day => {
             const dayStr = formatDateFn(day, 'MMM dd');
             const summary = summariesMap.get(formatDateFn(day, 'yyyy-MM-dd')); // Use full date for map key
-            const foodRev = summary?.food_revenue || 0;
-            const bevRev = summary?.beverage_revenue || 0;
+            const foodRev = summary?.actual_food_revenue || 0;
+            const bevRev = summary?.actual_beverage_revenue || 0;
             const actualFoodCost = summary?.actual_food_cost || 0;
             const actualBevCost = summary?.actual_beverage_cost || 0;
             return {
@@ -277,8 +277,8 @@ export default function DashboardClient() {
             costTrendsChartDataResult = daysInInterval.map(day => {
                 const dayStr = formatDateFn(day, 'yyyy-MM-dd');
                 const summary = summariesMap.get(dayStr);
-                const foodRev = summary?.food_revenue || 0;
-                const bevRev = summary?.beverage_revenue || 0;
+                const foodRev = summary?.actual_food_revenue || 0;
+                const bevRev = summary?.actual_beverage_revenue || 0;
                 const outletDayFoodCost = foodCostEntries
                     .filter(fce => fce.outlet_id === selectedOutletId && formatDateFn(fce.date instanceof Timestamp ? fce.date.toDate() : fce.date, 'yyyy-MM-dd') === dayStr)
                     .reduce((sum, fce) => sum + fce.total_food_cost, 0);
@@ -329,7 +329,7 @@ export default function DashboardClient() {
                 if (dailyFoodCostForOutlet > 0) {
                     totalOutletFoodCost += dailyFoodCostForOutlet;
                     const summary = summariesMap.get(dayStr);
-                    if (summary && summary.food_revenue) totalHotelFoodRevenueOnOutletDays += summary.food_revenue;
+                    if (summary && summary.actual_food_revenue) totalHotelFoodRevenueOnOutletDays += summary.actual_food_revenue;
                     daysWithFoodCost++;
                 }
             });
@@ -425,6 +425,52 @@ export default function DashboardClient() {
             .slice(0, 3);
         // --- End Top Categories Processing ---
 
+        // --- Outlet Food Cost Metrics ---
+const outletFoodCostMap: Record<string, { name: string; total: number; days: Set<string>; dailyCosts: { date: string; cost: number }[] }> = {};
+foodCostEntries.forEach(fce => {
+  if (!outletFoodCostMap[fce.outlet_id]) {
+    const outletName = outletDetailsMap.get(fce.outlet_id) || fce.outlet_id;
+    outletFoodCostMap[fce.outlet_id] = { name: outletName.split(' - ')[0], total: 0, days: new Set(), dailyCosts: [] };
+  }
+  outletFoodCostMap[fce.outlet_id].total += fce.total_food_cost;
+  const dayStr = formatDateFn(fce.date instanceof Timestamp ? fce.date.toDate() : fce.date, 'yyyy-MM-dd');
+  outletFoodCostMap[fce.outlet_id].days.add(dayStr);
+  outletFoodCostMap[fce.outlet_id].dailyCosts.push({ date: dayStr, cost: fce.total_food_cost });
+});
+const totalHotelFoodCost = Object.values(outletFoodCostMap).reduce((sum, o) => sum + o.total, 0);
+const outletAvgDailyFoodCost = Object.entries(outletFoodCostMap).map(([id, o]) => ({
+  id,
+  outletName: o.name,
+  avgDailyCost: o.days.size > 0 ? o.total / o.days.size : 0,
+}));
+const outletFoodCostPct = Object.entries(outletFoodCostMap).map(([id, o]) => ({
+  id,
+  outletName: o.name,
+  pct: totalHotelFoodCost > 0 ? (o.total / totalHotelFoodCost) * 100 : 0,
+}));
+const outletFoodCostTrend = Object.entries(outletFoodCostMap).map(([id, o]) => {
+  const sorted = o.dailyCosts.sort((a, b) => a.date.localeCompare(b.date));
+  const first = sorted[0]?.cost ?? 0;
+  const last = sorted[sorted.length - 1]?.cost ?? 0;
+  let trend: 'up' | 'down' | 'stable' = 'stable';
+  if (last > first) trend = 'up';
+  else if (last < first) trend = 'down';
+  return { id, outletName: o.name, trend, first, last };
+});
+const outletMetrics = Object.entries(outletFoodCostMap).map(([id, o]) => {
+  const avg = outletAvgDailyFoodCost.find(x => x.id === id)?.avgDailyCost ?? 0;
+  const pct = outletFoodCostPct.find(x => x.id === id)?.pct ?? 0;
+  const trend = outletFoodCostTrend.find(x => x.id === id)?.trend ?? 'stable';
+  return {
+    id,
+    outletName: o.name,
+    total: o.total,
+    avgDailyCost: avg,
+    pctOfTotal: pct,
+    trend,
+  };
+}).sort((a, b) => b.total - a.total);
+
         const currentDashboardData = {
           summaryStats: summaryStatsData,
           overviewChartData: overviewChartDataResult,
@@ -433,8 +479,9 @@ export default function DashboardClient() {
           outletPerformanceData: outletPerformanceDataResult,
           topFoodCategories: topFoodCategoriesData,
           topBeverageCategories: topBeverageCategoriesData,
+          outletMetrics,
         };
-        setDashboardData(currentDashboardData);
+        setDashboardData(currentDashboardData as DashboardReportData);
         setIsLoadingData(false); 
 
         if (numberOfDaysInPeriod > 0 && currentDashboardData.summaryStats.totalFoodRevenue > 0 && currentDashboardData.summaryStats.totalBeverageRevenue > 0) {
@@ -719,40 +766,44 @@ export default function DashboardClient() {
           {/* Outlet Performance */}
           <Card className="shadow-md bg-card">
             <CardHeader>
-              <CardTitle className="font-headline text-xl">Top Outlet Performance (Food Cost %)</CardTitle>
-              <CardDescription>Outlets with highest average Food Cost % (vs Hotel Revenue).</CardDescription>
+              <CardTitle className="font-headline text-xl">Outlet Food Cost Metrics</CardTitle>
+              <CardDescription>Key food cost metrics by outlet for the selected period.</CardDescription>
             </CardHeader>
             <CardContent className="h-[350px] overflow-y-auto">
-              {isLoadingData || dateRange === undefined || !dashboardData?.outletPerformanceData ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full bg-muted" />)}
-                </div>
-              ) : dashboardData.outletPerformanceData && dashboardData.outletPerformanceData.length > 0 ? (
-                <ul className="space-y-3">
-                  {dashboardData.outletPerformanceData.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md hover:bg-muted/60 transition-colors">
-                      <div className="flex items-center space-x-3">
-                        <ListChecks className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="font-medium text-sm text-foreground">{item.outletName}</p>
-                          <p className="text-xs text-muted-foreground">{item.metricName}</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-sm text-foreground">{item.value}</p>
-                        {item.trend && (
-                           <p className={`text-xs ${item.trend === 'up' ? 'text-destructive' : 'text-green-600'}`}>
-                            {item.trend === 'up' ? <TrendingUp className="inline h-3 w-3 mr-0.5"/> : <TrendingDown className="inline h-3 w-3 mr-0.5"/>}
-                            {item.trend === 'up' ? 'Higher' : 'Lower'}
-                          </p>
-                        )}
-                      </div>
-                    </li>
+            {isLoadingData || dateRange === undefined || !dashboardData?.outletPerformanceData ? (
+              <div className="space-y-4">
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full bg-muted" />)}
+              </div>
+            ) : dashboardData.outletPerformanceData && dashboardData.outletPerformanceData.length > 0 ? (
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="text-left font-semibold">Outlet</th>
+                    <th className="text-right font-semibold">Total Cost</th>
+                    <th className="text-right font-semibold">Avg Daily Cost</th>
+                    <th className="text-right font-semibold">% of Total</th>
+                    <th className="text-center font-semibold">Trend</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboardData.outletMetrics.map((item: any) => (
+                    <tr key={item.id} className="border-b last:border-0">
+                      <td className="py-2 pr-2 text-foreground">{item.outletName}</td>
+                      <td className="py-2 pr-2 text-right font-mono">${item.total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                      <td className="py-2 pr-2 text-right font-mono">${item.avgDailyCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                      <td className="py-2 pr-2 text-right font-mono">{item.pctOfTotal.toFixed(1)}%</td>
+                      <td className="py-2 text-center">
+                        {item.trend === 'up' && <TrendingUp className="inline h-4 w-4 text-destructive" />}
+                        {item.trend === 'down' && <TrendingDown className="inline h-4 w-4 text-green-600" />}
+                        {item.trend === 'stable' && <span className="text-muted-foreground">–</span>}
+                      </td>
+                    </tr>
                   ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center pt-10">No outlet performance data available for the selected period.</p>
-              )}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center pt-10">No outlet food cost data available for the selected period.</p>
+            )}
             </CardContent>
           </Card>
       </div>

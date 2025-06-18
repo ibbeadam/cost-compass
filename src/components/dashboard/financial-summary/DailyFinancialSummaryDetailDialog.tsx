@@ -106,7 +106,9 @@ export default function DailyFinancialSummaryDetailDialog({
                 {/* Food Section */}
                 <div className="space-y-1">
                   <h4 className="text-md font-semibold text-foreground flex items-center mb-2"><Utensils className="h-5 w-5 mr-2 text-muted-foreground" />Food</h4>
-                  <DetailItem label="Food Revenue" value={summary.food_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Actual Food Revenue" value={summary.actual_food_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Food Revenue" value={summary.budget_food_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Food Cost" value={summary.budget_food_cost} isCurrency icon={DollarSign} />
                   <DetailItem label="Budget Food Cost %" value={summary.budget_food_cost_pct} isPercentage icon={Percent} />
                   <DetailItem 
                     label="Actual Food Cost" 
@@ -136,7 +138,9 @@ export default function DailyFinancialSummaryDetailDialog({
                 {/* Beverage Section */}
                 <div className="space-y-1">
                   <h4 className="text-md font-semibold text-foreground flex items-center mb-2"><GlassWater className="h-5 w-5 mr-2 text-muted-foreground" />Beverage</h4>
-                  <DetailItem label="Beverage Revenue" value={summary.beverage_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Actual Beverage Revenue" value={summary.actual_beverage_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Beverage Revenue" value={summary.budget_beverage_revenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Beverage Cost" value={summary.budget_beverage_cost} isCurrency icon={DollarSign} />
                   <DetailItem label="Budget Beverage Cost %" value={summary.budget_beverage_cost_pct} isPercentage icon={Percent}/>
                   <DetailItem 
                     label="Actual Beverage Cost" 
@@ -171,6 +175,86 @@ export default function DailyFinancialSummaryDetailDialog({
                   <p className="text-sm text-foreground bg-muted/50 p-3 rounded-md">{summary.notes}</p>
                 </>
               )}
+            </section>
+
+            {/* Budget vs Actual Comparison Section */}
+            <section className="p-4 border rounded-lg shadow-sm bg-background">
+              <h3 className="text-lg font-semibold mb-3 text-primary border-b pb-2 flex items-center">
+                <DollarSign className="h-5 w-5 mr-2"/>
+                Budget vs Actual Comparison
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+                {/* Food Budget vs Actual */}
+                <div className="space-y-1">
+                  <h4 className="text-md font-semibold text-foreground flex items-center mb-2">
+                    <Utensils className="h-5 w-5 mr-2 text-muted-foreground" />
+                    Food Budget vs Actual
+                  </h4>
+                  <DetailItem 
+                    label="Revenue Variance" 
+                    value={summary.actual_food_revenue && summary.budget_food_revenue ? summary.actual_food_revenue - summary.budget_food_revenue : null} 
+                    isCurrency 
+                    icon={summary.actual_food_revenue && summary.budget_food_revenue && (summary.actual_food_revenue - summary.budget_food_revenue) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actual_food_revenue && summary.budget_food_revenue && (summary.actual_food_revenue - summary.budget_food_revenue) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                  />
+                  <DetailItem 
+                    label="Revenue Achievement %" 
+                    value={summary.actual_food_revenue && summary.budget_food_revenue && summary.budget_food_revenue > 0 ? (summary.actual_food_revenue / summary.budget_food_revenue) * 100 : null} 
+                    isPercentage 
+                    icon={Percent}
+                    valueClassName="font-bold"
+                  />
+                  <DetailItem 
+                    label="Cost Variance" 
+                    value={summary.actual_food_cost && summary.budget_food_cost ? summary.actual_food_cost - summary.budget_food_cost : null} 
+                    isCurrency 
+                    icon={summary.actual_food_cost && summary.budget_food_cost && (summary.actual_food_cost - summary.budget_food_cost) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actual_food_cost && summary.budget_food_cost && (summary.actual_food_cost - summary.budget_food_cost) > 0 ? "text-destructive" : "text-green-600 dark:text-green-500")}
+                  />
+                  <DetailItem 
+                    label="Cost Control %" 
+                    value={summary.actual_food_cost_pct && summary.budget_food_cost_pct ? summary.budget_food_cost_pct - summary.actual_food_cost_pct : null} 
+                    isPercentage 
+                    icon={summary.actual_food_cost_pct && summary.budget_food_cost_pct && (summary.budget_food_cost_pct - summary.actual_food_cost_pct) > 0 ? TrendingDown : TrendingUp}
+                    valueClassName={cn("font-bold", summary.actual_food_cost_pct && summary.budget_food_cost_pct && (summary.budget_food_cost_pct - summary.actual_food_cost_pct) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                  />
+                </div>
+                {/* Beverage Budget vs Actual */}
+                <div className="space-y-1">
+                  <h4 className="text-md font-semibold text-foreground flex items-center mb-2">
+                    <GlassWater className="h-5 w-5 mr-2 text-muted-foreground" />
+                    Beverage Budget vs Actual
+                  </h4>
+                  <DetailItem 
+                    label="Revenue Variance" 
+                    value={summary.actual_beverage_revenue && summary.budget_beverage_revenue ? summary.actual_beverage_revenue - summary.budget_beverage_revenue : null} 
+                    isCurrency 
+                    icon={summary.actual_beverage_revenue && summary.budget_beverage_revenue && (summary.actual_beverage_revenue - summary.budget_beverage_revenue) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actual_beverage_revenue && summary.budget_beverage_revenue && (summary.actual_beverage_revenue - summary.budget_beverage_revenue) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                  />
+                  <DetailItem 
+                    label="Revenue Achievement %" 
+                    value={summary.actual_beverage_revenue && summary.budget_beverage_revenue && summary.budget_beverage_revenue > 0 ? (summary.actual_beverage_revenue / summary.budget_beverage_revenue) * 100 : null} 
+                    isPercentage 
+                    icon={Percent}
+                    valueClassName="font-bold"
+                  />
+                  <DetailItem 
+                    label="Cost Variance" 
+                    value={summary.actual_beverage_cost && summary.budget_beverage_cost ? summary.actual_beverage_cost - summary.budget_beverage_cost : null} 
+                    isCurrency 
+                    icon={summary.actual_beverage_cost && summary.budget_beverage_cost && (summary.actual_beverage_cost - summary.budget_beverage_cost) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actual_beverage_cost && summary.budget_beverage_cost && (summary.actual_beverage_cost - summary.budget_beverage_cost) > 0 ? "text-destructive" : "text-green-600 dark:text-green-500")}
+                  />
+                  <DetailItem 
+                    label="Cost Control %" 
+                    value={summary.actual_beverage_cost_pct && summary.budget_beverage_cost_pct ? summary.budget_beverage_cost_pct - summary.actual_beverage_cost_pct : null} 
+                    isPercentage 
+                    icon={summary.actual_beverage_cost_pct && summary.budget_beverage_cost_pct && (summary.budget_beverage_cost_pct - summary.actual_beverage_cost_pct) > 0 ? TrendingDown : TrendingUp}
+                    valueClassName={cn("font-bold", summary.actual_beverage_cost_pct && summary.budget_beverage_cost_pct && (summary.budget_beverage_cost_pct - summary.actual_beverage_cost_pct) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                  />
+                </div>
+              </div>
             </section>
 
             {/* Detailed Food Cost Entries Section */}
