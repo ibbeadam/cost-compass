@@ -3,15 +3,23 @@ import type { Timestamp } from "firebase/firestore";
 export interface Outlet {
   id: string;
   name: string;
-  createdAt?: Timestamp | Date; 
+  createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
   isActive?: boolean;
-  address?: string | { street?: string; city?: string; state?: string; zipCode?: string; country?: string };
+  address?:
+    | string
+    | {
+        street?: string;
+        city?: string;
+        state?: string;
+        zipCode?: string;
+        country?: string;
+      };
   phoneNumber?: string;
   email?: string;
-  type?: string; 
-  currency?: string; 
-  timezone?: string; 
+  type?: string;
+  currency?: string;
+  timezone?: string;
   defaultBudgetFoodCostPct?: number;
   defaultBudgetBeverageCostPct?: number;
   targetOccupancy?: number;
@@ -20,7 +28,7 @@ export interface Outlet {
 export interface Item {
   id: string;
   name: string;
-  category: 'Food' | 'Beverage';
+  category: "Food" | "Beverage";
   unit: string;
   cost_per_unit: number;
 }
@@ -29,7 +37,7 @@ export interface TransferItem {
   id: string;
   itemId: string;
   itemName: string;
-  category: 'Food' | 'Beverage';
+  category: "Food" | "Beverage";
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -37,7 +45,7 @@ export interface TransferItem {
 
 export interface DailyCostData {
   id: string;
-  date: string; 
+  date: string;
   outletId: string;
   outletName: string;
   foodRevenue: number;
@@ -51,7 +59,7 @@ export interface DailyCostData {
 }
 
 export interface HistoricalDataPoint {
-  date: string; 
+  date: string;
   foodCostPct: number;
   beverageCostPct: number;
 }
@@ -72,28 +80,28 @@ export interface CostFluctuationOutput {
 
 // CostDetailCategory for the existing comprehensive DailyHotelEntry
 export interface TransferInItem {
-  id: string; 
-  toOutletId: string; 
-  toOutletName: string; 
-  description: string; 
+  id: string;
+  toOutletId: string;
+  toOutletName: string;
+  description: string;
   amount: number;
-  category: 'Food' | 'Beverage'; 
+  category: "Food" | "Beverage";
 }
 
 export interface DirectPurchaseItem {
-  id: string; 
-  purchaseCategory: string; 
-  description?: string; 
+  id: string;
+  purchaseCategory: string;
+  description?: string;
   amount: number;
-  costCategory: 'Food' | 'Beverage'; 
+  costCategory: "Food" | "Beverage";
 }
 
 export interface CostAdjustmentItem {
-  id:string; 
-  description: string; 
-  amount: number; 
-  type: 'OtherCost' | 'TransferOut' | 'CreditAdjustment'; 
-  costCategory: 'Food' | 'Beverage'; 
+  id: string;
+  description: string;
+  amount: number;
+  type: "OtherCost" | "TransferOut" | "CreditAdjustment";
+  costCategory: "Food" | "Beverage";
 }
 
 export interface CostDetailCategory {
@@ -106,38 +114,38 @@ export interface CostDetailCategory {
 
 // Existing comprehensive DailyHotelEntry type (may be refactored/deprecated later)
 export interface DailyHotelEntry {
-  id: string; 
-  date: Timestamp | Date; 
-  hotelNetSales?: number; 
+  id: string;
+  date: Timestamp | Date;
+  hotelNetSales?: number;
   hotelNetFoodSales?: number;
-  budgetHotelFoodCostPct?: number; 
-  entFood?: number; 
-  ocFood?: number; 
-  otherFoodCredit?: number; 
+  budgetHotelFoodCostPct?: number;
+  entFood?: number;
+  ocFood?: number;
+  otherFoodCredit?: number;
   hotelNetBeverageSales?: number;
-  budgetHotelBeverageCostPct?: number; 
-  entBeverage?: number; 
-  ocBeverage?: number; 
-  otherBeverageCredit?: number; 
+  budgetHotelBeverageCostPct?: number;
+  entBeverage?: number;
+  ocBeverage?: number;
+  otherBeverageCredit?: number;
   foodCostDetails?: CostDetailCategory;
   beverageCostDetails?: CostDetailCategory;
-  notes?: string; 
-  userId?: string; 
+  notes?: string;
+  userId?: string;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
   calculatedNetFoodCost?: number;
   calculatedActualFoodCostPct?: number;
-  calculatedFoodCostVariancePct?: number; 
+  calculatedFoodCostVariancePct?: number;
   calculatedNetBeverageCost?: number;
   calculatedActualBeverageCostPct?: number;
-  calculatedBeverageCostVariancePct?: number; 
+  calculatedBeverageCostVariancePct?: number;
 }
 
 export interface Category {
   id: string;
   name: string;
   description?: string;
-  type: 'Food' | 'Beverage';
+  type: "Food" | "Beverage";
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
 }
@@ -148,17 +156,17 @@ export interface DailyFinancialSummary {
   id: string; // Document ID, format YYYY-MM-DD
   date: Timestamp | Date; // Firestore Timestamp or JS Date
   outlet_id: string;
-  
+
   // Renamed revenue fields
   actual_food_revenue: number; // Renamed from 'food_revenue' - Actual food revenue for the day
   actual_beverage_revenue: number; // Renamed from 'beverage_revenue' - Actual beverage revenue for the day
-  
+
   // New budget fields
   budget_food_revenue: number; // Budgeted food revenue for the day
   budget_beverage_revenue: number; // Budgeted beverage revenue for the day
   budget_food_cost: number; // Budgeted food cost for the day
   budget_beverage_cost: number; // Budgeted beverage cost for the day
-  
+
   gross_food_cost: number; // Sum of all FoodCostEntry.total_food_cost for the day
   gross_beverage_cost: number; // Sum of all BeverageCostEntry.total_beverage_cost for the day
   net_food_cost: number; // gross_food_cost - ent_food - oc_food - other_food_adjustment
@@ -180,14 +188,14 @@ export interface DailyFinancialSummary {
   other_beverage_adjustments: number; // Other beverage related adjustments
 
   // Calculated fields (will be populated later or calculated on the fly)
-  actual_food_cost?: number | null; 
+  actual_food_cost?: number | null;
   actual_food_cost_pct?: number | null;
-  food_variance_pct?: number | null; 
-  
-  actual_beverage_cost?: number | null; 
+  food_variance_pct?: number | null;
+
+  actual_beverage_cost?: number | null;
   actual_beverage_cost_pct?: number | null;
-  beverage_variance_pct?: number | null; 
-  
+  beverage_variance_pct?: number | null;
+
   notes?: string;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
@@ -196,7 +204,7 @@ export interface DailyFinancialSummary {
 export interface FoodCostEntry {
   id: string; // Firestore auto-ID
   date: Timestamp | Date;
-  outlet_id: string; 
+  outlet_id: string;
   total_food_cost: number;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
@@ -205,9 +213,9 @@ export interface FoodCostEntry {
 export interface FoodCostDetail {
   id: string; // Firestore auto-ID
   food_cost_entry_id: string; // FK to FoodCostEntries collection (document ID)
-  category_id: string; 
+  category_id: string;
   categoryName?: string; // Denormalized for display convenience
-  cost: number; 
+  cost: number;
   description?: string; // Optional: e.g., "Purchase from Sysco" or "Meat - Beef Tenderloin"
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
@@ -216,7 +224,7 @@ export interface FoodCostDetail {
 export interface BeverageCostEntry {
   id: string; // Firestore auto-ID
   date: Timestamp | Date;
-  outlet_id: string; 
+  outlet_id: string;
   total_beverage_cost: number;
   createdAt?: Timestamp | Date;
   updatedAt?: Timestamp | Date;
@@ -225,7 +233,7 @@ export interface BeverageCostEntry {
 export interface BeverageCostDetail {
   id: string; // Firestore auto-ID
   beverage_cost_entry_id: string; // FK to BeverageCostEntries collection (document ID)
-  category_id: string; 
+  category_id: string;
   categoryName?: string; // Denormalized for display convenience
   cost: number;
   description?: string;
@@ -273,17 +281,26 @@ export interface DetailedFoodCostReport {
   outletName: string;
   outletId: string;
   dateRange: { from: Date; to: Date };
-  categoryCosts: { categoryName: string; totalCost: number; percentageOfTotalCost?: number }[];
-  totalCostFromTransfers: number;  // Total cost from food cost entries
-  otherAdjustmentsFood: number;    // Other food adjustments from daily summary
-  ocFoodTotal: number;            // Officer check food from daily summary
-  entFoodTotal: number;           // Entertainment food from daily summary
-  totalCostOfFood: number;        // Calculated as: totalCostFromTransfers - ocFoodTotal - entFoodTotal + otherAdjustmentsFood
-  totalFoodRevenue: number;       // Total food revenue from daily summary
-  foodCostPercentage: number;     // Calculated as: (totalCostOfFood / totalFoodRevenue) * 100
+  categoryCosts: {
+    categoryName: string;
+    totalCost: number;
+    percentageOfTotalCost?: number;
+  }[];
+  totalCostFromTransfers: number; // Total cost from food cost entries
+  otherAdjustmentsFood: number; // Other food adjustments from daily summary
+  ocFoodTotal: number; // Officer check food from daily summary
+  entFoodTotal: number; // Entertainment food from daily summary
+  totalCostOfFood: number; // Calculated as: totalCostFromTransfers - ocFoodTotal - entFoodTotal + otherAdjustmentsFood
+  totalFoodRevenue: number; // Total food revenue from daily summary
+  foodCostPercentage: number; // Calculated as: (totalCostOfFood / totalFoodRevenue) * 100
   budgetFoodCostPercentage: number; // Average budget food cost percentage from daily summary
-  variancePercentage: number;     // Calculated as: foodCostPercentage - budgetFoodCostPercentage
-  foodCostDetailsByItem: { categoryName: string; description: string; cost: number; percentageOfTotalCost?: number }[];
+  variancePercentage: number; // Calculated as: foodCostPercentage - budgetFoodCostPercentage
+  foodCostDetailsByItem: {
+    categoryName: string;
+    description: string;
+    cost: number;
+    percentageOfTotalCost?: number;
+  }[];
 }
 
 export interface DetailedFoodCostReportResponse {
@@ -296,16 +313,20 @@ export interface DetailedBeverageCostReport {
   outletId: string;
   dateRange: { from: Date; to: Date };
   categoryCosts: { categoryName: string; totalCost: number }[];
-  totalCostFromTransfers: number;  // Total cost from beverage cost entries
-  otherAdjustmentsBeverage: number;    // Other beverage adjustments from daily summary
-  ocBeverageTotal: number;            // Officer check beverage from daily summary
-  entBeverageTotal: number;           // Entertainment beverage from daily summary
-  totalCostOfBeverage: number;        // Calculated as: totalCostFromTransfers - ocBeverageTotal - entBeverageTotal + otherAdjustmentsBeverage
-  totalBeverageRevenue: number;       // Total beverage revenue from daily summary
-  beverageCostPercentage: number;     // Calculated as: (totalCostOfBeverage / totalBeverageRevenue) * 100
+  totalCostFromTransfers: number; // Total cost from beverage cost entries
+  otherAdjustmentsBeverage: number; // Other beverage adjustments from daily summary
+  ocBeverageTotal: number; // Officer check beverage from daily summary
+  entBeverageTotal: number; // Entertainment beverage from daily summary
+  totalCostOfBeverage: number; // Calculated as: totalCostFromTransfers - ocBeverageTotal - entBeverageTotal + otherAdjustmentsBeverage
+  totalBeverageRevenue: number; // Total beverage revenue from daily summary
+  beverageCostPercentage: number; // Calculated as: (totalCostOfBeverage / totalBeverageRevenue) * 100
   budgetBeverageCostPercentage: number; // Average budget beverage cost percentage from daily summary
-  variancePercentage: number;     // Calculated as: beverageCostPercentage - budgetBeverageCostPercentage
-  beverageCostDetailsByItem: { categoryName: string; description: string; cost: number }[];
+  variancePercentage: number; // Calculated as: beverageCostPercentage - budgetBeverageCostPercentage
+  beverageCostDetailsByItem: {
+    categoryName: string;
+    description: string;
+    cost: number;
+  }[];
 }
 
 export interface DetailedBeverageCostReportResponse {
@@ -327,7 +348,7 @@ export interface MonthlyProfitLossReport {
   overallCostPercentage: number;
   averageBudgetFoodCostPct: number;
   averageBudgetBeverageCostPct: number;
-  
+
   // New fields for detailed P&L statement
   incomeItems: PLStatementItem[];
   salesReturnsAllowances: number; // A negative value
@@ -354,7 +375,7 @@ export interface CostAnalysisByCategoryReport {
   totalFoodRevenue: number;
   totalBeverageRevenue: number;
   totalRevenue: number;
-  
+
   // Food categories analysis
   foodCategories: {
     categoryName: string;
@@ -370,7 +391,7 @@ export interface CostAnalysisByCategoryReport {
       percentageOfOutletFoodCost: number;
     }[];
   }[];
-  
+
   // Beverage categories analysis
   beverageCategories: {
     categoryName: string;
@@ -386,7 +407,7 @@ export interface CostAnalysisByCategoryReport {
       percentageOfOutletBeverageCost: number;
     }[];
   }[];
-  
+
   // Summary statistics
   totalFoodCost: number;
   totalBeverageCost: number;
@@ -394,14 +415,14 @@ export interface CostAnalysisByCategoryReport {
   overallFoodCostPercentage: number;
   overallBeverageCostPercentage: number;
   overallCostPercentage: number;
-  
+
   // Top performing categories
   topFoodCategories: {
     categoryName: string;
     totalCost: number;
     percentageOfTotalFoodCost: number;
   }[];
-  
+
   topBeverageCategories: {
     categoryName: string;
     totalCost: number;
@@ -413,7 +434,7 @@ export interface BudgetVsActualsReport {
   dateRange: { from: Date; to: Date };
   outletId?: string;
   outletName?: string;
-  
+
   // Food Budget vs Actuals
   foodBudget: {
     budgetedRevenue: number;
@@ -432,7 +453,7 @@ export interface BudgetVsActualsReport {
     costVariancePercentage: number;
     costPercentageVariance: number;
   };
-  
+
   // Beverage Budget vs Actuals
   beverageBudget: {
     budgetedRevenue: number;
@@ -451,7 +472,7 @@ export interface BudgetVsActualsReport {
     costVariancePercentage: number;
     costPercentageVariance: number;
   };
-  
+
   // Combined F&B Summary
   combinedBudget: {
     budgetedRevenue: number;
@@ -470,7 +491,7 @@ export interface BudgetVsActualsReport {
     costVariancePercentage: number;
     costPercentageVariance: number;
   };
-  
+
   // Daily breakdown for trend analysis
   dailyBreakdown: {
     date: Date;
@@ -483,7 +504,7 @@ export interface BudgetVsActualsReport {
     beverageBudgetedCost: number;
     beverageActualCost: number;
   }[];
-  
+
   // Performance indicators
   performanceIndicators: {
     foodRevenueAchievement: number; // Percentage of budget achieved
@@ -498,7 +519,7 @@ export interface DailyRevenueTrendsReport {
   dateRange: { from: Date; to: Date };
   outletId?: string;
   outletName?: string;
-  
+
   // Summary statistics
   summary: {
     totalFoodRevenue: number;
@@ -521,7 +542,7 @@ export interface DailyRevenueTrendsReport {
       totalRevenue: number;
     };
   };
-  
+
   // Daily trends data
   dailyTrends: {
     date: Date;
@@ -531,11 +552,11 @@ export interface DailyRevenueTrendsReport {
     foodRevenueChange: number; // Change from previous day
     beverageRevenueChange: number;
     totalRevenueChange: number;
-    foodRevenueChangePercentage: number;
-    beverageRevenueChangePercentage: number;
-    totalRevenueChangePercentage: number;
+    foodRevenueChangePercentage: number | null;
+    beverageRevenueChangePercentage: number | null;
+    totalRevenueChangePercentage: number | null;
   }[];
-  
+
   // Weekly aggregation
   weeklyTrends: {
     weekStart: Date;
@@ -549,7 +570,7 @@ export interface DailyRevenueTrendsReport {
     averageDailyTotalRevenue: number;
     daysInWeek: number;
   }[];
-  
+
   // Performance metrics
   performanceMetrics: {
     foodRevenueGrowth: number; // Overall growth rate
@@ -562,12 +583,12 @@ export interface DailyRevenueTrendsReport {
     worstPerformingDay: string;
     revenueConsistency: number; // How consistent revenue is (0-100)
   };
-  
+
   // Trend analysis
   trendAnalysis: {
-    overallTrend: 'increasing' | 'decreasing' | 'stable';
-    foodTrend: 'increasing' | 'decreasing' | 'stable';
-    beverageTrend: 'increasing' | 'decreasing' | 'stable';
+    overallTrend: "increasing" | "decreasing" | "stable";
+    foodTrend: "increasing" | "decreasing" | "stable";
+    beverageTrend: "increasing" | "decreasing" | "stable";
     trendStrength: number; // 0-100, how strong the trend is
     seasonalityDetected: boolean;
     peakDays: string[]; // Days with consistently higher revenue
@@ -577,6 +598,7 @@ export interface DailyRevenueTrendsReport {
 
 export interface DashboardReportData {
   outletMetrics: any;
+  outletBeverageMetrics: any; // Added for beverage metrics support
   summaryStats: {
     totalFoodRevenue: number;
     totalBeverageRevenue: number;
@@ -594,6 +616,7 @@ export interface DashboardReportData {
   costAnalysisByCategoryReport?: CostAnalysisByCategoryReport;
   budgetVsActualsReport?: BudgetVsActualsReport;
   dailyRevenueTrendsReport?: DailyRevenueTrendsReport;
+  dailySummaries?: any[]; // For stat card trend charts
 }
 
 // Type for Managed User (placeholder)
@@ -601,7 +624,7 @@ export interface ManagedUser {
   uid: string;
   email: string | null;
   displayName: string | null;
-  role?: 'admin' | 'user'; // Simplified roles for now
+  role?: "admin" | "user"; // Simplified roles for now
   disabled?: boolean;
   creationTime?: string; // Or Date
   lastSignInTime?: string; // Or Date
@@ -611,7 +634,7 @@ export interface User {
   id: string;
   email: string;
   displayName?: string;
-  role: 'admin' | 'manager' | 'user';
+  role: "admin" | "manager" | "user";
   isActive: boolean;
   createdAt: Date | Timestamp;
   updatedAt: Date | Timestamp;
@@ -624,7 +647,7 @@ export interface User {
 export interface CreateUserData {
   email: string;
   displayName?: string;
-  role: 'admin' | 'manager' | 'user';
+  role: "admin" | "manager" | "user";
   department?: string;
   phoneNumber?: string;
   permissions?: string[];
@@ -632,7 +655,7 @@ export interface CreateUserData {
 
 export interface UpdateUserData {
   displayName?: string;
-  role?: 'admin' | 'manager' | 'user';
+  role?: "admin" | "manager" | "user";
   isActive?: boolean;
   department?: string;
   phoneNumber?: string;

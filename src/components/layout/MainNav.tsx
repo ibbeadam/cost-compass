@@ -1,9 +1,9 @@
 // src/components/layout/MainNav.tsx
 "use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import * as React from 'react';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import * as React from "react";
 import {
   SidebarMenu,
   SidebarMenuItem,
@@ -11,11 +11,22 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
   SidebarMenuSubButton,
-} from '@/components/ui/sidebar';
-import { LayoutDashboard, Settings, FileText, Building, ListChecks, DollarSign, ClipboardList, GlassWater, Users } from 'lucide-react'; // Added Users icon
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext'; // Added useAuth
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+} from "@/components/ui/sidebar";
+import {
+  LayoutDashboard,
+  Settings,
+  FileText,
+  Building,
+  ListChecks,
+  DollarSign,
+  ClipboardList,
+  GlassWater,
+  Users,
+} from "lucide-react"; // Added Users icon
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext"; // Added useAuth
+import { Skeleton } from "@/components/ui/skeleton"; // Import Skeleton
+import { useSidebar } from "@/components/ui/sidebar"; // Add this import
 
 interface NavItem {
   href: string;
@@ -25,26 +36,44 @@ interface NavItem {
 }
 
 const navItemsBase: NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/financial-summary', label: 'Daily Financial Summary', icon: DollarSign },
-  { href: '/dashboard/food-cost-input', label: 'Food Cost Input', icon: ClipboardList },
-  { href: '/dashboard/beverage-cost-input', label: 'Beverage Cost Input', icon: GlassWater },
-  { href: '/dashboard/reports', label: 'Reports', icon: FileText },
-  { href: '/dashboard/outlets', label: 'Manage Outlets', icon: Building },
-  { href: '/dashboard/categories', label: 'Manage Categories', icon: ListChecks },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  {
+    href: "/dashboard/financial-summary",
+    label: "Daily Financial Summary",
+    icon: DollarSign,
+  },
+  {
+    href: "/dashboard/food-cost-input",
+    label: "Food Cost Input",
+    icon: ClipboardList,
+  },
+  {
+    href: "/dashboard/beverage-cost-input",
+    label: "Beverage Cost Input",
+    icon: GlassWater,
+  },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText },
+  { href: "/dashboard/outlets", label: "Manage Outlets", icon: Building },
+  {
+    href: "/dashboard/categories",
+    label: "Manage Categories",
+    icon: ListChecks,
+  },
 ];
 
 const adminNavItems: NavItem[] = [
-  { href: '/dashboard/users', label: 'Manage Users', icon: Users },
+  { href: "/dashboard/users", label: "Manage Users", icon: Users },
 ];
 
 const settingsNavItem: NavItem = {
-  href: '/dashboard/settings',
-  label: 'General Settings',
+  href: "/dashboard/settings",
+  label: "General Settings",
   icon: Settings,
 };
 
-const SidebarMenuSkeleton: React.FC<{ showIcon?: boolean }> = ({ showIcon }) => (
+const SidebarMenuSkeleton: React.FC<{ showIcon?: boolean }> = ({
+  showIcon,
+}) => (
   <div className="flex items-center space-x-3 p-2">
     {showIcon && <Skeleton className="h-5 w-5 rounded-full bg-muted" />}
     <Skeleton className="h-4 w-3/4 bg-muted" />
@@ -55,10 +84,16 @@ export function MainNav() {
   const [isMounted, setIsMounted] = React.useState(false);
   const pathname = usePathname();
   const { isAdmin, loading: authLoading } = useAuth(); // Get isAdmin and authLoading
+  const { isMobile, setOpenMobile } = useSidebar(); // Add this line
 
   React.useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  // Handler to close sidebar on mobile after navigation
+  const handleNavClick = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
   const isActive = (href: string) => {
     if (!isMounted) {
@@ -67,7 +102,7 @@ export function MainNav() {
     if (pathname === href) {
       return true;
     }
-    if (href !== '/dashboard' && pathname.startsWith(href + '/')) {
+    if (href !== "/dashboard" && pathname.startsWith(href + "/")) {
       return true;
     }
     return false;
@@ -82,8 +117,8 @@ export function MainNav() {
     return items;
   }, [isAdmin]);
 
-
-  if (authLoading && !isMounted) { // Show skeletons if auth is loading and not yet mounted
+  if (authLoading && !isMounted) {
+    // Show skeletons if auth is loading and not yet mounted
     return (
       <SidebarMenu>
         {[...Array(7)].map((_, i) => (
@@ -94,7 +129,6 @@ export function MainNav() {
       </SidebarMenu>
     );
   }
-
 
   return (
     <SidebarMenu>
@@ -108,35 +142,44 @@ export function MainNav() {
               className={cn(
                 "justify-start",
                 isActive(item.href)
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                item.disabled && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-sidebar-foreground"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                item.disabled &&
+                  "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-sidebar-foreground"
               )}
-              tooltip={{children: item.label, side: "right", className: "bg-card text-card-foreground border-border"}}
+              tooltip={{
+                children: item.label,
+                side: "right",
+                className: "bg-card text-card-foreground border-border",
+              }}
             >
-              <a>
+              <a onClick={handleNavClick}>
                 <item.icon className="h-5 w-5 mr-3 flex-shrink-0" />
-                <span className="group-data-[state=collapsed]:hidden">{item.label}</span>
+                <span className="group-data-[state=collapsed]:hidden">
+                  {item.label}
+                </span>
               </a>
             </SidebarMenuButton>
           </Link>
           {(item as any).subItems && (item as any).subItems.length > 0 && (
-             <SidebarMenuSub>
+            <SidebarMenuSub>
               {(item as any).subItems.map((subItem: any) => (
                 <SidebarMenuSubItem key={subItem.href}>
-                   <Link href={subItem.href} legacyBehavior passHref>
+                  <Link href={subItem.href} legacyBehavior passHref>
                     <SidebarMenuSubButton
                       asChild
                       isActive={isMounted && pathname === subItem.href}
-                       className={cn(
+                      className={cn(
                         isMounted && pathname === subItem.href
-                        ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
-                        : "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
+                          ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
+                          : "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                       )}
                     >
-                       <a>
+                      <a>
                         <subItem.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span className="group-data-[state=collapsed]:hidden">{subItem.label}</span>
+                        <span className="group-data-[state=collapsed]:hidden">
+                          {subItem.label}
+                        </span>
                       </a>
                     </SidebarMenuSubButton>
                   </Link>

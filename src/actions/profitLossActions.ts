@@ -1,9 +1,27 @@
 "use server";
 
-import { collection, query, where, getDocs, Timestamp, orderBy, getDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  Timestamp,
+  orderBy,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import type { DailyFinancialSummary, MonthlyProfitLossReport, PLStatementItem, Outlet, FoodCostEntry, BeverageCostEntry, BudgetVsActualsReport, DailyRevenueTrendsReport } from "@/types";
+import type {
+  DailyFinancialSummary,
+  MonthlyProfitLossReport,
+  PLStatementItem,
+  Outlet,
+  FoodCostEntry,
+  BeverageCostEntry,
+  BudgetVsActualsReport,
+  DailyRevenueTrendsReport,
+} from "@/types";
 import { getOutletsAction } from "./foodCostActions";
 
 const DAILY_FINANCIAL_SUMMARIES_COLLECTION = "dailyFinancialSummaries";
@@ -64,17 +82,36 @@ export async function getMonthlyProfitLossReportAction(
   const totalActualCost = totalActualFoodCost + totalActualBeverageCost;
   const grossProfit = totalRevenue - totalActualCost;
 
-  const foodCostPercentage = totalFoodRevenue > 0 ? (totalActualFoodCost / totalFoodRevenue) * 100 : 0;
-  const beverageCostPercentage = totalBeverageRevenue > 0 ? (totalActualBeverageCost / totalBeverageRevenue) * 100 : 0;
-  const overallCostPercentage = totalRevenue > 0 ? (totalActualCost / totalRevenue) * 100 : 0;
+  const foodCostPercentage =
+    totalFoodRevenue > 0 ? (totalActualFoodCost / totalFoodRevenue) * 100 : 0;
+  const beverageCostPercentage =
+    totalBeverageRevenue > 0
+      ? (totalActualBeverageCost / totalBeverageRevenue) * 100
+      : 0;
+  const overallCostPercentage =
+    totalRevenue > 0 ? (totalActualCost / totalRevenue) * 100 : 0;
 
-  const averageBudgetFoodCostPct = budgetFoodCostPctCount > 0 ? totalBudgetFoodCostPct / budgetFoodCostPctCount : 0;
-  const averageBudgetBeverageCostPct = budgetBeverageCostPctCount > 0 ? totalBudgetBeverageCostPct / budgetBeverageCostPctCount : 0;
+  const averageBudgetFoodCostPct =
+    budgetFoodCostPctCount > 0
+      ? totalBudgetFoodCostPct / budgetFoodCostPctCount
+      : 0;
+  const averageBudgetBeverageCostPct =
+    budgetBeverageCostPctCount > 0
+      ? totalBudgetBeverageCostPct / budgetBeverageCostPctCount
+      : 0;
 
   // Calculate income items based on actual data
   const incomeItems: PLStatementItem[] = [
-    { referenceId: "A1111-4267", description: "Food Revenue", amount: totalFoodRevenue },
-    { referenceId: "A1111-4268", description: "Beverage Revenue", amount: totalBeverageRevenue },
+    {
+      referenceId: "A1111-4267",
+      description: "Food Revenue",
+      amount: totalFoodRevenue,
+    },
+    {
+      referenceId: "A1111-4268",
+      description: "Beverage Revenue",
+      amount: totalBeverageRevenue,
+    },
   ];
   const salesReturnsAllowances = 0; // No returns/allowances data available
 
@@ -83,10 +120,21 @@ export async function getMonthlyProfitLossReportAction(
 
   // Calculate expense items based on actual cost data
   const expenseItems: PLStatementItem[] = [
-    { referenceId: "R4444-5345", description: "Food Cost", amount: totalActualFoodCost },
-    { referenceId: "R4444-5346", description: "Beverage Cost", amount: totalActualBeverageCost },
+    {
+      referenceId: "R4444-5345",
+      description: "Food Cost",
+      amount: totalActualFoodCost,
+    },
+    {
+      referenceId: "R4444-5346",
+      description: "Beverage Cost",
+      amount: totalActualBeverageCost,
+    },
   ];
-  const totalExpenses = expenseItems.reduce((sum, item) => sum + item.amount, 0);
+  const totalExpenses = expenseItems.reduce(
+    (sum, item) => sum + item.amount,
+    0
+  );
 
   const netIncomeBeforeTaxes = totalRevenuePL - totalExpenses;
   const taxRate = 0; // No tax data available
@@ -193,7 +241,7 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
     );
     const foodEntriesSnapshot = await getDocs(foodEntriesQuery);
     let foodTotal = 0;
-    foodEntriesSnapshot.forEach(doc => {
+    foodEntriesSnapshot.forEach((doc) => {
       const entry = doc.data() as FoodCostEntry;
       foodTotal += entry.total_food_cost || 0;
     });
@@ -208,7 +256,7 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
     );
     const beverageEntriesSnapshot = await getDocs(beverageEntriesQuery);
     let beverageTotal = 0;
-    beverageEntriesSnapshot.forEach(doc => {
+    beverageEntriesSnapshot.forEach((doc) => {
       const entry = doc.data() as BeverageCostEntry;
       beverageTotal += entry.total_beverage_cost || 0;
     });
@@ -217,8 +265,16 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
 
   // 4. Prepare Income Section
   const incomeItems: PLStatementItem[] = [
-    { referenceId: "INCOME-FOOD", description: "Food Revenue", amount: totalFoodRevenue },
-    { referenceId: "INCOME-BEVERAGE", description: "Beverage Revenue", amount: totalBeverageRevenue },
+    {
+      referenceId: "INCOME-FOOD",
+      description: "Food Revenue",
+      amount: totalFoodRevenue,
+    },
+    {
+      referenceId: "INCOME-BEVERAGE",
+      description: "Beverage Revenue",
+      amount: totalBeverageRevenue,
+    },
   ];
   const totalIncome = totalFoodRevenue + totalBeverageRevenue;
 
@@ -240,8 +296,14 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
       });
     }
   }
-  const totalFoodExpense = Object.values(foodExpenseByOutlet).reduce((a, b) => a + b, 0);
-  const totalBeverageExpense = Object.values(beverageExpenseByOutlet).reduce((a, b) => a + b, 0);
+  const totalFoodExpense = Object.values(foodExpenseByOutlet).reduce(
+    (a, b) => a + b,
+    0
+  );
+  const totalBeverageExpense = Object.values(beverageExpenseByOutlet).reduce(
+    (a, b) => a + b,
+    0
+  );
   const totalExpenses = totalFoodExpense + totalBeverageExpense;
 
   // 6. OC/ENT and Other Adjustments
@@ -251,24 +313,41 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
   const totalOtherAdjBeverage = totalOtherBeverageAdjustments;
 
   // 7. Total Actual Cost
-  const totalActualCostFood = totalFoodExpense - totalOCENTFood + totalOtherAdjFood;
-  const totalActualCostBeverage = totalBeverageExpense - totalOCENTBeverage + totalOtherAdjBeverage;
+  const totalActualCostFood =
+    totalFoodExpense - totalOCENTFood + totalOtherAdjFood;
+  const totalActualCostBeverage =
+    totalBeverageExpense - totalOCENTBeverage + totalOtherAdjBeverage;
   const totalActualCost = totalActualCostFood + totalActualCostBeverage;
 
   // 8. Net Income
   const netIncome = totalIncome - totalActualCost;
 
   // 9. Prepare monthYear label
-  const monthYear = format(startDate, "MMM dd, yyyy") === format(endDate, "MMM dd, yyyy")
-    ? format(startDate, "MMMM yyyy")
-    : `${format(startDate, "MMM dd, yyyy")} - ${format(endDate, "MMM dd, yyyy")}`;
+  const monthYear =
+    format(startDate, "MMM dd, yyyy") === format(endDate, "MMM dd, yyyy")
+      ? format(startDate, "MMMM yyyy")
+      : `${format(startDate, "MMM dd, yyyy")} - ${format(
+          endDate,
+          "MMM dd, yyyy"
+        )}`;
 
   // 10. Calculate percentages for summary cards
-  const foodCostPercentage = totalFoodRevenue > 0 ? (totalActualCostFood / totalFoodRevenue) * 100 : 0;
-  const beverageCostPercentage = totalBeverageRevenue > 0 ? (totalActualCostBeverage / totalBeverageRevenue) * 100 : 0;
-  const overallCostPercentage = totalIncome > 0 ? (totalActualCost / totalIncome) * 100 : 0;
-  const averageBudgetFoodCostPct = budgetFoodCostPctCount > 0 ? totalBudgetFoodCostPct / budgetFoodCostPctCount : 0;
-  const averageBudgetBeverageCostPct = budgetBeverageCostPctCount > 0 ? totalBudgetBeverageCostPct / budgetBeverageCostPctCount : 0;
+  const foodCostPercentage =
+    totalFoodRevenue > 0 ? (totalActualCostFood / totalFoodRevenue) * 100 : 0;
+  const beverageCostPercentage =
+    totalBeverageRevenue > 0
+      ? (totalActualCostBeverage / totalBeverageRevenue) * 100
+      : 0;
+  const overallCostPercentage =
+    totalIncome > 0 ? (totalActualCost / totalIncome) * 100 : 0;
+  const averageBudgetFoodCostPct =
+    budgetFoodCostPctCount > 0
+      ? totalBudgetFoodCostPct / budgetFoodCostPctCount
+      : 0;
+  const averageBudgetBeverageCostPct =
+    budgetBeverageCostPctCount > 0
+      ? totalBudgetBeverageCostPct / budgetBeverageCostPctCount
+      : 0;
 
   return {
     monthYear,
@@ -307,8 +386,12 @@ export async function getBudgetVsActualsReportAction(
   endDate: Date,
   outletId?: string
 ): Promise<BudgetVsActualsReport> {
-  console.log(`[getBudgetVsActualsReportAction] Generating report for ${startDate.toISOString()} to ${endDate.toISOString()}, outlet: ${outletId || 'all'}`);
-  
+  console.log(
+    `[getBudgetVsActualsReportAction] Generating report for ${startDate.toISOString()} to ${endDate.toISOString()}, outlet: ${
+      outletId || "all"
+    }`
+  );
+
   if (!db) {
     throw new Error("Firebase not initialized");
   }
@@ -336,25 +419,71 @@ export async function getBudgetVsActualsReportAction(
   }
 
   const summarySnapshot = await getDocs(summaryQuery);
-  
+
   if (summarySnapshot.empty) {
-    console.log(`[getBudgetVsActualsReportAction] No DailyFinancialSummary documents found for date range`);
+    console.log(
+      `[getBudgetVsActualsReportAction] No DailyFinancialSummary documents found for date range`
+    );
     // Return empty report structure
     return {
       dateRange: { from: startDate, to: endDate },
       outletId,
       outletName: outletId && outletId !== "all" ? "Unknown Outlet" : undefined,
-      foodBudget: { budgetedRevenue: 0, budgetedCostPercentage: 0, budgetedCost: 0 },
+      foodBudget: {
+        budgetedRevenue: 0,
+        budgetedCostPercentage: 0,
+        budgetedCost: 0,
+      },
       foodActual: { actualRevenue: 0, actualCost: 0, actualCostPercentage: 0 },
-      foodVariance: { revenueVariance: 0, revenueVariancePercentage: 0, costVariance: 0, costVariancePercentage: 0, costPercentageVariance: 0 },
-      beverageBudget: { budgetedRevenue: 0, budgetedCostPercentage: 0, budgetedCost: 0 },
-      beverageActual: { actualRevenue: 0, actualCost: 0, actualCostPercentage: 0 },
-      beverageVariance: { revenueVariance: 0, revenueVariancePercentage: 0, costVariance: 0, costVariancePercentage: 0, costPercentageVariance: 0 },
-      combinedBudget: { budgetedRevenue: 0, budgetedCost: 0, budgetedCostPercentage: 0 },
-      combinedActual: { actualRevenue: 0, actualCost: 0, actualCostPercentage: 0 },
-      combinedVariance: { revenueVariance: 0, revenueVariancePercentage: 0, costVariance: 0, costVariancePercentage: 0, costPercentageVariance: 0 },
+      foodVariance: {
+        revenueVariance: 0,
+        revenueVariancePercentage: 0,
+        costVariance: 0,
+        costVariancePercentage: 0,
+        costPercentageVariance: 0,
+      },
+      beverageBudget: {
+        budgetedRevenue: 0,
+        budgetedCostPercentage: 0,
+        budgetedCost: 0,
+      },
+      beverageActual: {
+        actualRevenue: 0,
+        actualCost: 0,
+        actualCostPercentage: 0,
+      },
+      beverageVariance: {
+        revenueVariance: 0,
+        revenueVariancePercentage: 0,
+        costVariance: 0,
+        costVariancePercentage: 0,
+        costPercentageVariance: 0,
+      },
+      combinedBudget: {
+        budgetedRevenue: 0,
+        budgetedCost: 0,
+        budgetedCostPercentage: 0,
+      },
+      combinedActual: {
+        actualRevenue: 0,
+        actualCost: 0,
+        actualCostPercentage: 0,
+      },
+      combinedVariance: {
+        revenueVariance: 0,
+        revenueVariancePercentage: 0,
+        costVariance: 0,
+        costVariancePercentage: 0,
+        costPercentageVariance: 0,
+      },
       dailyBreakdown: [],
-      performanceIndicators: { foodRevenueAchievement: 0, beverageRevenueAchievement: 0, foodCostControl: 0, beverageCostControl: 0, overallPerformance: 0 }
+      performanceIndicators: {
+        foodRevenueAchievement: 0,
+        beverageRevenueAchievement: 0,
+        foodCostControl: 0,
+        beverageCostControl: 0,
+        overallPerformance: 0,
+      },
     };
   }
 
@@ -367,7 +496,10 @@ export async function getBudgetVsActualsReportAction(
         outletName = outletDoc.data().name;
       }
     } catch (error) {
-      console.error(`[getBudgetVsActualsReportAction] Error fetching outlet name:`, error);
+      console.error(
+        `[getBudgetVsActualsReportAction] Error fetching outlet name:`,
+        error
+      );
     }
   }
 
@@ -380,37 +512,40 @@ export async function getBudgetVsActualsReportAction(
   let totalBeverageActualRevenue = 0;
   let totalBeverageBudgetedCost = 0;
   let totalBeverageActualCost = 0;
-  
-  const dailyBreakdown: BudgetVsActualsReport['dailyBreakdown'] = [];
+
+  const dailyBreakdown: BudgetVsActualsReport["dailyBreakdown"] = [];
 
   summarySnapshot.forEach((doc) => {
     const data = doc.data() as DailyFinancialSummary;
-    const date = data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as any);
-    
+    const date =
+      data.date instanceof Timestamp
+        ? data.date.toDate()
+        : new Date(data.date as any);
+
     // Food calculations - using new field names
     const foodActualRevenue = data.actual_food_revenue || 0;
     const foodBudgetedRevenue = data.budget_food_revenue || 0;
     const foodBudgetedCost = data.budget_food_cost || 0;
     const foodActualCost = data.actual_food_cost || 0;
     const foodBudgetPct = data.budget_food_cost_pct || 0;
-    
+
     totalFoodBudgetedRevenue += foodBudgetedRevenue;
     totalFoodActualRevenue += foodActualRevenue;
     totalFoodBudgetedCost += foodBudgetedCost;
     totalFoodActualCost += foodActualCost;
-    
+
     // Beverage calculations - using new field names
     const beverageActualRevenue = data.actual_beverage_revenue || 0;
     const beverageBudgetedRevenue = data.budget_beverage_revenue || 0;
     const beverageBudgetedCost = data.budget_beverage_cost || 0;
     const beverageActualCost = data.actual_beverage_cost || 0;
     const beverageBudgetPct = data.budget_beverage_cost_pct || 0;
-    
+
     totalBeverageBudgetedRevenue += beverageBudgetedRevenue;
     totalBeverageActualRevenue += beverageActualRevenue;
     totalBeverageBudgetedCost += beverageBudgetedCost;
     totalBeverageActualCost += beverageActualCost;
-    
+
     // Daily breakdown
     dailyBreakdown.push({
       date,
@@ -427,56 +562,110 @@ export async function getBudgetVsActualsReportAction(
 
   // 4. Calculate variances
   const foodRevenueVariance = totalFoodActualRevenue - totalFoodBudgetedRevenue;
-  const foodRevenueVariancePercentage = totalFoodBudgetedRevenue > 0 ? (foodRevenueVariance / totalFoodBudgetedRevenue) * 100 : 0;
+  const foodRevenueVariancePercentage =
+    totalFoodBudgetedRevenue > 0
+      ? (foodRevenueVariance / totalFoodBudgetedRevenue) * 100
+      : 0;
   const foodCostVariance = totalFoodActualCost - totalFoodBudgetedCost;
-  const foodCostVariancePercentage = totalFoodBudgetedCost > 0 ? (foodCostVariance / totalFoodBudgetedCost) * 100 : 0;
-  
-  const beverageRevenueVariance = totalBeverageActualRevenue - totalBeverageBudgetedRevenue;
-  const beverageRevenueVariancePercentage = totalBeverageBudgetedRevenue > 0 ? (beverageRevenueVariance / totalBeverageBudgetedRevenue) * 100 : 0;
-  const beverageCostVariance = totalBeverageActualCost - totalBeverageBudgetedCost;
-  const beverageCostVariancePercentage = totalBeverageBudgetedCost > 0 ? (beverageCostVariance / totalBeverageBudgetedCost) * 100 : 0;
+  const foodCostVariancePercentage =
+    totalFoodBudgetedCost > 0
+      ? (foodCostVariance / totalFoodBudgetedCost) * 100
+      : 0;
+
+  const beverageRevenueVariance =
+    totalBeverageActualRevenue - totalBeverageBudgetedRevenue;
+  const beverageRevenueVariancePercentage =
+    totalBeverageBudgetedRevenue > 0
+      ? (beverageRevenueVariance / totalBeverageBudgetedRevenue) * 100
+      : 0;
+  const beverageCostVariance =
+    totalBeverageActualCost - totalBeverageBudgetedCost;
+  const beverageCostVariancePercentage =
+    totalBeverageBudgetedCost > 0
+      ? (beverageCostVariance / totalBeverageBudgetedCost) * 100
+      : 0;
 
   // 5. Calculate percentages
-  const foodBudgetedCostPercentage = totalFoodBudgetedRevenue > 0 ? (totalFoodBudgetedCost / totalFoodBudgetedRevenue) * 100 : 0;
-  const foodActualCostPercentage = totalFoodActualRevenue > 0 ? (totalFoodActualCost / totalFoodActualRevenue) * 100 : 0;
-  const foodCostPercentageVariance = foodActualCostPercentage - foodBudgetedCostPercentage;
-  
-  const beverageBudgetedCostPercentage = totalBeverageBudgetedRevenue > 0 ? (totalBeverageBudgetedCost / totalBeverageBudgetedRevenue) * 100 : 0;
-  const beverageActualCostPercentage = totalBeverageActualRevenue > 0 ? (totalBeverageActualCost / totalBeverageActualRevenue) * 100 : 0;
-  const beverageCostPercentageVariance = beverageActualCostPercentage - beverageBudgetedCostPercentage;
+  const foodBudgetedCostPercentage =
+    totalFoodBudgetedRevenue > 0
+      ? (totalFoodBudgetedCost / totalFoodBudgetedRevenue) * 100
+      : 0;
+  const foodActualCostPercentage =
+    totalFoodActualRevenue > 0
+      ? (totalFoodActualCost / totalFoodActualRevenue) * 100
+      : 0;
+  const foodCostPercentageVariance =
+    foodActualCostPercentage - foodBudgetedCostPercentage;
+
+  const beverageBudgetedCostPercentage =
+    totalBeverageBudgetedRevenue > 0
+      ? (totalBeverageBudgetedCost / totalBeverageBudgetedRevenue) * 100
+      : 0;
+  const beverageActualCostPercentage =
+    totalBeverageActualRevenue > 0
+      ? (totalBeverageActualCost / totalBeverageActualRevenue) * 100
+      : 0;
+  const beverageCostPercentageVariance =
+    beverageActualCostPercentage - beverageBudgetedCostPercentage;
 
   // 6. Combined calculations
-  const totalBudgetedRevenue = totalFoodBudgetedRevenue + totalBeverageBudgetedRevenue;
-  const totalActualRevenue = totalFoodActualRevenue + totalBeverageActualRevenue;
+  const totalBudgetedRevenue =
+    totalFoodBudgetedRevenue + totalBeverageBudgetedRevenue;
+  const totalActualRevenue =
+    totalFoodActualRevenue + totalBeverageActualRevenue;
   const totalBudgetedCost = totalFoodBudgetedCost + totalBeverageBudgetedCost;
   const totalActualCost = totalFoodActualCost + totalBeverageActualCost;
-  
+
   const combinedRevenueVariance = totalActualRevenue - totalBudgetedRevenue;
-  const combinedRevenueVariancePercentage = totalBudgetedRevenue > 0 ? (combinedRevenueVariance / totalBudgetedRevenue) * 100 : 0;
+  const combinedRevenueVariancePercentage =
+    totalBudgetedRevenue > 0
+      ? (combinedRevenueVariance / totalBudgetedRevenue) * 100
+      : 0;
   const combinedCostVariance = totalActualCost - totalBudgetedCost;
-  const combinedCostVariancePercentage = totalBudgetedCost > 0 ? (combinedCostVariance / totalBudgetedCost) * 100 : 0;
-  
-  const combinedBudgetedCostPercentage = totalBudgetedRevenue > 0 ? (totalBudgetedCost / totalBudgetedRevenue) * 100 : 0;
-  const combinedActualCostPercentage = totalActualRevenue > 0 ? (totalActualCost / totalActualRevenue) * 100 : 0;
-  const combinedCostPercentageVariance = combinedActualCostPercentage - combinedBudgetedCostPercentage;
+  const combinedCostVariancePercentage =
+    totalBudgetedCost > 0
+      ? (combinedCostVariance / totalBudgetedCost) * 100
+      : 0;
+
+  const combinedBudgetedCostPercentage =
+    totalBudgetedRevenue > 0
+      ? (totalBudgetedCost / totalBudgetedRevenue) * 100
+      : 0;
+  const combinedActualCostPercentage =
+    totalActualRevenue > 0 ? (totalActualCost / totalActualRevenue) * 100 : 0;
+  const combinedCostPercentageVariance =
+    combinedActualCostPercentage - combinedBudgetedCostPercentage;
 
   // 7. Performance indicators
-  const foodRevenueAchievement = totalFoodBudgetedRevenue > 0 ? (totalFoodActualRevenue / totalFoodBudgetedRevenue) * 100 : 0;
-  const beverageRevenueAchievement = totalBeverageBudgetedRevenue > 0 ? (totalBeverageActualRevenue / totalBeverageBudgetedRevenue) * 100 : 0;
-  
-  // Cost control: lower is better (actual vs budget percentage)
-  const foodCostControl = foodBudgetedCostPercentage > 0 ? (foodActualCostPercentage / foodBudgetedCostPercentage) * 100 : 0;
-  const beverageCostControl = beverageBudgetedCostPercentage > 0 ? (beverageActualCostPercentage / beverageBudgetedCostPercentage) * 100 : 0;
-  
-  // Overall performance score (weighted average)
-  const overallPerformance = (
-    (foodRevenueAchievement * 0.4) + 
-    (beverageRevenueAchievement * 0.4) + 
-    (Math.max(0, 100 - foodCostControl) * 0.1) + 
-    (Math.max(0, 100 - beverageCostControl) * 0.1)
-  );
+  const foodRevenueAchievement =
+    totalFoodBudgetedRevenue > 0
+      ? (totalFoodActualRevenue / totalFoodBudgetedRevenue) * 100
+      : 0;
+  const beverageRevenueAchievement =
+    totalBeverageBudgetedRevenue > 0
+      ? (totalBeverageActualRevenue / totalBeverageBudgetedRevenue) * 100
+      : 0;
 
-  console.log(`[getBudgetVsActualsReportAction] Report generated successfully with ${dailyBreakdown.length} days of data`);
+  // Cost control: lower is better (actual vs budget percentage)
+  const foodCostControl =
+    foodBudgetedCostPercentage > 0
+      ? (foodActualCostPercentage / foodBudgetedCostPercentage) * 100
+      : 0;
+  const beverageCostControl =
+    beverageBudgetedCostPercentage > 0
+      ? (beverageActualCostPercentage / beverageBudgetedCostPercentage) * 100
+      : 0;
+
+  // Overall performance score (weighted average)
+  const overallPerformance =
+    foodRevenueAchievement * 0.4 +
+    beverageRevenueAchievement * 0.4 +
+    Math.max(0, 100 - foodCostControl) * 0.1 +
+    Math.max(0, 100 - beverageCostControl) * 0.1;
+
+  console.log(
+    `[getBudgetVsActualsReportAction] Report generated successfully with ${dailyBreakdown.length} days of data`
+  );
 
   const result = {
     dateRange: { from: startDate, to: endDate },
@@ -555,7 +744,7 @@ export async function getBudgetVsActualsReportAction(
     hasCombinedVariance: !!result.combinedVariance,
     hasDailyBreakdown: !!result.dailyBreakdown,
     hasPerformanceIndicators: !!result.performanceIndicators,
-    dailyBreakdownLength: result.dailyBreakdown.length
+    dailyBreakdownLength: result.dailyBreakdown.length,
   });
 
   return result;
@@ -566,8 +755,12 @@ export async function getDailyRevenueTrendsReportAction(
   endDate: Date,
   outletId?: string
 ): Promise<DailyRevenueTrendsReport> {
-  console.log(`[getDailyRevenueTrendsReportAction] Generating report for ${startDate.toISOString()} to ${endDate.toISOString()}, outlet: ${outletId || 'all'}`);
-  
+  console.log(
+    `[getDailyRevenueTrendsReportAction] Generating report for ${startDate.toISOString()} to ${endDate.toISOString()}, outlet: ${
+      outletId || "all"
+    }`
+  );
+
   try {
     if (!db) {
       throw new Error("Firebase not initialized");
@@ -596,15 +789,20 @@ export async function getDailyRevenueTrendsReportAction(
     }
 
     const summarySnapshot = await getDocs(summaryQuery);
-    console.log(`[getDailyRevenueTrendsReportAction] Found ${summarySnapshot.size} documents`);
-    
+    console.log(
+      `[getDailyRevenueTrendsReportAction] Found ${summarySnapshot.size} documents`
+    );
+
     if (summarySnapshot.empty) {
-      console.log(`[getDailyRevenueTrendsReportAction] No DailyFinancialSummary documents found for date range`);
+      console.log(
+        `[getDailyRevenueTrendsReportAction] No DailyFinancialSummary documents found for date range`
+      );
       // Return empty report structure
       return {
         dateRange: { from: startDate, to: endDate },
         outletId,
-        outletName: outletId && outletId !== "all" ? "Unknown Outlet" : undefined,
+        outletName:
+          outletId && outletId !== "all" ? "Unknown Outlet" : undefined,
         summary: {
           totalFoodRevenue: 0,
           totalBeverageRevenue: 0,
@@ -613,8 +811,18 @@ export async function getDailyRevenueTrendsReportAction(
           averageDailyBeverageRevenue: 0,
           averageDailyTotalRevenue: 0,
           totalDays: 0,
-          highestRevenueDay: { date: startDate, foodRevenue: 0, beverageRevenue: 0, totalRevenue: 0 },
-          lowestRevenueDay: { date: startDate, foodRevenue: 0, beverageRevenue: 0, totalRevenue: 0 }
+          highestRevenueDay: {
+            date: startDate,
+            foodRevenue: 0,
+            beverageRevenue: 0,
+            totalRevenue: 0,
+          },
+          lowestRevenueDay: {
+            date: startDate,
+            foodRevenue: 0,
+            beverageRevenue: 0,
+            totalRevenue: 0,
+          },
         },
         dailyTrends: [],
         weeklyTrends: [],
@@ -627,17 +835,17 @@ export async function getDailyRevenueTrendsReportAction(
           totalRevenueVolatility: 0,
           bestPerformingDay: "N/A",
           worstPerformingDay: "N/A",
-          revenueConsistency: 0
+          revenueConsistency: 0,
         },
         trendAnalysis: {
-          overallTrend: 'stable',
-          foodTrend: 'stable',
-          beverageTrend: 'stable',
+          overallTrend: "stable",
+          foodTrend: "stable",
+          beverageTrend: "stable",
           trendStrength: 0,
           seasonalityDetected: false,
           peakDays: [],
-          slowDays: []
-        }
+          slowDays: [],
+        },
       };
     }
 
@@ -650,7 +858,10 @@ export async function getDailyRevenueTrendsReportAction(
           outletName = outletDoc.data().name;
         }
       } catch (error) {
-        console.error(`[getDailyRevenueTrendsReportAction] Error fetching outlet name:`, error);
+        console.error(
+          `[getDailyRevenueTrendsReportAction] Error fetching outlet name:`,
+          error
+        );
       }
     }
 
@@ -664,12 +875,15 @@ export async function getDailyRevenueTrendsReportAction(
 
     summarySnapshot.forEach((doc) => {
       const data = doc.data() as DailyFinancialSummary;
-      const date = data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as any);
-      
+      const date =
+        data.date instanceof Timestamp
+          ? data.date.toDate()
+          : new Date(data.date as any);
+
       const foodRevenue = data.actual_food_revenue || 0;
       const beverageRevenue = data.actual_beverage_revenue || 0;
       const totalRevenue = foodRevenue + beverageRevenue;
-      
+
       dailyData.push({
         date,
         foodRevenue,
@@ -682,56 +896,85 @@ export async function getDailyRevenueTrendsReportAction(
     dailyData.sort((a, b) => a.date.getTime() - b.date.getTime());
 
     // 4. Calculate daily trends with change percentages
-    const dailyTrends: DailyRevenueTrendsReport['dailyTrends'] = dailyData.map((day, index) => {
-      const prevDay = index > 0 ? dailyData[index - 1] : null;
-      
-      const foodRevenueChange = prevDay ? day.foodRevenue - prevDay.foodRevenue : 0;
-      const beverageRevenueChange = prevDay ? day.beverageRevenue - prevDay.beverageRevenue : 0;
-      const totalRevenueChange = prevDay ? day.totalRevenue - prevDay.totalRevenue : 0;
-      
-      const foodRevenueChangePercentage = prevDay && prevDay.foodRevenue > 0 ? (foodRevenueChange / prevDay.foodRevenue) * 100 : 0;
-      const beverageRevenueChangePercentage = prevDay && prevDay.beverageRevenue > 0 ? (beverageRevenueChange / prevDay.beverageRevenue) * 100 : 0;
-      const totalRevenueChangePercentage = prevDay && prevDay.totalRevenue > 0 ? (totalRevenueChange / prevDay.totalRevenue) * 100 : 0;
-      
-      return {
-        date: day.date,
-        foodRevenue: day.foodRevenue,
-        beverageRevenue: day.beverageRevenue,
-        totalRevenue: day.totalRevenue,
-        foodRevenueChange,
-        beverageRevenueChange,
-        totalRevenueChange,
-        foodRevenueChangePercentage,
-        beverageRevenueChangePercentage,
-        totalRevenueChangePercentage,
-      };
-    });
+    const dailyTrends: DailyRevenueTrendsReport["dailyTrends"] = dailyData.map(
+      (day, index) => {
+        const prevDay = index > 0 ? dailyData[index - 1] : null;
+        const foodRevenueChange = prevDay
+          ? day.foodRevenue - prevDay.foodRevenue
+          : 0;
+        const beverageRevenueChange = prevDay
+          ? day.beverageRevenue - prevDay.beverageRevenue
+          : 0;
+        const totalRevenueChange = prevDay
+          ? day.totalRevenue - prevDay.totalRevenue
+          : 0;
+        const foodRevenueChangePercentage =
+          prevDay && prevDay.foodRevenue > 0
+            ? (foodRevenueChange / prevDay.foodRevenue) * 100
+            : null;
+        const beverageRevenueChangePercentage =
+          prevDay && prevDay.beverageRevenue > 0
+            ? (beverageRevenueChange / prevDay.beverageRevenue) * 100
+            : null;
+        const totalRevenueChangePercentage =
+          prevDay && prevDay.totalRevenue > 0
+            ? (totalRevenueChange / prevDay.totalRevenue) * 100
+            : null;
+        return {
+          date: day.date,
+          foodRevenue: day.foodRevenue,
+          beverageRevenue: day.beverageRevenue,
+          totalRevenue: day.totalRevenue,
+          foodRevenueChange,
+          beverageRevenueChange,
+          totalRevenueChange,
+          foodRevenueChangePercentage,
+          beverageRevenueChangePercentage,
+          totalRevenueChangePercentage,
+        };
+      }
+    );
 
     // 5. Calculate summary statistics
-    const totalFoodRevenue = dailyData.reduce((sum, day) => sum + day.foodRevenue, 0);
-    const totalBeverageRevenue = dailyData.reduce((sum, day) => sum + day.beverageRevenue, 0);
+    const totalFoodRevenue = dailyData.reduce(
+      (sum, day) => sum + day.foodRevenue,
+      0
+    );
+    const totalBeverageRevenue = dailyData.reduce(
+      (sum, day) => sum + day.beverageRevenue,
+      0
+    );
     const totalRevenue = totalFoodRevenue + totalBeverageRevenue;
     const totalDays = dailyData.length;
-    
-    const averageDailyFoodRevenue = totalDays > 0 ? totalFoodRevenue / totalDays : 0;
-    const averageDailyBeverageRevenue = totalDays > 0 ? totalBeverageRevenue / totalDays : 0;
-    const averageDailyTotalRevenue = totalDays > 0 ? totalRevenue / totalDays : 0;
+
+    const averageDailyFoodRevenue =
+      totalDays > 0 ? totalFoodRevenue / totalDays : 0;
+    const averageDailyBeverageRevenue =
+      totalDays > 0 ? totalBeverageRevenue / totalDays : 0;
+    const averageDailyTotalRevenue =
+      totalDays > 0 ? totalRevenue / totalDays : 0;
 
     // Find highest and lowest revenue days
-    const highestRevenueDay = dailyData.reduce((max, day) => 
-      day.totalRevenue > max.totalRevenue ? day : max, dailyData[0]);
-    const lowestRevenueDay = dailyData.reduce((min, day) => 
-      day.totalRevenue < min.totalRevenue ? day : min, dailyData[0]);
+    const highestRevenueDay = dailyData.reduce(
+      (max, day) => (day.totalRevenue > max.totalRevenue ? day : max),
+      dailyData[0]
+    );
+    const lowestRevenueDay = dailyData.reduce(
+      (min, day) => (day.totalRevenue < min.totalRevenue ? day : min),
+      dailyData[0]
+    );
 
     // 6. Calculate weekly trends
-    const weeklyTrends: DailyRevenueTrendsReport['weeklyTrends'] = [];
-    const weekMap = new Map<number, Array<typeof dailyData[0]>>();
+    const weeklyTrends: DailyRevenueTrendsReport["weeklyTrends"] = [];
+    const weekMap = new Map<number, Array<(typeof dailyData)[0]>>();
 
-    dailyData.forEach(day => {
+    dailyData.forEach((day) => {
       const weekStart = new Date(day.date);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Start of week (Sunday)
-      const weekNumber = Math.floor(weekStart.getTime() / (7 * 24 * 60 * 60 * 1000));
-      
+      const weekNumber = Math.floor(
+        weekStart.getTime() / (7 * 24 * 60 * 60 * 1000)
+      );
+
       if (!weekMap.has(weekNumber)) {
         weekMap.set(weekNumber, []);
       }
@@ -740,16 +983,22 @@ export async function getDailyRevenueTrendsReportAction(
 
     weekMap.forEach((weekDays, weekNumber) => {
       if (weekDays.length === 0) return; // Skip empty weeks
-      
+
       const weekStart = new Date(weekDays[0].date);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekEnd.getDate() + 6);
-      
-      const weekFoodRevenue = weekDays.reduce((sum, day) => sum + day.foodRevenue, 0);
-      const weekBeverageRevenue = weekDays.reduce((sum, day) => sum + day.beverageRevenue, 0);
+
+      const weekFoodRevenue = weekDays.reduce(
+        (sum, day) => sum + day.foodRevenue,
+        0
+      );
+      const weekBeverageRevenue = weekDays.reduce(
+        (sum, day) => sum + day.beverageRevenue,
+        0
+      );
       const weekTotalRevenue = weekFoodRevenue + weekBeverageRevenue;
-      
+
       weeklyTrends.push({
         weekStart,
         weekEnd,
@@ -757,17 +1006,20 @@ export async function getDailyRevenueTrendsReportAction(
         totalFoodRevenue: weekFoodRevenue,
         totalBeverageRevenue: weekBeverageRevenue,
         totalRevenue: weekTotalRevenue,
-        averageDailyFoodRevenue: weekDays.length > 0 ? weekFoodRevenue / weekDays.length : 0,
-        averageDailyBeverageRevenue: weekDays.length > 0 ? weekBeverageRevenue / weekDays.length : 0,
-        averageDailyTotalRevenue: weekDays.length > 0 ? weekTotalRevenue / weekDays.length : 0,
+        averageDailyFoodRevenue:
+          weekDays.length > 0 ? weekFoodRevenue / weekDays.length : 0,
+        averageDailyBeverageRevenue:
+          weekDays.length > 0 ? weekBeverageRevenue / weekDays.length : 0,
+        averageDailyTotalRevenue:
+          weekDays.length > 0 ? weekTotalRevenue / weekDays.length : 0,
         daysInWeek: weekDays.length,
       });
     });
 
     // 7. Calculate performance metrics
-    const foodRevenues = dailyData.map(day => day.foodRevenue);
-    const beverageRevenues = dailyData.map(day => day.beverageRevenue);
-    const totalRevenues = dailyData.map(day => day.totalRevenue);
+    const foodRevenues = dailyData.map((day) => day.foodRevenue);
+    const beverageRevenues = dailyData.map((day) => day.beverageRevenue);
+    const totalRevenues = dailyData.map((day) => day.totalRevenue);
 
     // Calculate growth rates (simple linear regression slope)
     const foodRevenueGrowth = calculateGrowthRate(foodRevenues);
@@ -776,13 +1028,14 @@ export async function getDailyRevenueTrendsReportAction(
 
     // Calculate volatility (standard deviation)
     const foodRevenueVolatility = calculateStandardDeviation(foodRevenues);
-    const beverageRevenueVolatility = calculateStandardDeviation(beverageRevenues);
+    const beverageRevenueVolatility =
+      calculateStandardDeviation(beverageRevenues);
     const totalRevenueVolatility = calculateStandardDeviation(totalRevenues);
 
     // Find best and worst performing days of the week
     const dayOfWeekRevenue = new Map<string, number[]>();
-    dailyData.forEach(day => {
-      const dayName = day.date.toLocaleDateString('en-US', { weekday: 'long' });
+    dailyData.forEach((day) => {
+      const dayName = day.date.toLocaleDateString("en-US", { weekday: "long" });
       if (!dayOfWeekRevenue.has(dayName)) {
         dayOfWeekRevenue.set(dayName, []);
       }
@@ -795,7 +1048,8 @@ export async function getDailyRevenueTrendsReportAction(
     let worstAverage = Infinity;
 
     dayOfWeekRevenue.forEach((revenues, dayName) => {
-      const average = revenues.reduce((sum, rev) => sum + rev, 0) / revenues.length;
+      const average =
+        revenues.reduce((sum, rev) => sum + rev, 0) / revenues.length;
       if (average > bestAverage) {
         bestAverage = average;
         bestPerformingDay = dayName;
@@ -813,17 +1067,19 @@ export async function getDailyRevenueTrendsReportAction(
     const overallTrend = determineTrend(totalRevenueGrowth);
     const foodTrend = determineTrend(foodRevenueGrowth);
     const beverageTrend = determineTrend(beverageRevenueGrowth);
-    
-    const trendStrength = Math.abs(totalRevenueGrowth) / (totalRevenueVolatility || 1) * 100;
-    
+
+    const trendStrength =
+      (Math.abs(totalRevenueGrowth) / (totalRevenueVolatility || 1)) * 100;
+
     // Detect seasonality (simplified - check for weekly patterns)
     const seasonalityDetected = dayOfWeekRevenue.size >= 3;
-    
+
     // Identify peak and slow days
     const peakDays: string[] = [];
     const slowDays: string[] = [];
     dayOfWeekRevenue.forEach((revenues, dayName) => {
-      const average = revenues.reduce((sum, rev) => sum + rev, 0) / revenues.length;
+      const average =
+        revenues.reduce((sum, rev) => sum + rev, 0) / revenues.length;
       const overallAverage = totalRevenue / totalDays;
       if (average > overallAverage * 1.1) {
         peakDays.push(dayName);
@@ -832,7 +1088,9 @@ export async function getDailyRevenueTrendsReportAction(
       }
     });
 
-    console.log(`[getDailyRevenueTrendsReportAction] Report generated successfully with ${dailyData.length} days of data`);
+    console.log(
+      `[getDailyRevenueTrendsReportAction] Report generated successfully with ${dailyData.length} days of data`
+    );
 
     return {
       dateRange: { from: startDate, to: endDate },
@@ -883,7 +1141,10 @@ export async function getDailyRevenueTrendsReportAction(
       },
     };
   } catch (error) {
-    console.error(`[getDailyRevenueTrendsReportAction] Error generating report:`, error);
+    console.error(
+      `[getDailyRevenueTrendsReportAction] Error generating report:`,
+      error
+    );
     throw error; // Re-throw the error to be handled by the client
   }
 }
@@ -891,44 +1152,47 @@ export async function getDailyRevenueTrendsReportAction(
 // Helper functions
 function calculateGrowthRate(values: number[]): number {
   if (values.length < 2) return 0;
-  
+
   const n = values.length;
   const sumX = (n * (n - 1)) / 2;
   const sumY = values.reduce((sum, val, index) => sum + val * index, 0);
   const sumXY = values.reduce((sum, val, index) => sum + val * index, 0);
   const sumX2 = values.reduce((sum, _, index) => sum + index * index, 0);
-  
+
   const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
   return slope;
 }
 
 function calculateStandardDeviation(values: number[]): number {
   if (values.length === 0) return 0;
-  
+
   const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
-  const squaredDiffs = values.map(val => Math.pow(val - mean, 2));
-  const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
-  
+  const squaredDiffs = values.map((val) => Math.pow(val - mean, 2));
+  const variance =
+    squaredDiffs.reduce((sum, val) => sum + val, 0) / values.length;
+
   return Math.sqrt(variance);
 }
 
 function calculateRevenueConsistency(values: number[]): number {
   if (values.length === 0) return 0;
-  
+
   const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
   const stdDev = calculateStandardDeviation(values);
-  
+
   if (mean === 0) return 0;
-  
+
   const coefficientOfVariation = stdDev / mean;
-  const consistency = Math.max(0, 100 - (coefficientOfVariation * 100));
-  
+  const consistency = Math.max(0, 100 - coefficientOfVariation * 100);
+
   return Math.min(100, consistency);
 }
 
-function determineTrend(growthRate: number): 'increasing' | 'decreasing' | 'stable' {
+function determineTrend(
+  growthRate: number
+): "increasing" | "decreasing" | "stable" {
   const threshold = 0.01; // 1% threshold for trend detection
-  if (growthRate > threshold) return 'increasing';
-  if (growthRate < -threshold) return 'decreasing';
-  return 'stable';
-} 
+  if (growthRate > threshold) return "increasing";
+  if (growthRate < -threshold) return "decreasing";
+  return "stable";
+}

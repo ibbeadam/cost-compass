@@ -1,18 +1,15 @@
-
 "use client"; // Added to use Pathname
 
 // import type { Metadata } from 'next'; // Metadata cannot be exported from Client Components
-import './globals.css';
+import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import {
-  SidebarProvider,
-} from '@/components/ui/sidebar';
-import { AppSidebar } from '@/components/layout/AppSidebar';
-import { AppHeader } from '@/components/layout/AppHeader';
-import { AppFooter } from '@/components/layout/AppFooter';
-import { AuthProvider } from '@/contexts/AuthContext';
-import { usePathname } from 'next/navigation'; // Added
-import { useEffect, useState } from 'react'; // Added for isMounted pattern
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/layout/AppSidebar";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { AppFooter } from "@/components/layout/AppFooter";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { usePathname } from "next/navigation"; // Added
+import { useEffect, useState } from "react"; // Added for isMounted pattern
 
 // export const metadata: Metadata = { // Cannot export metadata from a Client Component
 //   title: 'Cost Compass',
@@ -37,14 +34,30 @@ export default function RootLayout({
     // Or, structure it so the part that depends on pathname is only rendered when isMounted.
     return (
       <html lang="en" suppressHydrationWarning>
-        <head><title>Cost Compass</title>{/* Default title */}
-          <meta name="description" content="Daily Food and Beverage Cost Monitoring" />{/* Default description */}
+        <head>
+          <title>Cost Compass</title>
+          {/* Default title */}
+          <meta
+            name="description"
+            content="Daily Food and Beverage Cost Monitoring"
+          />
+          {/* Default description */}
           <link rel="preconnect" href="https://fonts.googleapis.com" />
-          <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-          <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+          <link
+            rel="preconnect"
+            href="https://fonts.gstatic.com"
+            crossOrigin="anonymous"
+          />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+            rel="stylesheet"
+          />
+          <link
+            href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap"
+            rel="stylesheet"
+          />
         </head>
-        <body className="font-body antialiased bg-background text-foreground">
+        <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
           <AuthProvider>
             <div className="flex min-h-screen w-full items-center justify-center">
               {children}
@@ -56,30 +69,45 @@ export default function RootLayout({
     );
   }
 
-  const isAuthPage = pathname === '/login' || pathname === '/signup';
+  const isAuthPage = pathname === "/login" || pathname === "/signup";
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <head><title>Cost Compass</title>{/* Default title, pages can override */}
-        <meta name="description" content="Daily Food and Beverage Cost Monitoring" />
+      <head>
+        <title>Cost Compass</title>
+        {/* Default title, pages can override */}
+        <meta
+          name="description"
+          content="Daily Food and Beverage Cost Monitoring"
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
       </head>
-      <body className="font-body antialiased bg-background text-foreground">
+      <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
         <AuthProvider>
           {isAuthPage ? (
-            <div className="flex min-h-screen w-full items-center justify-center">
+            <div className="flex min-h-screen w-full items-center justify-center overflow-x-hidden">
               {children}
             </div>
           ) : (
             <SidebarProvider>
-              <div className="flex min-h-screen w-full">
+              <div className="flex min-h-screen w-full overflow-x-hidden">
                 <AppSidebar />
-                <div className="flex flex-1 flex-col"> 
+                <div className="flex flex-1 flex-col overflow-x-hidden">
                   <AppHeader />
-                  <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full">
+                  <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full overflow-x-hidden">
                     {children}
                   </main>
                   <AppFooter />
@@ -90,6 +118,14 @@ export default function RootLayout({
           <Toaster />
         </AuthProvider>
       </body>
+      <style jsx global>{`
+        html,
+        body,
+        #__next {
+          max-width: 100vw;
+          overflow-x: hidden !important;
+        }
+      `}</style>
     </html>
   );
 }

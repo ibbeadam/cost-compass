@@ -2,7 +2,18 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Timestamp } from "firebase/firestore";
-import { PlusCircle, Edit, Trash2, AlertTriangle, ListChecks, Utensils, GlassWater, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  PlusCircle,
+  Edit,
+  Trash2,
+  AlertTriangle,
+  ListChecks,
+  Utensils,
+  GlassWater,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+} from "lucide-react";
 
 import type { Category } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -30,10 +41,13 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { CategoryForm } from "./CategoryForm";
-import { getPaginatedCategoriesAction, initializeDefaultCategoriesAction } from "@/actions/categoryActions";
+import {
+  getPaginatedCategoriesAction,
+  initializeDefaultCategoriesAction,
+} from "@/actions/categoryActions";
 import { useToast } from "@/hooks/use-toast";
 import { deleteCategoryAction } from "@/actions/categoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,8 +58,14 @@ const ITEMS_PER_PAGE = 5;
 const convertTimestampsToDates = (category: Category): Category => {
   return {
     ...category,
-    createdAt: category.createdAt && category.createdAt instanceof Timestamp ? category.createdAt.toDate() : category.createdAt,
-    updatedAt: category.updatedAt && category.updatedAt instanceof Timestamp ? category.updatedAt.toDate() : category.updatedAt,
+    createdAt:
+      category.createdAt && category.createdAt instanceof Timestamp
+        ? category.createdAt.toDate()
+        : category.createdAt,
+    updatedAt:
+      category.updatedAt && category.updatedAt instanceof Timestamp
+        ? category.updatedAt.toDate()
+        : category.updatedAt,
   };
 };
 
@@ -58,12 +78,13 @@ export default function CategoryListClient() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const { toast } = useToast();
-  
+
   const fetchAllCategories = useCallback(async () => {
     setIsLoading(true);
     try {
       // Pass fetchAll = true to get all categories
-      const { categories: fetchedCategories, totalCount } = await getPaginatedCategoriesAction(undefined, undefined, true);
+      const { categories: fetchedCategories, totalCount } =
+        await getPaginatedCategoriesAction(undefined, undefined, true);
       setAllCategories(fetchedCategories.map(convertTimestampsToDates));
       setTotalCategories(totalCount);
       setCurrentPage(1); // Reset to first page
@@ -93,7 +114,9 @@ export default function CategoryListClient() {
       toast({
         variant: "destructive",
         title: "Error Initializing Categories",
-        description: (error as Error).message || "Could not initialize default categories.",
+        description:
+          (error as Error).message ||
+          "Could not initialize default categories.",
       });
     } finally {
       setIsInitializing(false);
@@ -127,7 +150,8 @@ export default function CategoryListClient() {
       toast({
         variant: "destructive",
         title: "Error Deleting Category",
-        description: (error as Error).message || "Could not delete the category.",
+        description:
+          (error as Error).message || "Could not delete the category.",
       });
     }
   };
@@ -137,7 +161,7 @@ export default function CategoryListClient() {
     setEditingCategory(null);
     fetchAllCategories(); // Re-fetch all categories after success
   };
-  
+
   const onFormCancel = () => {
     setIsFormOpen(false);
     setEditingCategory(null);
@@ -149,8 +173,12 @@ export default function CategoryListClient() {
     return allCategories.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   }, [allCategories, currentPage]);
 
-  const startIndexDisplay = totalCategories > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
-  const endIndexDisplay = totalCategories > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalCategories) : 0;
+  const startIndexDisplay =
+    totalCategories > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+  const endIndexDisplay =
+    totalCategories > 0
+      ? Math.min(currentPage * ITEMS_PER_PAGE, totalCategories)
+      : 0;
 
   const renderPageNumbers = () => {
     const pageNumbers = [];
@@ -190,11 +218,13 @@ export default function CategoryListClient() {
     return pageNumbers;
   };
 
-
   if (isLoading) {
     return (
       <div>
-        <div className="flex justify-end mb-4"> <Skeleton className="h-10 w-40 bg-muted" /> </div>
+        <div className="flex justify-end mb-4">
+          {" "}
+          <Skeleton className="h-10 w-40 bg-muted" />{" "}
+        </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Skeleton className="h-12 w-full bg-muted/50" />
           {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
@@ -211,7 +241,9 @@ export default function CategoryListClient() {
           <Skeleton className="h-6 w-1/3 bg-muted" />
           <div className="flex items-center space-x-1">
             <Skeleton className="h-9 w-9 bg-muted rounded-md" />
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />)}
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-9 w-9 bg-muted rounded-md" />
+            ))}
             <Skeleton className="h-9 w-9 bg-muted rounded-md" />
           </div>
         </div>
@@ -224,12 +256,14 @@ export default function CategoryListClient() {
       <div className="flex justify-between items-center mb-4">
         <div>
           <h2 className="text-2xl font-bold font-headline">Categories</h2>
-          <p className="text-muted-foreground">Manage food and beverage categories for cost tracking</p>
+          <p className="text-muted-foreground">
+            Manage food and beverage categories for cost tracking
+          </p>
         </div>
         <div className="flex gap-2">
           {allCategories.length === 0 && (
-            <Button 
-              onClick={handleInitializeDefaultCategories} 
+            <Button
+              onClick={handleInitializeDefaultCategories}
               disabled={isInitializing}
               variant="outline"
             >
@@ -253,95 +287,134 @@ export default function CategoryListClient() {
       </div>
 
       {allCategories.length === 0 ? (
-         <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
-            <ListChecks className="mx-auto h-12 w-12 mb-4 text-primary" />
-            <p className="text-lg font-medium">No categories found.</p>
-            <p className="mb-4">Click "Initialize Default Categories" to get started with pre-defined categories, or "Add New Category" to create your own.</p>
+        <div className="text-center py-10 text-muted-foreground bg-muted/20 rounded-lg border">
+          <ListChecks className="mx-auto h-12 w-12 mb-4 text-primary" />
+          <p className="text-lg font-medium">No categories found.</p>
+          <p className="mb-4">
+            Click "Initialize Default Categories" to get started with
+            pre-defined categories, or "Add New Category" to create your own.
+          </p>
         </div>
       ) : (
         <>
-        <div className="rounded-lg border overflow-hidden shadow-md bg-card">
-          <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="font-headline">Name</TableHead>
-                <TableHead className="font-headline">Type</TableHead>
-                <TableHead className="font-headline">Description</TableHead>
-                <TableHead className="font-headline w-[120px] text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentItems.map((category) => (
-                <TableRow key={category.id}>
-                  <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={category.type === 'Food' ? 'default' : 'secondary'} className="capitalize bg-primary/10 text-primary border-primary/20">
-                      {category.type === 'Food' ? 
-                        <Utensils className="mr-1.5 h-3.5 w-3.5" /> : 
-                        <GlassWater className="mr-1.5 h-3.5 w-3.5" />
-                      }
-                      {category.type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm truncate max-w-xs">{category.description || "-"}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(category)} className="mr-2 hover:text-primary">
-                      <Edit className="h-4 w-4" />
-                      <span className="sr-only">Edit Category</span>
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete Category</span>
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="flex items-center">
-                            <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
-                            Are you sure?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This action cannot be undone. This will permanently delete the category "{category.name}". 
-                            It might affect existing cost entries if this category is in use.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDelete(category.id)}
-                            className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
+          <div className="rounded-lg border overflow-hidden shadow-md bg-card">
+            <Table className="whitespace-nowrap">
+              <TableHeader className="bg-muted/50">
+                <TableRow>
+                  <TableHead className="font-headline">Name</TableHead>
+                  <TableHead className="font-headline">Type</TableHead>
+                  <TableHead className="font-headline">Description</TableHead>
+                  <TableHead className="font-headline w-[120px] text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-         {totalPages > 1 && (
+              </TableHeader>
+              <TableBody>
+                {currentItems.map((category) => (
+                  <TableRow key={category.id}>
+                    <TableCell className="font-medium">
+                      {category.name}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          category.type === "Food" ? "default" : "secondary"
+                        }
+                        className="capitalize bg-primary/10 text-primary border-primary/20"
+                      >
+                        {category.type === "Food" ? (
+                          <Utensils className="mr-1.5 h-3.5 w-3.5" />
+                        ) : (
+                          <GlassWater className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {category.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm truncate max-w-xs">
+                      {category.description || "-"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(category)}
+                        className="mr-2 hover:text-primary"
+                      >
+                        <Edit className="h-4 w-4" />
+                        <span className="sr-only">Edit Category</span>
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete Category</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center">
+                              <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
+                              Are you sure?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. This will
+                              permanently delete the category "{category.name}".
+                              It might affect existing cost entries if this
+                              category is in use.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDelete(category.id)}
+                              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {totalPages > 1 && (
             <div className="flex justify-between items-center mt-4 px-2">
-                <div className="text-sm text-muted-foreground">
-                Showing {startIndexDisplay} to {endIndexDisplay} of {totalCategories} results
-                </div>
-                <div className="flex items-center space-x-1">
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage - 1)} disabled={currentPage === 1 || isLoading}>
-                    <ChevronLeft className="h-4 w-4" />
-                    <span className="sr-only">Previous Page</span>
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndexDisplay} to {endIndexDisplay} of{" "}
+                {totalCategories} results
+              </div>
+              <div className="flex items-center space-x-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1 || isLoading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="sr-only">Previous Page</span>
                 </Button>
                 {renderPageNumbers()}
-                <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => setCurrentPage(currentPage + 1)} disabled={currentPage === totalPages || isLoading}>
-                    <ChevronRight className="h-4 w-4" />
-                    <span className="sr-only">Next Page</span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages || isLoading}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="sr-only">Next Page</span>
                 </Button>
-                </div>
+              </div>
             </div>
-        )}
+          )}
         </>
       )}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
@@ -351,16 +424,18 @@ export default function CategoryListClient() {
               {editingCategory ? "Edit Category" : "Add New Category"}
             </DialogTitle>
             <DialogDescription>
-              {editingCategory ? "Update the details for this category." : "Enter the details for the new category."}
+              {editingCategory
+                ? "Update the details for this category."
+                : "Enter the details for the new category."}
             </DialogDescription>
           </DialogHeader>
           <div className="pt-4">
-             <CategoryForm
-                key={editingCategory ? editingCategory.id : 'new-category'}
-                category={editingCategory}
-                onSuccess={onFormSuccess}
-                onCancel={onFormCancel}
-              />
+            <CategoryForm
+              key={editingCategory ? editingCategory.id : "new-category"}
+              category={editingCategory}
+              onSuccess={onFormSuccess}
+              onCancel={onFormCancel}
+            />
           </div>
         </DialogContent>
       </Dialog>
