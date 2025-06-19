@@ -2046,7 +2046,7 @@ export default function ReportsClient() {
   };
 
   return (
-    <div className="flex flex-col gap-6 w-full">
+    <div className="flex flex-col gap-6 w-full text-[clamp(0.85rem,1vw+0.7rem,1.1rem)]">
       {/* Report Options */}
       <Card className="w-full shadow-md bg-card">
         <CardHeader>

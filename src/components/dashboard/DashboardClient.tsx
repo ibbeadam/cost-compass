@@ -1304,7 +1304,7 @@ export default function DashboardClient() {
       />
 
       {/* Charts Grid */}
-      <div className="grid gap-6 md:grid-cols-1">
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-1 md:grid-cols-1">
         {/* Overview Chart Card (Main Bar Chart) */}
         <Card className="shadow-md bg-card">
           <CardHeader>
@@ -1315,9 +1315,9 @@ export default function DashboardClient() {
               Hotel Food & Beverage cost percentages over the selected period.
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="w-full max-w-full overflow-x-auto">
-              <div className="min-w-[350px] sm:min-w-0">
+          <CardContent className="p-2 sm:p-4 flex items-center justify-center min-h-[200px] h-[45vw] sm:h-72">
+            <div className="w-full h-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
                 {isLoadingData ||
                 dateRange === undefined ||
                 !dashboardData?.overviewChartData ? (
@@ -1371,15 +1371,15 @@ export default function DashboardClient() {
                     </BarChart>
                   </ChartContainer>
                 )}
-              </div>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {/* Cost Trends (Line Chart) */}
-        <Card className="shadow-md bg-card lg:col-span-2">
+        <Card className="shadow-md bg-card md:col-span-2 lg:col-span-2">
           <CardHeader>
             <CardTitle className="font-headline text-xl">Cost Trends</CardTitle>
             <CardDescription>
@@ -1391,9 +1391,9 @@ export default function DashboardClient() {
                 : "Average daily hotel cost % trends."}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="w-full max-w-full overflow-x-auto">
-              <div className="min-w-[350px] sm:min-w-0">
+          <CardContent className="p-2 sm:p-4 flex items-center justify-center min-h-[200px] h-[45vw] sm:h-72">
+            <div className="w-full h-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
                 {isLoadingData ||
                 dateRange === undefined ||
                 !dashboardData?.costTrendsChartData ? (
@@ -1453,7 +1453,7 @@ export default function DashboardClient() {
                     </RechartsLine>
                   </ChartContainer>
                 )}
-              </div>
+              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
@@ -1468,9 +1468,9 @@ export default function DashboardClient() {
               Total costs breakdown per outlet (Top 5).
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="w-full max-w-full overflow-x-auto flex justify-center items-center h-64">
-              <div className="w-full" style={{ maxWidth: 320 }}>
+          <CardContent className="p-2 sm:p-4 flex items-center justify-center min-h-[200px] h-[45vw] sm:h-72">
+            <div className="w-full max-w-full overflow-x-auto flex justify-center items-center h-full">
+              <div className="w-full" style={{ maxWidth: 320, height: "100%" }}>
                 {isLoadingData ||
                 dateRange === undefined ||
                 !dashboardData?.costDistributionChartData ? (
@@ -1480,7 +1480,7 @@ export default function DashboardClient() {
                     config={donutChartConfig}
                     className="h-full w-full flex items-center justify-center"
                   >
-                    <ResponsiveContainer width="100%" height={220}>
+                    <ResponsiveContainer width="100%" height="100%">
                       <RechartsPie>
                         <Pie
                           data={dashboardData.costDistributionChartData}
