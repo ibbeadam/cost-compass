@@ -1,8 +1,7 @@
-
 // src/components/layout/UserNav.tsx
 "use client";
 
-import Link from 'next/link';
+import Link from "next/link";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,12 +13,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, LogOut, Settings, LogIn } from 'lucide-react'; 
-import { useAuth } from '@/contexts/AuthContext'; 
-import { Skeleton } from '@/components/ui/skeleton'; 
+import { User, LogOut, Settings, LogIn } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function UserNav() {
-  const { user, loading, signOut } = useAuth(); 
+  const { user, userProfile, loading, signOut } = useAuth();
 
   const handleLogout = async () => {
     await signOut();
@@ -45,24 +44,50 @@ export function UserNav() {
     );
   }
 
-  const userName = user.displayName || user.email || "User";
-  const userEmail = user.email || "No email provided";
-  const userAvatar = user.photoURL || `https://placehold.co/40x40.png?text=${userName.substring(0,1).toUpperCase()}`;
+  // Use userProfile's displayName if available
+  const userName = userProfile?.displayName || user?.displayName || "User";
+  const userEmail = user?.email || "No email provided";
+  // Type guard for photoURL property
+  const getPhotoURL = (profile: any) => {
+    if (profile && typeof profile === "object" && "photoURL" in profile) {
+      return (profile as { photoURL?: string }).photoURL;
+    }
+    return undefined;
+  };
+
+  const userAvatar =
+    getPhotoURL(userProfile) ||
+    (user && "photoURL" in user ? (user as any).photoURL : undefined) ||
+    `https://placehold.co/40x40.png?text=${userName
+      .substring(0, 2)
+      .toUpperCase()}`;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
           <Avatar className="h-9 w-9">
-            <AvatarImage src={userAvatar} alt={userName} data-ai-hint="profile person" />
-            <AvatarFallback>{userName.substring(0, 1).toUpperCase()}</AvatarFallback>
+            <AvatarImage
+              src={userAvatar}
+              alt={userName}
+              data-ai-hint="profile person"
+            />
+            <AvatarFallback>
+              {userName.substring(0, 1).toUpperCase()}
+            </AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56 bg-card border-border shadow-lg" align="end" forceMount>
+      <DropdownMenuContent
+        className="w-56 bg-card border-border shadow-lg"
+        align="end"
+        forceMount
+      >
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none text-card-foreground">{userName}</p>
+            <p className="text-sm font-medium leading-none text-card-foreground">
+              {userName}
+            </p>
             <p className="text-xs leading-none text-muted-foreground">
               {userEmail}
             </p>
@@ -77,14 +102,17 @@ export function UserNav() {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent">
-             <Link href="/dashboard/settings" className="flex items-center">
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
-             </Link>
+            <Link href="/dashboard/settings" className="flex items-center">
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator className="bg-border"/>
-        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer hover:bg-accent text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10">
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuItem
+          onClick={handleLogout}
+          className="cursor-pointer hover:bg-accent text-destructive hover:text-destructive focus:text-destructive focus:bg-destructive/10"
+        >
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>
         </DropdownMenuItem>
