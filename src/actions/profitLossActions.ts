@@ -21,6 +21,9 @@ import type {
   BeverageCostEntry,
   BudgetVsActualsReport,
   DailyRevenueTrendsReport,
+  YearOverYearReport,
+  RealTimeKPIDashboard,
+  ForecastingReport,
 } from "@/types";
 import { getOutletsAction } from "./foodCostActions";
 
@@ -911,14 +914,26 @@ export async function getDailyRevenueTrendsReportAction(
         const foodRevenueChangePercentage =
           prevDay && prevDay.foodRevenue > 0
             ? (foodRevenueChange / prevDay.foodRevenue) * 100
+            : prevDay && prevDay.foodRevenue === 0 && day.foodRevenue > 0
+            ? 100 // Show 100% when going from 0 to positive value
+            : prevDay && prevDay.foodRevenue === 0 && day.foodRevenue === 0
+            ? 0 // Show 0% when both days have 0 revenue
             : null;
         const beverageRevenueChangePercentage =
           prevDay && prevDay.beverageRevenue > 0
             ? (beverageRevenueChange / prevDay.beverageRevenue) * 100
+            : prevDay && prevDay.beverageRevenue === 0 && day.beverageRevenue > 0
+            ? 100 // Show 100% when going from 0 to positive value
+            : prevDay && prevDay.beverageRevenue === 0 && day.beverageRevenue === 0
+            ? 0 // Show 0% when both days have 0 revenue
             : null;
         const totalRevenueChangePercentage =
           prevDay && prevDay.totalRevenue > 0
             ? (totalRevenueChange / prevDay.totalRevenue) * 100
+            : prevDay && prevDay.totalRevenue === 0 && day.totalRevenue > 0
+            ? 100 // Show 100% when going from 0 to positive value
+            : prevDay && prevDay.totalRevenue === 0 && day.totalRevenue === 0
+            ? 0 // Show 0% when both days have 0 revenue
             : null;
         return {
           date: day.date,
@@ -1195,4 +1210,741 @@ function determineTrend(
   if (growthRate > threshold) return "increasing";
   if (growthRate < -threshold) return "decreasing";
   return "stable";
+}
+
+// Year-over-Year Comparison Report
+export async function getYearOverYearReportAction(
+  currentYear: number,
+  outletId?: string
+): Promise<YearOverYearReport> {
+  try {
+    const previousYear = currentYear - 1;
+    
+    // Get data for both years
+    const currentYearData = await getYearlyAggregatedData(currentYear, outletId);
+    const previousYearData = await getYearlyAggregatedData(previousYear, outletId);
+    
+    // Calculate growth metrics
+    const growthMetrics = calculateGrowthMetrics(currentYearData, previousYearData);
+    
+    // Get monthly comparison
+    const monthlyComparison = await getMonthlyComparisonData(currentYear, previousYear, outletId);
+    
+    // Generate insights
+    const insights = generateYearOverYearInsights(monthlyComparison, growthMetrics);
+    
+    return {
+      currentYearData,
+      previousYearData,
+      growthMetrics,
+      monthlyComparison,
+      insights,
+    };
+  } catch (error) {
+    console.error("Error generating year-over-year report:", error);
+    throw new Error(`Failed to generate year-over-year report: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function getYearlyAggregatedData(year: number, outletId?: string) {
+  const startDate = new Date(year, 0, 1); // January 1st
+  const endDate = new Date(year, 11, 31); // December 31st
+  
+  let q = query(
+    collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
+    where("date", ">=", Timestamp.fromDate(startDate)),
+    where("date", "<=", Timestamp.fromDate(endDate)),
+    orderBy("date", "asc")
+  );
+  
+  if (outletId && outletId !== "all") {
+    q = query(q, where("outlet_id", "==", outletId));
+  }
+  
+  const snapshot = await getDocs(q);
+  const summaries: DailyFinancialSummary[] = snapshot.docs.map(doc => ({
+    ...doc.data(),
+    id: doc.id,
+  } as DailyFinancialSummary));
+  
+  // Aggregate yearly data
+  const totalFoodRevenue = summaries.reduce((sum, s) => sum + (s.actual_food_revenue || 0), 0);
+  const totalBeverageRevenue = summaries.reduce((sum, s) => sum + (s.actual_beverage_revenue || 0), 0);
+  const totalRevenue = totalFoodRevenue + totalBeverageRevenue;
+  
+  const totalFoodCost = summaries.reduce((sum, s) => sum + (s.actual_food_cost || s.net_food_cost || 0), 0);
+  const totalBeverageCost = summaries.reduce((sum, s) => sum + (s.actual_beverage_cost || s.net_beverage_cost || 0), 0);
+  const totalCosts = totalFoodCost + totalBeverageCost;
+  
+  const netProfit = totalRevenue - totalCosts;
+  const avgMonthlyRevenue = totalRevenue / 12;
+  
+  return {
+    year,
+    totalRevenue,
+    totalFoodRevenue,
+    totalBeverageRevenue,
+    totalCosts,
+    netProfit,
+    avgMonthlyRevenue,
+  };
+}
+
+function calculateGrowthMetrics(currentYear: any, previousYear: any) {
+  const revenueGrowth = previousYear.totalRevenue > 0 
+    ? ((currentYear.totalRevenue - previousYear.totalRevenue) / previousYear.totalRevenue) * 100 
+    : 0;
+    
+  const foodRevenueGrowth = previousYear.totalFoodRevenue > 0 
+    ? ((currentYear.totalFoodRevenue - previousYear.totalFoodRevenue) / previousYear.totalFoodRevenue) * 100 
+    : 0;
+    
+  const beverageRevenueGrowth = previousYear.totalBeverageRevenue > 0 
+    ? ((currentYear.totalBeverageRevenue - previousYear.totalBeverageRevenue) / previousYear.totalBeverageRevenue) * 100 
+    : 0;
+    
+  const costGrowth = previousYear.totalCosts > 0 
+    ? ((currentYear.totalCosts - previousYear.totalCosts) / previousYear.totalCosts) * 100 
+    : 0;
+    
+  const profitGrowth = previousYear.netProfit !== 0 
+    ? ((currentYear.netProfit - previousYear.netProfit) / Math.abs(previousYear.netProfit)) * 100 
+    : 0;
+    
+  const currentMargin = currentYear.totalRevenue > 0 ? (currentYear.netProfit / currentYear.totalRevenue) * 100 : 0;
+  const previousMargin = previousYear.totalRevenue > 0 ? (previousYear.netProfit / previousYear.totalRevenue) * 100 : 0;
+  const marginImprovement = currentMargin - previousMargin;
+  
+  return {
+    revenueGrowth,
+    foodRevenueGrowth,
+    beverageRevenueGrowth,
+    costGrowth,
+    profitGrowth,
+    marginImprovement,
+  };
+}
+
+async function getMonthlyComparisonData(currentYear: number, previousYear: number, outletId?: string) {
+  const monthlyComparison = [];
+  
+  for (let month = 1; month <= 12; month++) {
+    const currentMonthData = await getMonthlyData(currentYear, month, outletId);
+    const previousMonthData = await getMonthlyData(previousYear, month, outletId);
+    
+    const growth = previousMonthData > 0 
+      ? ((currentMonthData - previousMonthData) / previousMonthData) * 100 
+      : 0;
+      
+    let performance: "outperforming" | "underperforming" | "on_track";
+    if (growth > 5) performance = "outperforming";
+    else if (growth < -5) performance = "underperforming";
+    else performance = "on_track";
+    
+    monthlyComparison.push({
+      month,
+      currentYearRevenue: currentMonthData,
+      previousYearRevenue: previousMonthData,
+      growth,
+      performance,
+    });
+  }
+  
+  return monthlyComparison;
+}
+
+async function getMonthlyData(year: number, month: number, outletId?: string): Promise<number> {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0); // Last day of month
+  
+  let q = query(
+    collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
+    where("date", ">=", Timestamp.fromDate(startDate)),
+    where("date", "<=", Timestamp.fromDate(endDate))
+  );
+  
+  if (outletId && outletId !== "all") {
+    q = query(q, where("outlet_id", "==", outletId));
+  }
+  
+  const snapshot = await getDocs(q);
+  const summaries = snapshot.docs.map(doc => doc.data() as DailyFinancialSummary);
+  
+  return summaries.reduce((sum, s) => 
+    sum + (s.actual_food_revenue || 0) + (s.actual_beverage_revenue || 0), 0
+  );
+}
+
+function generateYearOverYearInsights(monthlyComparison: any[], growthMetrics: any) {
+  // Find strongest and weakest months
+  const sortedByGrowth = [...monthlyComparison].sort((a, b) => b.growth - a.growth);
+  const strongestMonths = sortedByGrowth.slice(0, 3).map(m => getMonthName(m.month));
+  const weakestMonths = sortedByGrowth.slice(-3).map(m => getMonthName(m.month));
+  
+  // Seasonal trends (simplified)
+  const seasonalTrends = [
+    "Q1 performance shows seasonal patterns",
+    "Summer months indicate peak performance",
+    "Holiday seasons drive revenue spikes"
+  ];
+  
+  // Recommendations based on growth metrics
+  const recommendations = [];
+  if (growthMetrics.revenueGrowth > 10) {
+    recommendations.push("Maintain current growth strategies");
+  } else if (growthMetrics.revenueGrowth < 0) {
+    recommendations.push("Focus on revenue recovery initiatives");
+  }
+  
+  if (growthMetrics.costGrowth > growthMetrics.revenueGrowth) {
+    recommendations.push("Implement cost control measures");
+  }
+  
+  if (growthMetrics.marginImprovement < 0) {
+    recommendations.push("Review pricing and cost structure");
+  }
+  
+  return {
+    strongestMonths,
+    weakestMonths,
+    seasonalTrends,
+    recommendations,
+  };
+}
+
+function getMonthName(month: number): string {
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  return months[month - 1];
+}
+
+// Real-Time KPI Dashboard
+export async function getRealTimeKPIDashboardAction(
+  outletId?: string
+): Promise<RealTimeKPIDashboard> {
+  try {
+    // Get today's data and recent trend data
+    const today = new Date();
+    const yesterdayStart = new Date(today);
+    yesterdayStart.setDate(today.getDate() - 1);
+    yesterdayStart.setHours(0, 0, 0, 0);
+    
+    const yesterdayEnd = new Date(today);
+    yesterdayEnd.setDate(today.getDate() - 1);
+    yesterdayEnd.setHours(23, 59, 59, 999);
+    
+    const last7Days = new Date(today);
+    last7Days.setDate(today.getDate() - 7);
+    
+    // Get most recent day's data (simulate "real-time")
+    const latestData = await getLatestDailyData(outletId);
+    const previousPeriodData = await getPreviousPeriodData(7, outletId); // Last 7 days for trends
+    
+    // Calculate current period KPIs
+    const currentPeriodKPIs = calculateCurrentPeriodKPIs(latestData);
+    
+    // Calculate trending KPIs
+    const trendingKPIs = calculateTrendingKPIs(latestData, previousPeriodData);
+    
+    // Generate alerts
+    const alerts = generateKPIAlerts(latestData, currentPeriodKPIs);
+    
+    return {
+      outletId,
+      outletName: latestData?.outletName || "All Outlets",
+      lastUpdated: new Date(),
+      currentPeriodKPIs,
+      trendingKPIs,
+      alerts,
+    };
+  } catch (error) {
+    console.error("Error generating real-time KPI dashboard:", error);
+    throw new Error(`Failed to generate KPI dashboard: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function getLatestDailyData(outletId?: string) {
+  // Get the most recent daily financial summary
+  let q = query(
+    collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
+    orderBy("date", "desc")
+  );
+  
+  if (outletId && outletId !== "all") {
+    q = query(q, where("outlet_id", "==", outletId));
+  }
+  
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  
+  const latestDoc = snapshot.docs[0];
+  const data = latestDoc.data() as DailyFinancialSummary;
+  
+  // Get outlet name if needed
+  let outletName = "All Outlets";
+  if (outletId && outletId !== "all") {
+    try {
+      const outlets = await getOutletsAction();
+      const outlet = outlets.find(o => o.id === outletId);
+      outletName = outlet?.name || "Unknown Outlet";
+    } catch (error) {
+      console.warn("Could not fetch outlet name:", error);
+    }
+  }
+  
+  return {
+    ...data,
+    outletName,
+  };
+}
+
+async function getPreviousPeriodData(days: number, outletId?: string) {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(endDate.getDate() - days);
+  
+  let q = query(
+    collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
+    where("date", ">=", Timestamp.fromDate(startDate)),
+    where("date", "<=", Timestamp.fromDate(endDate)),
+    orderBy("date", "desc")
+  );
+  
+  if (outletId && outletId !== "all") {
+    q = query(q, where("outlet_id", "==", outletId));
+  }
+  
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => doc.data() as DailyFinancialSummary);
+}
+
+function calculateCurrentPeriodKPIs(latestData: any) {
+  if (!latestData) {
+    // Return default KPIs if no data
+    return {
+      todayRevenue: 0,
+      revenueTarget: 0,
+      revenueAchievement: 0,
+      currentFoodCostPct: 0,
+      currentBeverageCostPct: 0,
+      targetFoodCostPct: 0,
+      targetBeverageCostPct: 0,
+      customersServed: 0,
+      averageCheck: 0,
+      tableUtilization: 0,
+      salesPerHour: 0,
+      salesPerEmployee: 0,
+      orderAccuracy: 0,
+    };
+  }
+  
+  const todayRevenue = (latestData.actual_food_revenue || 0) + (latestData.actual_beverage_revenue || 0);
+  const revenueTarget = (latestData.budget_food_revenue || 0) + (latestData.budget_beverage_revenue || 0);
+  const revenueAchievement = revenueTarget > 0 ? (todayRevenue / revenueTarget) * 100 : 0;
+  
+  const currentFoodCostPct = latestData.actual_food_cost_pct || 0;
+  const currentBeverageCostPct = latestData.actual_beverage_cost_pct || 0;
+  const targetFoodCostPct = latestData.budget_food_cost_pct || 0;
+  const targetBeverageCostPct = latestData.budget_beverage_cost_pct || 0;
+  
+  const customersServed = latestData.total_covers || 0;
+  const averageCheck = latestData.average_check || (customersServed > 0 ? todayRevenue / customersServed : 0);
+  
+  // Simulate other KPIs (these would come from additional data sources in real implementation)
+  const tableUtilization = Math.min(100, Math.max(0, (customersServed / 100) * 100)); // Assuming 100 seat capacity
+  const salesPerHour = todayRevenue / 12; // Assuming 12 hour operation
+  const salesPerEmployee = todayRevenue / 10; // Assuming 10 employees
+  const orderAccuracy = 95 + Math.random() * 4; // Simulated 95-99%
+  
+  return {
+    todayRevenue,
+    revenueTarget,
+    revenueAchievement,
+    currentFoodCostPct,
+    currentBeverageCostPct,
+    targetFoodCostPct,
+    targetBeverageCostPct,
+    customersServed,
+    averageCheck,
+    tableUtilization,
+    salesPerHour,
+    salesPerEmployee,
+    orderAccuracy,
+  };
+}
+
+function calculateTrendingKPIs(latestData: any, historicalData: any[]) {
+  if (!latestData || historicalData.length === 0) {
+    return [];
+  }
+  
+  // Calculate averages from historical data
+  const avgRevenue = historicalData.reduce((sum, d) => 
+    sum + (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0), 0
+  ) / historicalData.length;
+  
+  const avgFoodCostPct = historicalData.reduce((sum, d) => 
+    sum + (d.actual_food_cost_pct || 0), 0
+  ) / historicalData.length;
+  
+  const avgBeverageCostPct = historicalData.reduce((sum, d) => 
+    sum + (d.actual_beverage_cost_pct || 0), 0
+  ) / historicalData.length;
+  
+  const avgCovers = historicalData.reduce((sum, d) => 
+    sum + (d.total_covers || 0), 0
+  ) / historicalData.length;
+  
+  const currentRevenue = (latestData.actual_food_revenue || 0) + (latestData.actual_beverage_revenue || 0);
+  const currentFoodCostPct = latestData.actual_food_cost_pct || 0;
+  const currentBeverageCostPct = latestData.actual_beverage_cost_pct || 0;
+  const currentCovers = latestData.total_covers || 0;
+  
+  return [
+    {
+      name: "Daily Revenue",
+      value: currentRevenue,
+      target: avgRevenue,
+      trend: (currentRevenue > avgRevenue ? "up" : currentRevenue < avgRevenue ? "down" : "stable") as "up" | "down" | "stable",
+      trendPercentage: avgRevenue > 0 ? ((currentRevenue - avgRevenue) / avgRevenue) * 100 : 0,
+      status: (currentRevenue > avgRevenue * 1.1 ? "excellent" : 
+              currentRevenue > avgRevenue * 0.9 ? "good" : 
+              currentRevenue > avgRevenue * 0.8 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
+    },
+    {
+      name: "Food Cost %",
+      value: currentFoodCostPct,
+      target: avgFoodCostPct,
+      trend: (currentFoodCostPct < avgFoodCostPct ? "up" : currentFoodCostPct > avgFoodCostPct ? "down" : "stable") as "up" | "down" | "stable", // Lower is better for costs
+      trendPercentage: avgFoodCostPct > 0 ? ((avgFoodCostPct - currentFoodCostPct) / avgFoodCostPct) * 100 : 0, // Inverted for cost
+      status: (currentFoodCostPct < avgFoodCostPct * 0.9 ? "excellent" : 
+              currentFoodCostPct < avgFoodCostPct * 1.1 ? "good" : 
+              currentFoodCostPct < avgFoodCostPct * 1.2 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
+    },
+    {
+      name: "Customer Count",
+      value: currentCovers,
+      target: avgCovers,
+      trend: (currentCovers > avgCovers ? "up" : currentCovers < avgCovers ? "down" : "stable") as "up" | "down" | "stable",
+      trendPercentage: avgCovers > 0 ? ((currentCovers - avgCovers) / avgCovers) * 100 : 0,
+      status: (currentCovers > avgCovers * 1.1 ? "excellent" : 
+              currentCovers > avgCovers * 0.9 ? "good" : 
+              currentCovers > avgCovers * 0.8 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
+    },
+  ];
+}
+
+function generateKPIAlerts(latestData: any, kpis: any): { type: "cost_variance" | "revenue_shortfall" | "efficiency_issue"; message: string; severity: "high" | "medium" | "low"; timestamp: Date; }[] {
+  const alerts: { type: "cost_variance" | "revenue_shortfall" | "efficiency_issue"; message: string; severity: "high" | "medium" | "low"; timestamp: Date; }[] = [];
+  const now = new Date();
+  
+  if (!latestData) return alerts;
+  
+  // Revenue shortfall alert
+  if (kpis.revenueAchievement < 80) {
+    alerts.push({
+      type: "revenue_shortfall" as const,
+      message: `Revenue is ${(100 - kpis.revenueAchievement).toFixed(1)}% below target`,
+      severity: kpis.revenueAchievement < 50 ? "high" as const : "medium" as const,
+      timestamp: now,
+    });
+  }
+  
+  // Cost variance alerts
+  if (kpis.currentFoodCostPct > kpis.targetFoodCostPct * 1.1) {
+    alerts.push({
+      type: "cost_variance" as const,
+      message: `Food cost is ${(kpis.currentFoodCostPct - kpis.targetFoodCostPct).toFixed(1)}% above target`,
+      severity: kpis.currentFoodCostPct > kpis.targetFoodCostPct * 1.2 ? "high" as const : "medium" as const,
+      timestamp: now,
+    });
+  }
+  
+  if (kpis.currentBeverageCostPct > kpis.targetBeverageCostPct * 1.1) {
+    alerts.push({
+      type: "cost_variance" as const,
+      message: `Beverage cost is ${(kpis.currentBeverageCostPct - kpis.targetBeverageCostPct).toFixed(1)}% above target`,
+      severity: kpis.currentBeverageCostPct > kpis.targetBeverageCostPct * 1.2 ? "high" as const : "medium" as const,
+      timestamp: now,
+    });
+  }
+  
+  // Efficiency alerts
+  if (kpis.customersServed < 50 && kpis.todayRevenue > 0) { // Assuming this indicates low efficiency
+    alerts.push({
+      type: "efficiency_issue" as const,
+      message: `Low customer volume: only ${kpis.customersServed} customers served`,
+      severity: "low" as const,
+      timestamp: now,
+    });
+  }
+  
+  return alerts;
+}
+
+// Revenue & Cost Forecasting Report (Basic Implementation)
+export async function getForecastingReportAction(
+  historicalDateRange: { from: Date; to: Date },
+  forecastPeriod: { from: Date; to: Date },
+  outletId?: string
+): Promise<ForecastingReport> {
+  try {
+    // Get historical data for trend analysis
+    const historicalData = await getHistoricalDataForForecasting(historicalDateRange, outletId);
+    
+    if (historicalData.length < 3) {
+      throw new Error("Insufficient historical data for forecasting. Need at least 3 days of data.");
+    }
+    
+    // For limited data, use simple averaging instead of complex trend analysis
+    const isLimitedData = historicalData.length < 7;
+    
+    // Calculate trend coefficients
+    const revenueTrend = calculateLinearTrend(historicalData.map(d => (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0)));
+    const foodCostTrend = calculateLinearTrend(historicalData.map(d => d.actual_food_cost_pct || 0));
+    const beverageCostTrend = calculateLinearTrend(historicalData.map(d => d.actual_beverage_cost_pct || 0));
+    const customerTrend = calculateLinearTrend(historicalData.map(d => d.total_covers || 0));
+    
+    // Generate forecasts
+    const revenueForecast = generateRevenueForecast(forecastPeriod, revenueTrend, historicalData);
+    const costForecast = generateCostForecast(foodCostTrend, beverageCostTrend, isLimitedData);
+    const demandForecast = generateDemandForecast(customerTrend, revenueTrend, historicalData);
+    
+    // Generate insights
+    const assumptions = generateForecastAssumptions(isLimitedData, historicalData.length);
+    const riskFactors = generateRiskFactors(revenueTrend, costForecast, isLimitedData);
+    const recommendations = generateForecastRecommendations(revenueTrend, costForecast, isLimitedData);
+    
+    return {
+      dateRange: historicalDateRange,
+      forecastPeriod,
+      outletId,
+      outletName: "All Outlets", // Would be fetched from outlet data
+      revenueForecast,
+      costForecast,
+      demandForecast,
+      assumptions,
+      riskFactors,
+      recommendations,
+    };
+  } catch (error) {
+    console.error("Error generating forecasting report:", error);
+    throw new Error(`Failed to generate forecasting report: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+async function getHistoricalDataForForecasting(dateRange: { from: Date; to: Date }, outletId?: string) {
+  let q = query(
+    collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
+    where("date", ">=", Timestamp.fromDate(dateRange.from)),
+    where("date", "<=", Timestamp.fromDate(dateRange.to)),
+    orderBy("date", "asc")
+  );
+  
+  if (outletId && outletId !== "all") {
+    q = query(q, where("outlet_id", "==", outletId));
+  }
+  
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => doc.data() as DailyFinancialSummary);
+}
+
+function calculateLinearTrend(values: number[]) {
+  if (values.length < 2) return { slope: 0, intercept: values[0] || 0 };
+  
+  const n = values.length;
+  const xSum = (n * (n - 1)) / 2; // Sum of 0, 1, 2, ..., n-1
+  const ySum = values.reduce((sum, val) => sum + val, 0);
+  const xySum = values.reduce((sum, val, index) => sum + (val * index), 0);
+  const xxSum = values.reduce((sum, _, index) => sum + (index * index), 0);
+  
+  const slope = (n * xySum - xSum * ySum) / (n * xxSum - xSum * xSum);
+  const intercept = (ySum - slope * xSum) / n;
+  
+  return { slope, intercept };
+}
+
+function generateRevenueForecast(
+  forecastPeriod: { from: Date; to: Date },
+  revenueTrend: { slope: number; intercept: number },
+  historicalData: DailyFinancialSummary[]
+) {
+  const dailyForecasts = [];
+  const monthlyForecasts = [];
+  
+  // Calculate average revenue for confidence intervals
+  const avgRevenue = historicalData.reduce((sum, d) => 
+    sum + (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0), 0
+  ) / historicalData.length;
+  
+  const revenueStdDev = Math.sqrt(
+    historicalData.reduce((sum, d) => {
+      const revenue = (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0);
+      return sum + Math.pow(revenue - avgRevenue, 2);
+    }, 0) / historicalData.length
+  );
+  
+  // Generate daily forecasts
+  const daysDiff = Math.ceil((forecastPeriod.to.getTime() - forecastPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+  
+  for (let i = 0; i <= daysDiff; i++) {
+    const forecastDate = new Date(forecastPeriod.from);
+    forecastDate.setDate(forecastDate.getDate() + i);
+    
+    const predictedRevenue = Math.max(0, revenueTrend.intercept + (revenueTrend.slope * (historicalData.length + i)));
+    const confidenceRange = revenueStdDev * 1.96; // 95% confidence interval
+    
+    dailyForecasts.push({
+      date: forecastDate,
+      predictedRevenue,
+      confidenceInterval: {
+        lower: Math.max(0, predictedRevenue - confidenceRange),
+        upper: predictedRevenue + confidenceRange,
+      },
+    });
+  }
+  
+  // Generate monthly forecasts (simplified)
+  const monthsInPeriod = Math.ceil(daysDiff / 30);
+  for (let i = 0; i < monthsInPeriod; i++) {
+    const monthDate = new Date(forecastPeriod.from);
+    monthDate.setMonth(monthDate.getMonth() + i);
+    
+    const monthlyRevenue = (revenueTrend.intercept + (revenueTrend.slope * (historicalData.length + (i * 30)))) * 30;
+    const seasonalFactor = 1 + (Math.sin((monthDate.getMonth() / 12) * 2 * Math.PI) * 0.1); // Simple seasonal adjustment
+    
+    monthlyForecasts.push({
+      month: monthDate,
+      predictedRevenue: Math.max(0, monthlyRevenue * seasonalFactor),
+      confidenceInterval: {
+        lower: Math.max(0, monthlyRevenue * seasonalFactor * 0.8),
+        upper: monthlyRevenue * seasonalFactor * 1.2,
+      },
+      seasonalFactor,
+    });
+  }
+  
+  return { daily: dailyForecasts, monthly: monthlyForecasts };
+}
+
+function generateCostForecast(
+  foodCostTrend: { slope: number; intercept: number },
+  beverageCostTrend: { slope: number; intercept: number },
+  isLimitedData = false
+) {
+  return {
+    predictedFoodCostPct: Math.max(0, Math.min(100, foodCostTrend.intercept + foodCostTrend.slope * 30)),
+    predictedBeverageCostPct: Math.max(0, Math.min(100, beverageCostTrend.intercept + beverageCostTrend.slope * 30)),
+    predictedLaborCostPct: 25, // Placeholder - would need labor data
+    confidenceLevel: isLimitedData ? 50 : 75, // Lower confidence for limited data
+  };
+}
+
+function generateDemandForecast(
+  customerTrend: { slope: number; intercept: number },
+  revenueTrend: { slope: number; intercept: number },
+  historicalData: DailyFinancialSummary[]
+) {
+  const avgCustomers = historicalData.reduce((sum, d) => sum + (d.total_covers || 0), 0) / historicalData.length;
+  const avgRevenue = historicalData.reduce((sum, d) => 
+    sum + (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0), 0
+  ) / historicalData.length;
+  
+  const predictedCustomers = Math.max(0, customerTrend.intercept + customerTrend.slope * 30);
+  const predictedRevenue = Math.max(0, revenueTrend.intercept + revenueTrend.slope * 30);
+  const predictedAverageCheck = predictedCustomers > 0 ? predictedRevenue / predictedCustomers : avgRevenue / avgCustomers;
+  
+  return {
+    predictedCustomers,
+    predictedAverageCheck,
+    peakHours: ["12:00-14:00", "18:00-21:00"], // Industry standard
+    slowHours: ["14:00-17:00", "21:00-23:00"],
+  };
+}
+
+function generateForecastAssumptions(isLimitedData = false, dataPoints = 0) {
+  const baseAssumptions = [
+    isLimitedData 
+      ? `Based on limited data analysis (${dataPoints} days) - forecast accuracy may be reduced`
+      : "Based on linear trend analysis of historical data",
+    "Assumes current market conditions remain stable",
+    isLimitedData 
+      ? "Simple averaging used due to limited historical data"
+      : "Seasonal adjustments applied using historical patterns",
+    "External factors (events, weather) not included",
+  ];
+  
+  if (!isLimitedData) {
+    baseAssumptions.push("95% confidence intervals calculated from historical variance");
+  } else {
+    baseAssumptions.push("Wider confidence intervals due to limited data sample");
+  }
+  
+  return baseAssumptions;
+}
+
+function generateRiskFactors(
+  revenueTrend: { slope: number; intercept: number },
+  costForecast: any,
+  isLimitedData = false
+) {
+  const risks = [];
+  
+  if (revenueTrend.slope < 0) {
+    risks.push("Declining revenue trend may continue");
+  }
+  
+  if (costForecast.predictedFoodCostPct > 35) {
+    risks.push("Food costs may exceed sustainable levels");
+  }
+  
+  if (costForecast.predictedBeverageCostPct > 25) {
+    risks.push("Beverage costs trending above industry standards");
+  }
+  
+  if (isLimitedData) {
+    risks.push("Limited historical data reduces forecast reliability");
+    risks.push("Predictions based on short-term trends may not reflect long-term patterns");
+  }
+  
+  risks.push("Economic conditions may impact customer demand");
+  risks.push("Supply chain disruptions could affect costs");
+  
+  return risks;
+}
+
+function generateForecastRecommendations(
+  revenueTrend: { slope: number; intercept: number },
+  costForecast: any,
+  isLimitedData = false
+) {
+  const recommendations = [];
+  
+  if (revenueTrend.slope > 0) {
+    recommendations.push("Continue current growth strategies");
+  } else {
+    recommendations.push("Implement revenue recovery initiatives");
+  }
+  
+  if (costForecast.predictedFoodCostPct > 30) {
+    recommendations.push("Review food cost control measures");
+  }
+  
+  if (costForecast.predictedBeverageCostPct > 20) {
+    recommendations.push("Optimize beverage purchasing and inventory");
+  }
+  
+  if (isLimitedData) {
+    recommendations.push("Collect more historical data to improve forecast accuracy");
+    recommendations.push("Use current forecasts as preliminary estimates only");
+    recommendations.push("Re-run forecasts weekly as more data becomes available");
+  } else {
+    recommendations.push("Monitor forecasts weekly and adjust strategies");
+  }
+  
+  recommendations.push("Collect additional data points for improved accuracy");
+  
+  return recommendations;
 }

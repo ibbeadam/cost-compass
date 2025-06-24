@@ -38,6 +38,9 @@ import {
   getMonthlyProfitLossReportForDateRangeAction,
   getBudgetVsActualsReportAction,
   getDailyRevenueTrendsReportAction,
+  getYearOverYearReportAction,
+  getRealTimeKPIDashboardAction,
+  getForecastingReportAction,
 } from "@/actions/profitLossActions";
 import type {
   Outlet,
@@ -49,6 +52,9 @@ import type {
   CostAnalysisByCategoryReport,
   BudgetVsActualsReport,
   DailyRevenueTrendsReport,
+  YearOverYearReport,
+  RealTimeKPIDashboard,
+  ForecastingReport,
 } from "@/types";
 import { FlashFoodCostReportTable } from "../../ui/flash-food-cost-report-table";
 import { DetailedFoodCostReportTable } from "../../ui/detailed-food-cost-report-table";
@@ -59,6 +65,9 @@ import { MonthlyProfitLossReportTable } from "../../ui/MonthlyProfitLossReportTa
 import { CostAnalysisByCategoryReportTable } from "../../ui/cost-analysis-by-category-report-table";
 import { BudgetVsActualsReportTable } from "../../ui/budget-vs-actuals-report-table";
 import { DailyRevenueTrendsReportTable } from "../../ui/daily-revenue-trends-report-table";
+import { YearOverYearReportTable } from "../../ui/year-over-year-report-table";
+import { RealTimeKPIDashboardComponent } from "../../ui/real-time-kpi-dashboard";
+import { ForecastingReportTable } from "../../ui/forecasting-report-table";
 import {
   Tooltip,
   TooltipContent,
@@ -75,12 +84,18 @@ interface ReportOption {
 }
 
 const reportOptions: ReportOption[] = [
+  // Existing Reports
   { value: "detailed_food_cost", label: "Detailed Food Cost Report" },
   { value: "detailed_beverage_cost", label: "Detailed Beverage Cost Report" },
   { value: "monthly_profit_loss", label: "Monthly Profit/Loss Report" },
   { value: "cost_analysis_by_category", label: "Cost Analysis by Category" },
   { value: "budget_vs_actuals", label: "Budget vs. Actuals (F&B)" },
   { value: "daily_revenue_trends", label: "Daily Revenue Trends" },
+  
+  // Required New Reports
+  { value: "year_over_year", label: "Year-over-Year Comparison" },
+  { value: "real_time_kpi", label: "Real-Time KPI Dashboard" },
+  { value: "forecasting_report", label: "Revenue & Cost Forecasting" },
 ];
 
 export default function ReportsClient() {
@@ -99,6 +114,9 @@ export default function ReportsClient() {
     | CostAnalysisByCategoryReport
     | BudgetVsActualsReport
     | DailyRevenueTrendsReport
+    | YearOverYearReport
+    | RealTimeKPIDashboard
+    | ForecastingReport
     | null
   >(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
@@ -269,6 +287,53 @@ export default function ReportsClient() {
           selectedOutletId
         );
         console.log("Daily Revenue Trends Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "year_over_year") {
+        console.log("Calling getYearOverYearReportAction from client...");
+        // For Year-over-Year, we'll use the current year from the date range
+        const currentYear = dateRange.from.getFullYear();
+        const data = await getYearOverYearReportAction(
+          currentYear,
+          selectedOutletId === "all" ? undefined : selectedOutletId
+        );
+        console.log("Year-over-Year Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "real_time_kpi") {
+        console.log("Calling getRealTimeKPIDashboardAction from client...");
+        const data = await getRealTimeKPIDashboardAction(
+          selectedOutletId === "all" ? undefined : selectedOutletId
+        );
+        console.log("Real-Time KPI Dashboard data:", data);
+        setReportData(data);
+      } else if (selectedReport === "forecasting_report") {
+        console.log("Calling getForecastingReportAction from client...");
+        
+        // For forecasting, ensure we have enough historical data
+        // If selected range is too short, extend it backwards to get at least 7 days
+        const minHistoricalDays = 7;
+        const selectedDays = Math.ceil((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        let historicalStart = new Date(dateRange.from);
+        const historicalEnd = new Date(dateRange.to);
+        
+        if (selectedDays < minHistoricalDays) {
+          // Extend the historical period backwards to get enough data
+          historicalStart = new Date(dateRange.to);
+          historicalStart.setDate(historicalStart.getDate() - (minHistoricalDays - 1));
+        }
+        
+        // Predict for the next 30 days
+        const forecastStartDate = new Date(dateRange.to);
+        forecastStartDate.setDate(forecastStartDate.getDate() + 1);
+        const forecastEndDate = new Date(forecastStartDate);
+        forecastEndDate.setDate(forecastEndDate.getDate() + 30);
+        
+        const data = await getForecastingReportAction(
+          { from: historicalStart, to: historicalEnd }, // Extended historical period
+          { from: forecastStartDate, to: forecastEndDate }, // Forecast period
+          selectedOutletId === "all" ? undefined : selectedOutletId
+        );
+        console.log("Forecasting Report data:", data);
         setReportData(data);
       } else {
         // Fallback for other reports not yet implemented
@@ -739,10 +804,73 @@ export default function ReportsClient() {
           formatNumber(category.averageDailyCost),
         ]);
       });
+      ws_data.push([]);
+
+      // Key Insights Section
+      ws_data.push(["Key Insights"]);
+      ws_data.push([]);
+      
+      // Food Key Insights
+      ws_data.push(["Food Key Insights"]);
+      ws_data.push(["Total Food Revenue", formatNumber(categoryReport.totalFoodRevenue)]);
+      ws_data.push(["Food Cost Percentage", formatNumber(categoryReport.overallFoodCostPercentage) + "%"]);
+      ws_data.push(["Food Categories Analyzed", categoryReport.foodCategories.length]);
+      const daysInRange = Math.ceil((categoryReport.dateRange.to.getTime() - categoryReport.dateRange.from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      ws_data.push(["Average Daily Food Cost", formatNumber(categoryReport.totalFoodCost / daysInRange)]);
+      ws_data.push([]);
+      
+      ws_data.push(["Top Food Performers"]);
+      categoryReport.topFoodCategories.slice(0, 3).forEach((category, index) => {
+        ws_data.push([
+          `#${index + 1} ${category.categoryName}`,
+          formatNumber(category.percentageOfTotalFoodCost) + "% of food costs"
+        ]);
+      });
+      ws_data.push([]);
+      
+      if (categoryReport.topFoodCategories[0]) {
+        ws_data.push([
+          "Food Insight",
+          `${categoryReport.topFoodCategories[0].categoryName} is your highest food cost category, representing ${formatNumber(categoryReport.topFoodCategories[0].percentageOfTotalFoodCost)}% of total food costs.`
+        ]);
+      }
+      ws_data.push([]);
+      
+      // Beverage Key Insights
+      ws_data.push(["Beverage Key Insights"]);
+      ws_data.push(["Total Beverage Revenue", formatNumber(categoryReport.totalBeverageRevenue)]);
+      ws_data.push(["Beverage Cost Percentage", formatNumber(categoryReport.overallBeverageCostPercentage) + "%"]);
+      ws_data.push(["Beverage Categories Analyzed", categoryReport.beverageCategories.length]);
+      ws_data.push(["Average Daily Beverage Cost", formatNumber(categoryReport.totalBeverageCost / daysInRange)]);
+      ws_data.push([]);
+      
+      ws_data.push(["Top Beverage Performers"]);
+      categoryReport.topBeverageCategories.slice(0, 3).forEach((category, index) => {
+        ws_data.push([
+          `#${index + 1} ${category.categoryName}`,
+          formatNumber(category.percentageOfTotalBeverageCost) + "% of beverage costs"
+        ]);
+      });
+      ws_data.push([]);
+      
+      if (categoryReport.topBeverageCategories[0]) {
+        ws_data.push([
+          "Beverage Insight",
+          `${categoryReport.topBeverageCategories[0].categoryName} is your highest beverage cost category, representing ${formatNumber(categoryReport.topBeverageCategories[0].percentageOfTotalBeverageCost)}% of total beverage costs.`
+        ]);
+      }
+      ws_data.push([]);
+      
+      // Overall Summary
+      ws_data.push(["Overall Performance Summary"]);
+      ws_data.push(["Total Revenue", formatNumber(categoryReport.totalRevenue)]);
+      ws_data.push(["Overall Cost Percentage", formatNumber(categoryReport.overallCostPercentage) + "%"]);
+      ws_data.push(["Total Categories Analyzed", categoryReport.foodCategories.length + categoryReport.beverageCategories.length]);
+      ws_data.push([]);
 
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Cost Analysis by Category Report");
+      XLSX.utils.book_append_sheet(wb, ws, "Cost Analysis by Category");
       XLSX.writeFile(
         wb,
         `Cost_Analysis_by_Category_Report_${formatDateFn(
@@ -1779,6 +1907,170 @@ export default function ReportsClient() {
         },
       });
 
+      // Key Insights Section
+      yPos += 10;
+      doc.setFontSize(14);
+      doc.text("Key Insights", 14, yPos);
+      yPos += 10;
+
+      // Food Key Insights
+      doc.setFontSize(12);
+      doc.text("Food Key Insights", 14, yPos);
+      yPos += 8;
+      doc.setFontSize(10);
+      
+      const daysInRangePDF = Math.ceil((categoryReport.dateRange.to.getTime() - categoryReport.dateRange.from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      
+      const foodInsightsData = [
+        ["Total Food Revenue", `$${formatNumber(categoryReport.totalFoodRevenue)}`],
+        ["Food Cost Percentage", `${formatNumber(categoryReport.overallFoodCostPercentage)}%`],
+        ["Food Categories Analyzed", categoryReport.foodCategories.length.toString()],
+        ["Average Daily Food Cost", `$${formatNumber(categoryReport.totalFoodCost / daysInRangePDF)}`]
+      ];
+
+      autoTable(doc, {
+        head: [["Metric", "Value"]],
+        body: foodInsightsData,
+        startY: yPos,
+        theme: "grid",
+        styles: { fontSize: 9 },
+        columnStyles: {
+          0: { halign: "left" },
+          1: { halign: "right" },
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+
+      yPos += 8;
+      doc.setFontSize(10);
+      doc.text("Top Food Performers:", 14, yPos);
+      yPos += 5;
+      
+      const topFoodData = categoryReport.topFoodCategories.slice(0, 3).map((category, index) => [
+        `#${index + 1}`,
+        category.categoryName,
+        `${formatNumber(category.percentageOfTotalFoodCost)}%`
+      ]);
+
+      autoTable(doc, {
+        head: [["Rank", "Category", "% of Food Cost"]],
+        body: topFoodData,
+        startY: yPos,
+        theme: "striped",
+        styles: { fontSize: 9 },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "left" },
+          2: { halign: "right" },
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+
+      if (categoryReport.topFoodCategories[0]) {
+        yPos += 5;
+        doc.setFontSize(9);
+        const foodInsightText = `Insight: ${categoryReport.topFoodCategories[0].categoryName} is your highest food cost category, representing ${formatNumber(categoryReport.topFoodCategories[0].percentageOfTotalFoodCost)}% of total food costs.`;
+        const splitText = doc.splitTextToSize(foodInsightText, 180);
+        doc.text(splitText, 14, yPos);
+        yPos += splitText.length * 4;
+      }
+
+      // Beverage Key Insights
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.text("Beverage Key Insights", 14, yPos);
+      yPos += 8;
+      doc.setFontSize(10);
+
+      const beverageInsightsData = [
+        ["Total Beverage Revenue", `$${formatNumber(categoryReport.totalBeverageRevenue)}`],
+        ["Beverage Cost Percentage", `${formatNumber(categoryReport.overallBeverageCostPercentage)}%`],
+        ["Beverage Categories Analyzed", categoryReport.beverageCategories.length.toString()],
+        ["Average Daily Beverage Cost", `$${formatNumber(categoryReport.totalBeverageCost / daysInRangePDF)}`]
+      ];
+
+      autoTable(doc, {
+        head: [["Metric", "Value"]],
+        body: beverageInsightsData,
+        startY: yPos,
+        theme: "grid",
+        styles: { fontSize: 9 },
+        columnStyles: {
+          0: { halign: "left" },
+          1: { halign: "right" },
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+
+      yPos += 8;
+      doc.setFontSize(10);
+      doc.text("Top Beverage Performers:", 14, yPos);
+      yPos += 5;
+      
+      const topBeverageData = categoryReport.topBeverageCategories.slice(0, 3).map((category, index) => [
+        `#${index + 1}`,
+        category.categoryName,
+        `${formatNumber(category.percentageOfTotalBeverageCost)}%`
+      ]);
+
+      autoTable(doc, {
+        head: [["Rank", "Category", "% of Beverage Cost"]],
+        body: topBeverageData,
+        startY: yPos,
+        theme: "striped",
+        styles: { fontSize: 9 },
+        columnStyles: {
+          0: { halign: "center" },
+          1: { halign: "left" },
+          2: { halign: "right" },
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+
+      if (categoryReport.topBeverageCategories[0]) {
+        yPos += 5;
+        doc.setFontSize(9);
+        const beverageInsightText = `Insight: ${categoryReport.topBeverageCategories[0].categoryName} is your highest beverage cost category, representing ${formatNumber(categoryReport.topBeverageCategories[0].percentageOfTotalBeverageCost)}% of total beverage costs.`;
+        const splitText = doc.splitTextToSize(beverageInsightText, 180);
+        doc.text(splitText, 14, yPos);
+        yPos += splitText.length * 4;
+      }
+
+      // Overall Summary
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.text("Overall Performance Summary", 14, yPos);
+      yPos += 8;
+
+      const overallSummaryData = [
+        ["Total Revenue", `$${formatNumber(categoryReport.totalRevenue)}`],
+        ["Overall Cost Percentage", `${formatNumber(categoryReport.overallCostPercentage)}%`],
+        ["Total Categories Analyzed", `${categoryReport.foodCategories.length + categoryReport.beverageCategories.length}`]
+      ];
+
+      autoTable(doc, {
+        head: [["Metric", "Value"]],
+        body: overallSummaryData,
+        startY: yPos,
+        theme: "grid",
+        styles: { fontSize: 9 },
+        columnStyles: {
+          0: { halign: "left" },
+          1: { halign: "right" },
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+
       doc.save(
         `Cost_Analysis_by_Category_Report_${formatDateFn(
           dateRange.from,
@@ -2080,12 +2372,30 @@ export default function ReportsClient() {
           </div>
 
           <div className="flex-1 min-w-[200px]">
-            <label
-              htmlFor="date-range-picker"
-              className="block text-sm font-medium text-foreground mb-1"
-            >
-              Date Range
-            </label>
+            <div className="flex items-center gap-1 mb-1">
+              <label
+                htmlFor="date-range-picker"
+                className="block text-sm font-medium text-foreground"
+              >
+                Date Range
+              </label>
+              {selectedReport === "forecasting_report" && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        For forecasting, this date range represents historical data.
+                        If less than 7 days, the system will automatically extend
+                        the period to ensure reliable predictions.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
             {dateRange && (
               <DateRangePicker date={dateRange} setDate={setDateRange} />
             )}
@@ -2384,14 +2694,58 @@ export default function ReportsClient() {
                 />
               </div>
             )}
+
+          {/* Year-over-Year Report */}
           {!isLoadingReport &&
             reportData &&
-            selectedReport !== "detailed_food_cost" &&
-            selectedReport !== "detailed_beverage_cost" &&
-            selectedReport !== "monthly_profit_loss" &&
-            selectedReport !== "cost_analysis_by_category" &&
-            selectedReport !== "budget_vs_actuals" &&
-            selectedReport !== "daily_revenue_trends" && (
+            selectedReport === "year_over_year" &&
+            "currentYearData" in reportData && (
+              <div className="space-y-6">
+                <YearOverYearReportTable
+                  data={reportData as YearOverYearReport}
+                />
+              </div>
+            )}
+
+          {/* Real-Time KPI Dashboard */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "real_time_kpi" &&
+            "currentPeriodKPIs" in reportData && (
+              <div className="space-y-6">
+                <RealTimeKPIDashboardComponent
+                  data={reportData as RealTimeKPIDashboard}
+                />
+              </div>
+            )}
+
+          {/* Forecasting Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "forecasting_report" &&
+            "revenueForecast" in reportData && (
+              <div className="space-y-6">
+                <ForecastingReportTable
+                  data={reportData as ForecastingReport}
+                />
+              </div>
+            )}
+
+
+          {/* Placeholder for reports without implemented components yet */}
+          {!isLoadingReport &&
+            reportData &&
+            ![
+              "detailed_food_cost",
+              "detailed_beverage_cost", 
+              "monthly_profit_loss",
+              "cost_analysis_by_category",
+              "budget_vs_actuals",
+              "daily_revenue_trends",
+              "year_over_year",
+              "real_time_kpi",
+              "forecasting_report"
+            ].includes(selectedReport) && (
               <div className="border p-4 rounded-lg bg-secondary/10">
                 <h3 className="text-lg font-semibold mb-2">Report Output:</h3>
                 <pre className="whitespace-pre-wrap text-sm text-foreground/80">
@@ -2399,6 +2753,7 @@ export default function ReportsClient() {
                 </pre>
               </div>
             )}
+
         </CardContent>
       </Card>
     </div>

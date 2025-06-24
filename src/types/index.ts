@@ -661,3 +661,141 @@ export interface UpdateUserData {
   phoneNumber?: string;
   permissions?: string[];
 }
+
+// NEW FINANCIAL REPORTS TYPES
+
+// Strategic Analysis Reports
+export interface YearOverYearReport {
+  currentYearData: {
+    year: number;
+    totalRevenue: number;
+    totalFoodRevenue: number;
+    totalBeverageRevenue: number;
+    totalCosts: number;
+    netProfit: number;
+    avgMonthlyRevenue: number;
+  };
+  
+  previousYearData: {
+    year: number;
+    totalRevenue: number;
+    totalFoodRevenue: number;
+    totalBeverageRevenue: number;
+    totalCosts: number;
+    netProfit: number;
+    avgMonthlyRevenue: number;
+  };
+  
+  growthMetrics: {
+    revenueGrowth: number;
+    foodRevenueGrowth: number;
+    beverageRevenueGrowth: number;
+    costGrowth: number;
+    profitGrowth: number;
+    marginImprovement: number;
+  };
+  
+  monthlyComparison: {
+    month: number;
+    currentYearRevenue: number;
+    previousYearRevenue: number;
+    growth: number;
+    performance: "outperforming" | "underperforming" | "on_track";
+  }[];
+  
+  insights: {
+    strongestMonths: string[];
+    weakestMonths: string[];
+    seasonalTrends: string[];
+    recommendations: string[];
+  };
+}
+
+// KPI Dashboard Types
+export interface RealTimeKPIDashboard {
+  outletId?: string;
+  outletName?: string;
+  lastUpdated: Date;
+  
+  currentPeriodKPIs: {
+    // Revenue KPIs
+    todayRevenue: number;
+    revenueTarget: number;
+    revenueAchievement: number;
+    
+    // Cost KPIs
+    currentFoodCostPct: number;
+    currentBeverageCostPct: number;
+    targetFoodCostPct: number;
+    targetBeverageCostPct: number;
+    
+    // Operational KPIs
+    customersServed: number;
+    averageCheck: number;
+    tableUtilization: number;
+    
+    // Efficiency KPIs
+    salesPerHour: number;
+    salesPerEmployee: number;
+    orderAccuracy: number;
+  };
+  
+  trendingKPIs: {
+    name: string;
+    value: number;
+    target: number;
+    trend: "up" | "down" | "stable";
+    trendPercentage: number;
+    status: "excellent" | "good" | "warning" | "critical";
+  }[];
+  
+  alerts: {
+    type: "cost_variance" | "revenue_shortfall" | "efficiency_issue";
+    message: string;
+    severity: "high" | "medium" | "low";
+    timestamp: Date;
+  }[];
+}
+
+// Advanced Analytics Types
+export interface ForecastingReport {
+  dateRange: { from: Date; to: Date };
+  forecastPeriod: { from: Date; to: Date };
+  outletId?: string;
+  outletName?: string;
+  
+  revenueForecast: {
+    daily: {
+      date: Date;
+      predictedRevenue: number;
+      confidenceInterval: { lower: number; upper: number };
+      actualRevenue?: number;
+    }[];
+    
+    monthly: {
+      month: Date;
+      predictedRevenue: number;
+      confidenceInterval: { lower: number; upper: number };
+      seasonalFactor: number;
+    }[];
+  };
+  
+  costForecast: {
+    predictedFoodCostPct: number;
+    predictedBeverageCostPct: number;
+    predictedLaborCostPct: number;
+    confidenceLevel: number;
+  };
+  
+  demandForecast: {
+    predictedCustomers: number;
+    predictedAverageCheck: number;
+    peakHours: string[];
+    slowHours: string[];
+  };
+  
+  assumptions: string[];
+  riskFactors: string[];
+  recommendations: string[];
+}
+

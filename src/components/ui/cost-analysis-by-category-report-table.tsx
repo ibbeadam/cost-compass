@@ -535,53 +535,143 @@ export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, 
         </CardContent>
       </Card>
 
-      {/* Summary Insights */}
+      {/* Key Insights - Separated by Food and Beverage */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Food Insights */}
+        <Card className="w-full shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-red-50 border-b">
+            <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+              <Activity className="mr-2 h-5 w-5" />
+              Food Key Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <h4 className="font-semibold text-orange-800">Food Performance Overview</h4>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span>Total food revenue: <strong>{renderCurrency(data.totalFoodRevenue)}</strong> over {daysInRange} days</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  <span>Food cost percentage: <strong>{renderPercentage(data.overallFoodCostPercentage)}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                  <span>Food categories analyzed: <strong>{data.foodCategories.length}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                  <span>Average daily food cost: <strong>{renderCurrency(data.totalFoodCost / daysInRange)}</strong></span>
+                </li>
+              </ul>
+              
+              <h4 className="font-semibold text-orange-800 mt-6">Top Food Performers</h4>
+              <ul className="space-y-2 text-sm">
+                {data.topFoodCategories.slice(0, 3).map((category, index) => (
+                  <li key={index} className="flex items-center justify-between gap-2 p-2 bg-orange-50 rounded">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs bg-orange-100">
+                        #{index + 1}
+                      </Badge>
+                      <span><strong>{category.categoryName}</strong></span>
+                    </div>
+                    <span className="text-orange-700 font-medium">{renderPercentage(category.percentageOfTotalFoodCost)}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="text-xs text-orange-800">
+                  <strong>Insight:</strong> {data.topFoodCategories[0]?.categoryName} is your highest food cost category, 
+                  representing {renderPercentage(data.topFoodCategories[0]?.percentageOfTotalFoodCost)} of total food costs.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Beverage Insights */}
+        <Card className="w-full shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+            <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
+              <Activity className="mr-2 h-5 w-5" />
+              Beverage Key Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <h4 className="font-semibold text-blue-800">Beverage Performance Overview</h4>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>Total beverage revenue: <strong>{renderCurrency(data.totalBeverageRevenue)}</strong> over {daysInRange} days</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                  <span>Beverage cost percentage: <strong>{renderPercentage(data.overallBeverageCostPercentage)}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
+                  <span>Beverage categories analyzed: <strong>{data.beverageCategories.length}</strong></span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-sky-500 rounded-full"></div>
+                  <span>Average daily beverage cost: <strong>{renderCurrency(data.totalBeverageCost / daysInRange)}</strong></span>
+                </li>
+              </ul>
+              
+              <h4 className="font-semibold text-blue-800 mt-6">Top Beverage Performers</h4>
+              <ul className="space-y-2 text-sm">
+                {data.topBeverageCategories.slice(0, 3).map((category, index) => (
+                  <li key={index} className="flex items-center justify-between gap-2 p-2 bg-blue-50 rounded">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs bg-blue-100">
+                        #{index + 1}
+                      </Badge>
+                      <span><strong>{category.categoryName}</strong></span>
+                    </div>
+                    <span className="text-blue-700 font-medium">{renderPercentage(category.percentageOfTotalBeverageCost)}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-xs text-blue-800">
+                  <strong>Insight:</strong> {data.topBeverageCategories[0]?.categoryName} is your highest beverage cost category, 
+                  representing {renderPercentage(data.topBeverageCategories[0]?.percentageOfTotalBeverageCost)} of total beverage costs.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Overall Summary */}
       <Card className="w-full shadow-lg">
         <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-50 border-b">
           <CardTitle className="text-lg font-semibold text-gray-800 flex items-center">
             <Activity className="mr-2 h-5 w-5" />
-            Key Insights
+            Overall Performance Summary
           </CardTitle>
         </CardHeader>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <h4 className="font-semibold text-green-800">Performance Highlights</h4>
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>Total revenue: <strong>{renderCurrency(data.totalRevenue)}</strong> over {daysInRange} days</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>Overall cost percentage: <strong>{renderPercentage(data.overallCostPercentage)}</strong></span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                  <span>Food categories analyzed: <strong>{data.foodCategories.length}</strong></span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                  <span>Beverage categories analyzed: <strong>{data.beverageCategories.length}</strong></span>
-                </li>
-              </ul>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+              <div className="text-2xl font-bold text-green-700">{renderCurrency(data.totalRevenue)}</div>
+              <div className="text-sm text-green-600">Total Revenue</div>
+              <div className="text-xs text-green-500 mt-1">{daysInRange} days period</div>
             </div>
-            <div className="space-y-4">
-              <h4 className="font-semibold text-blue-800">Top Performers</h4>
-              <ul className="space-y-2 text-sm">
-                {data.topFoodCategories.slice(0, 2).map((category, index) => (
-                  <li key={index} className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-                    <span>Food: <strong>{category.categoryName}</strong> ({renderPercentage(category.percentageOfTotalFoodCost)})</span>
-                  </li>
-                ))}
-                {data.topBeverageCategories.slice(0, 2).map((category, index) => (
-                  <li key={index} className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                    <span>Beverage: <strong>{category.categoryName}</strong> ({renderPercentage(category.percentageOfTotalBeverageCost)})</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="text-center p-4 bg-amber-50 rounded-lg border border-amber-200">
+              <div className="text-2xl font-bold text-amber-700">{renderPercentage(data.overallCostPercentage)}</div>
+              <div className="text-sm text-amber-600">Overall Cost %</div>
+              <div className="text-xs text-amber-500 mt-1">Combined F&B</div>
+            </div>
+            <div className="text-center p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <div className="text-2xl font-bold text-purple-700">{data.foodCategories.length + data.beverageCategories.length}</div>
+              <div className="text-sm text-purple-600">Categories Analyzed</div>
+              <div className="text-xs text-purple-500 mt-1">{data.foodCategories.length} Food + {data.beverageCategories.length} Beverage</div>
             </div>
           </div>
         </CardContent>

@@ -8,6 +8,7 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppFooter } from "@/components/layout/AppFooter";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { usePathname } from "next/navigation"; // Added
 import { useEffect, useState } from "react"; // Added for isMounted pattern
 
@@ -58,12 +59,14 @@ export default function RootLayout({
           />
         </head>
         <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
-          <AuthProvider>
-            <div className="flex min-h-screen w-full items-center justify-center">
-              {children}
-            </div>
-            <Toaster />
-          </AuthProvider>
+          <ThemeProvider>
+            <AuthProvider>
+              <div className="flex min-h-screen w-full items-center justify-center">
+                {children}
+              </div>
+              <Toaster />
+            </AuthProvider>
+          </ThemeProvider>
         </body>
       </html>
     );
@@ -96,27 +99,29 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
-        <AuthProvider>
-          {isAuthPage ? (
-            <div className="flex min-h-screen w-full items-center justify-center overflow-x-hidden">
-              {children}
-            </div>
-          ) : (
-            <SidebarProvider>
-              <div className="flex min-h-screen w-full overflow-x-hidden">
-                <AppSidebar />
-                <div className="flex flex-1 flex-col overflow-x-hidden">
-                  <AppHeader />
-                  <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full overflow-x-hidden">
-                    {children}
-                  </main>
-                  <AppFooter />
-                </div>
+        <ThemeProvider>
+          <AuthProvider>
+            {isAuthPage ? (
+              <div className="flex min-h-screen w-full items-center justify-center overflow-x-hidden">
+                {children}
               </div>
-            </SidebarProvider>
-          )}
-          <Toaster />
-        </AuthProvider>
+            ) : (
+              <SidebarProvider>
+                <div className="flex min-h-screen w-full overflow-x-hidden">
+                  <AppSidebar />
+                  <div className="flex flex-1 flex-col overflow-x-hidden">
+                    <AppHeader />
+                    <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full overflow-x-hidden">
+                      {children}
+                    </main>
+                    <AppFooter />
+                  </div>
+                </div>
+              </SidebarProvider>
+            )}
+            <Toaster />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
       <style jsx global>{`
         html,

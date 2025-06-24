@@ -567,28 +567,30 @@ export function DailyRevenueTrendsReportTable({
                         </TableCell>
                         <TableCell
                           className={cn(
-                            "text-right font-mono flex items-center justify-end gap-1",
+                            "text-right font-mono",
                             getChangeColor(
                               (day.foodRevenueChangePercentage ?? 0) as number
                             )
                           )}
                         >
                           {day.foodRevenueChangePercentage != null ? (
-                            <>
+                            <div className="flex items-center justify-end gap-1">
                               {getChangeIcon(
                                 day.foodRevenueChangePercentage as number
                               )}
-                              {renderPercentage(
-                                day.foodRevenueChangePercentage as number
-                              )}
-                            </>
+                              <span>
+                                {renderPercentage(
+                                  day.foodRevenueChangePercentage as number
+                                )}
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell
                           className={cn(
-                            "text-right font-mono flex items-center justify-end gap-1",
+                            "text-right font-mono",
                             getChangeColor(
                               (day.beverageRevenueChangePercentage ??
                                 0) as number
@@ -596,35 +598,39 @@ export function DailyRevenueTrendsReportTable({
                           )}
                         >
                           {day.beverageRevenueChangePercentage != null ? (
-                            <>
+                            <div className="flex items-center justify-end gap-1">
                               {getChangeIcon(
                                 day.beverageRevenueChangePercentage as number
                               )}
-                              {renderPercentage(
-                                day.beverageRevenueChangePercentage as number
-                              )}
-                            </>
+                              <span>
+                                {renderPercentage(
+                                  day.beverageRevenueChangePercentage as number
+                                )}
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell
                           className={cn(
-                            "text-right font-mono flex items-center justify-end gap-1",
+                            "text-right font-mono",
                             getChangeColor(
                               (day.totalRevenueChangePercentage ?? 0) as number
                             )
                           )}
                         >
                           {day.totalRevenueChangePercentage != null ? (
-                            <>
+                            <div className="flex items-center justify-end gap-1">
                               {getChangeIcon(
                                 day.totalRevenueChangePercentage as number
                               )}
-                              {renderPercentage(
-                                day.totalRevenueChangePercentage as number
-                              )}
-                            </>
+                              <span>
+                                {renderPercentage(
+                                  day.totalRevenueChangePercentage as number
+                                )}
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}

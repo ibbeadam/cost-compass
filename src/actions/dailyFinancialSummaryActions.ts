@@ -271,37 +271,31 @@ export async function deleteDailyFinancialSummaryAction(id: string): Promise<voi
   if (!id) {
     throw new Error("Entry ID (YYYY-MM-DD) is required for deletion.");
   }
-  let entryDate: Date | null = null;
 
   try {
     const entryRef = doc(db!, collectionName, id);
-    const entrySnap = await getDoc(entryRef);
-    if (entrySnap.exists()) {
-        const entryData = entrySnap.data();
-        if (entryData && entryData.date instanceof Timestamp) {
-            entryDate = entryData.date.toDate();
-        }
-    }
-
+    
+    // Delete the main daily financial summary document
     const batch = writeBatch(db!);
     batch.delete(entryRef);
 
+    // Also delete related food cost details
     const detailsQuery = query(collection(db!, foodCostEntriesCollectionName), where("food_cost_entry_id", "==", id));
     const detailsSnapshot = await getDocs(detailsQuery);
     detailsSnapshot.forEach(detailDoc => batch.delete(detailDoc.ref));
 
     await batch.commit();
 
-    if (entryDate) {
-        await recalculateAndSaveFinancialSummary(entryDate);
-    }
+    // Note: We intentionally do NOT call recalculateAndSaveFinancialSummary here
+    // because that would recreate the document we just deleted with zero values.
+    // The document should remain deleted.
 
     revalidatePath("/dashboard/financial-summary");
     revalidatePath("/dashboard");
 
   } catch (error) {
-    console.error("Error deleting food cost entry: ", error);
-    throw new Error(`Failed to delete food cost entry: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error deleting daily financial summary: ", error);
+    throw new Error(`Failed to delete daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
