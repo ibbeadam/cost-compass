@@ -43,7 +43,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { 
   getAllUsersAction, 
   createUserAction, 
@@ -61,7 +61,6 @@ export default function UserManagementClient() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { toast } = useToast();
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -69,15 +68,11 @@ export default function UserManagementClient() {
       const fetchedUsers = await getAllUsersAction();
       setUsers(fetchedUsers);
     } catch (error) {
-      toast({ 
-        variant: "destructive", 
-        title: "Error Fetching Users", 
-        description: (error as Error).message || "Could not load users." 
-      });
+      showToast.error((error as Error).message || "Could not load users.");
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     fetchUsers();
@@ -97,13 +92,9 @@ export default function UserManagementClient() {
     try {
       await deleteUserAction(userId);
       fetchUsers();
-      toast({ title: "User Deleted", description: "The user has been deleted successfully." });
+      showToast.success("The user has been deleted successfully.");
     } catch (error) {
-      toast({ 
-        variant: "destructive", 
-        title: "Error Deleting User", 
-        description: (error as Error).message || "Could not delete user." 
-      });
+      showToast.error((error as Error).message || "Could not delete user.");
     }
   };
 
@@ -111,13 +102,9 @@ export default function UserManagementClient() {
     try {
       await toggleUserActiveStatusAction(userId);
       fetchUsers();
-      toast({ title: "Status Updated", description: "User status has been updated." });
+      showToast.success("User status has been updated.");
     } catch (error) {
-      toast({ 
-        variant: "destructive", 
-        title: "Error Updating Status", 
-        description: (error as Error).message || "Could not update user status." 
-      });
+      showToast.error((error as Error).message || "Could not update user status.");
     }
   };
 
@@ -126,20 +113,16 @@ export default function UserManagementClient() {
     try {
       if (editingUser) {
         await updateUserAction(editingUser.id, formData as UpdateUserData);
-        toast({ title: "User Updated", description: "User has been updated successfully." });
+        showToast.success("User has been updated successfully.");
       } else {
         await createUserAction(formData as CreateUserData);
-        toast({ title: "User Created", description: "User has been created successfully. A password reset email has been sent." });
+        showToast.success("User has been created successfully. A password reset email has been sent.");
       }
       setIsFormOpen(false);
       setEditingUser(null);
       fetchUsers();
     } catch (error) {
-      toast({ 
-        variant: "destructive", 
-        title: editingUser ? "Error Updating User" : "Error Creating User", 
-        description: (error as Error).message || "Could not save user." 
-      });
+      showToast.error((error as Error).message || "Could not save user.");
     } finally {
       setIsSubmitting(false);
     }

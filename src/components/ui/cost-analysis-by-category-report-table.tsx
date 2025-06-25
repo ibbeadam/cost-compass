@@ -26,7 +26,8 @@ import {
   Calendar,
   Building2,
   PieChart,
-  Activity
+  Activity,
+  AlertTriangle
 } from "lucide-react";
 import type { CostAnalysisByCategoryReport } from "@/types";
 import { cn, formatNumber } from "@/lib/utils";
@@ -271,6 +272,75 @@ export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, 
           subtitle="vs Budget"
         />
       </div>
+
+      {/* Cost Adjustments Breakdown */}
+      {data.foodAdjustments && data.beverageAdjustments && (
+        <Card className="w-full shadow-lg border-amber-200">
+          <CardHeader className="bg-gradient-to-r from-amber-50 to-yellow-50 border-b border-amber-200">
+            <CardTitle className="text-lg font-semibold text-amber-800 flex items-center">
+              <AlertTriangle className="mr-2 h-5 w-5" />
+              Cost Adjustments Applied
+            </CardTitle>
+            <p className="text-sm text-amber-700 mt-1">
+              Net costs shown after applying OC, Entertainment, and other adjustments (matching dashboard calculations). Other adjustments can be positive (increases cost) or negative (decreases cost).
+            </p>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <h4 className="font-semibold text-orange-800 border-b border-orange-200 pb-2">Food Cost Adjustments</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Raw Food Cost:</span>
+                    <span className="font-mono">${formatNumber(data.rawFoodCost || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                    <span>- OC Deduction:</span>
+                    <span className="font-mono">-${formatNumber(data.foodAdjustments.oc)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                    <span>- Entertainment:</span>
+                    <span className="font-mono">-${formatNumber(data.foodAdjustments.entertainment)}</span>
+                  </div>
+                  <div className={`flex justify-between ${data.foodAdjustments.other >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <span>{data.foodAdjustments.other >= 0 ? '+ Other Adjustments:' : '- Other Adjustments:'}</span>
+                    <span className="font-mono">{data.foodAdjustments.other >= 0 ? '+' : ''}${formatNumber(Math.abs(data.foodAdjustments.other))}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-200 pt-2 font-semibold">
+                    <span>Net Food Cost:</span>
+                    <span className="font-mono text-green-600">${formatNumber(data.totalFoodCost)}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <h4 className="font-semibold text-blue-800 border-b border-blue-200 pb-2">Beverage Cost Adjustments</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Raw Beverage Cost:</span>
+                    <span className="font-mono">${formatNumber(data.rawBeverageCost || 0)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                    <span>- OC Deduction:</span>
+                    <span className="font-mono">-${formatNumber(data.beverageAdjustments.oc)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                    <span>- Entertainment:</span>
+                    <span className="font-mono">-${formatNumber(data.beverageAdjustments.entertainment)}</span>
+                  </div>
+                  <div className={`flex justify-between ${data.beverageAdjustments.other >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <span>{data.beverageAdjustments.other >= 0 ? '+ Other Adjustments:' : '- Other Adjustments:'}</span>
+                    <span className="font-mono">{data.beverageAdjustments.other >= 0 ? '+' : ''}${formatNumber(Math.abs(data.beverageAdjustments.other))}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-gray-200 pt-2 font-semibold">
+                    <span>Net Beverage Cost:</span>
+                    <span className="font-mono text-green-600">${formatNumber(data.totalBeverageCost)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Cost Distribution Visualization */}
       <Card className="w-full shadow-lg">

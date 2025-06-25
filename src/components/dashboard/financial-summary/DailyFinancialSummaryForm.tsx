@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { format, isValid } from "date-fns";
@@ -58,7 +58,6 @@ interface DailyFinancialSummaryFormProps {
 
 export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCancel }: DailyFinancialSummaryFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
 
   const defaultValues: FormValues = {
     date: initialData?.date instanceof Timestamp ? initialData.date.toDate() : (initialData?.date ? new Date(initialData.date) : new Date()),
@@ -160,18 +159,11 @@ export default function DailyFinancialSummaryForm({ initialData, onSuccess, onCa
       }
       
       await saveDailyFinancialSummaryAction(summaryDataPayload, initialData?.id);
-      toast({
-        title: initialData ? "Summary Updated" : "Summary Added",
-        description: `Daily financial summary for ${format(data.date, "PPP")} has been successfully saved.`,
-      });
+      showToast.success(`Daily financial summary for ${format(data.date, "PPP")} has been successfully saved.`);
       onSuccess();
     } catch (error) {
       console.error("Error saving daily financial summary:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Saving Summary",
-        description: (error as Error).message || "Could not save the summary. Please try again.",
-      });
+      showToast.error((error as Error).message || "Could not save the summary. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

@@ -7,7 +7,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import type { Outlet, Category, FoodCostEntry, FoodCostDetail } from "@/types";
 import { getOutletsAction, getFoodCategoriesAction } from "@/actions/foodCostActions"; // Reusing from foodCostActions
 import FoodCostInputForm from "./FoodCostInputForm";
@@ -28,7 +28,6 @@ export default function FoodCostInputClient() {
 
   const [isClient, setIsClient] = useState(false); // 1. Add isClient state
 
-  const { toast } = useToast();
 
   // 2. Add useEffect to set isClient on mount
   useEffect(() => {
@@ -50,7 +49,7 @@ export default function FoodCostInputClient() {
         }
         setFoodCategories(fetchedCategories);
       } catch (error) {
-        toast({ variant: "destructive", title: "Error fetching initial data", description: (error as Error).message });
+        showToast.error((error as Error).message);
         throw error; // Re-throw to allow further error handling if needed
       } finally {
         setIsLoadingOutlets(false);
@@ -58,7 +57,7 @@ export default function FoodCostInputClient() {
       }
     }
     fetchData();
-  }, [toast, selectedOutletId]);
+  }, [selectedOutletId]);
 
   const fetchEntryData = useCallback(async () => {
     if (!selectedOutletId) {
@@ -95,7 +94,7 @@ export default function FoodCostInputClient() {
       setCurrentEntry(entry);
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-${entry?.id || 'new'}`);
     } catch (error) {
-      toast({ variant: "destructive", title: "Error fetching cost entry", description: (error as Error).message });
+      showToast.error((error as Error).message);
       setCurrentEntry(null);
       console.log("Error fetching cost entry:", error);
       // selectedDate is guaranteed to be a valid Date here due to the checks above.\
@@ -103,7 +102,7 @@ export default function FoodCostInputClient() {
     } finally {
       setIsLoadingEntry(false);
     }
-  }, [selectedDate, selectedOutletId, toast, setIsLoadingEntry, setCurrentEntry, setFormKey]);
+  }, [selectedDate, selectedOutletId, setIsLoadingEntry, setCurrentEntry, setFormKey]);
 
 
   useEffect(() => {
@@ -126,7 +125,7 @@ export default function FoodCostInputClient() {
   };
 
   const onFormSuccess = () => {
-    toast({ title: "Food Cost Entry Saved", description: "The entry has been successfully saved." });
+    showToast.success("The entry has been successfully saved.");
     fetchEntryData(); // Refresh data after save
   }
 

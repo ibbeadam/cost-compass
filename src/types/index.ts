@@ -381,6 +381,8 @@ export interface CostAnalysisByCategoryReport {
     categoryName: string;
     categoryId: string;
     totalCost: number;
+    rawCost?: number;
+    adjustment?: number;
     percentageOfTotalFoodCost: number;
     percentageOfTotalRevenue: number;
     averageDailyCost: number;
@@ -388,6 +390,8 @@ export interface CostAnalysisByCategoryReport {
       outletName: string;
       outletId: string;
       cost: number;
+      rawCost?: number;
+      adjustment?: number;
       percentageOfOutletFoodCost: number;
     }[];
   }[];
@@ -397,6 +401,8 @@ export interface CostAnalysisByCategoryReport {
     categoryName: string;
     categoryId: string;
     totalCost: number;
+    rawCost?: number;
+    adjustment?: number;
     percentageOfTotalBeverageCost: number;
     percentageOfTotalRevenue: number;
     averageDailyCost: number;
@@ -404,6 +410,8 @@ export interface CostAnalysisByCategoryReport {
       outletName: string;
       outletId: string;
       cost: number;
+      rawCost?: number;
+      adjustment?: number;
       percentageOfOutletBeverageCost: number;
     }[];
   }[];
@@ -412,6 +420,20 @@ export interface CostAnalysisByCategoryReport {
   totalFoodCost: number;
   totalBeverageCost: number;
   totalCost: number;
+  rawFoodCost?: number;
+  rawBeverageCost?: number;
+  foodAdjustments?: {
+    oc: number;
+    entertainment: number;
+    other: number;
+    total: number;
+  };
+  beverageAdjustments?: {
+    oc: number;
+    entertainment: number;
+    other: number;
+    total: number;
+  };
   overallFoodCostPercentage: number;
   overallBeverageCostPercentage: number;
   overallCostPercentage: number;
@@ -722,6 +744,7 @@ export interface RealTimeKPIDashboard {
     todayRevenue: number;
     revenueTarget: number;
     revenueAchievement: number;
+    revenueVariance: number;
     
     // Cost KPIs
     currentFoodCostPct: number;
@@ -730,14 +753,14 @@ export interface RealTimeKPIDashboard {
     targetBeverageCostPct: number;
     
     // Operational KPIs
-    customersServed: number;
-    averageCheck: number;
-    tableUtilization: number;
+    profitMargin: number;
+    foodRevenuePercentage: number;
+    beverageRevenuePercentage: number;
     
     // Efficiency KPIs
-    salesPerHour: number;
-    salesPerEmployee: number;
-    orderAccuracy: number;
+    foodCostVariance: number;
+    beverageCostVariance: number;
+    costEfficiencyRatio: number;
   };
   
   trendingKPIs: {
@@ -783,15 +806,47 @@ export interface ForecastingReport {
   costForecast: {
     predictedFoodCostPct: number;
     predictedBeverageCostPct: number;
-    predictedLaborCostPct: number;
+    predictedProfitMargin: number;
+    costEfficiencyRatio: number;
     confidenceLevel: number;
+    
+    // Daily cost forecasts
+    daily: {
+      date: Date;
+      predictedFoodCost: number;
+      predictedBeverageCost: number;
+      predictedTotalCost: number;
+      confidenceInterval: { 
+        lower: number; 
+        upper: number; 
+      };
+    }[];
+    
+    // Monthly cost forecasts
+    monthly: {
+      month: Date;
+      predictedFoodCost: number;
+      predictedBeverageCost: number;
+      predictedTotalCost: number;
+      confidenceInterval: { 
+        lower: number; 
+        upper: number; 
+      };
+      seasonalFactor: number;
+    }[];
   };
   
-  demandForecast: {
-    predictedCustomers: number;
-    predictedAverageCheck: number;
-    peakHours: string[];
-    slowHours: string[];
+  businessForecast: {
+    revenueMixForecast: {
+      foodRevenuePercentage: number;
+      beverageRevenuePercentage: number;
+    };
+    revenueGrowthRate: number;
+    breakEvenRevenue: number;
+    costVarianceForecast: {
+      foodCostVariance: number;
+      beverageCostVariance: number;
+    };
   };
   
   assumptions: string[];

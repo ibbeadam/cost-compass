@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import type { Category, BeverageCostEntry, BeverageCostDetail } from "@/types";
@@ -51,7 +51,6 @@ export default function BeverageCostInputForm({
   onSuccess,
 }: BeverageCostInputFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
 
   const form = useForm<BeverageCostInputFormValues>({
     resolver: zodResolver(beverageCostInputFormSchema),
@@ -95,11 +94,11 @@ export default function BeverageCostInputForm({
 
   async function onSubmit(data: BeverageCostInputFormValues) {
     if (!selectedDate) {
-        toast({ variant: "destructive", title: "Date Missing", description: "Please ensure a date is selected."});
+        showToast.error("Please ensure a date is selected.");
         return;
     }
     if (!selectedOutletId) {
-        toast({ variant: "destructive", title: "Outlet Missing", description: "Please ensure an outlet is selected."});
+        showToast.error("Please ensure an outlet is selected.");
         return;
     }
     setIsSubmitting(true);
@@ -112,14 +111,10 @@ export default function BeverageCostInputForm({
       }));
 
       await saveBeverageCostEntryAction(selectedDate, selectedOutletId, itemsToSave, existingEntry?.id);
-      toast({ title: "Beverage Cost Entry Saved", description: "Successfully saved." });
+      showToast.success("Successfully saved.");
       onSuccess();
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error Saving Entry",
-        description: (error as Error).message || "Could not save the entry.",
-      });
+      showToast.error((error as Error).message || "Could not save the entry.");
     } finally {
       setIsSubmitting(false);
     }

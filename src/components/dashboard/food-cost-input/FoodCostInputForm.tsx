@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 // DatePicker is no longer imported or used here, it's managed in FoodCostEntryListClient.tsx
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { Loader2, PlusCircle, Trash2 } from "lucide-react";
 import type { Category, FoodCostEntry, FoodCostDetail } from "@/types";
@@ -55,7 +55,6 @@ export default function FoodCostInputForm({
 }: FoodCostInputFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Removed entryDate state, as selectedDate prop will be used directly
-  const { toast } = useToast();
 
   const form = useForm<FoodCostInputFormValues>({
     resolver: zodResolver(foodCostInputFormSchema),
@@ -102,11 +101,11 @@ export default function FoodCostInputForm({
 
   async function onSubmit(data: FoodCostInputFormValues) {
     if (!selectedDate) {
-        toast({ variant: "destructive", title: "Date Missing", description: "Please ensure a date is selected."});
+        showToast.error("Please ensure a date is selected.");
         return;
     }
     if (!selectedOutletId) {
-        toast({ variant: "destructive", title: "Outlet Missing", description: "Please ensure an outlet is selected."});
+        showToast.error("Please ensure an outlet is selected.");
         return;
     }
 
@@ -120,14 +119,10 @@ export default function FoodCostInputForm({
       }));
 
       await saveFoodCostEntryAction(selectedDate, selectedOutletId, itemsToSave, existingEntry?.id);
-      toast({ title: "Food Cost Entry Saved", description: "Successfully saved." });
+      showToast.success("Successfully saved.");
       onSuccess(); 
     } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error Saving Entry",
-        description: (error as Error).message || "Could not save the entry.",
-      });
+      showToast.error((error as Error).message || "Could not save the entry.");
     } finally {
       setIsSubmitting(false);
     }

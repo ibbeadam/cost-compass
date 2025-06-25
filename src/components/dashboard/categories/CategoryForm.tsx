@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { Category } from "@/types/index";
 import { addCategoryAction, updateCategoryAction } from "@/actions/categoryActions";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -47,7 +47,6 @@ interface CategoryFormProps {
 
 export function CategoryForm({ category, onSuccess, onCancel }: CategoryFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
 
   const defaultValues: Partial<CategoryFormValues> = {
     name: category?.name || "",
@@ -83,25 +82,15 @@ export function CategoryForm({ category, onSuccess, onCancel }: CategoryFormProp
     try {
       if (category && category.id) {
         await updateCategoryAction(category.id, data.name, data.description, data.type);
-        toast({
-          title: "Category Updated",
-          description: "The category has been successfully updated.",
-        });
+        showToast.success("Category has been successfully updated!");
       } else {
         await addCategoryAction(data.name, data.description, data.type);
-        toast({
-          title: "Category Added",
-          description: "The new category has been successfully added.",
-        });
+        showToast.success("New category has been successfully added!");
       }
       onSuccess();
     } catch (error) {
       console.error("Error saving category:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Saving Category",
-        description: (error as Error).message || "Could not save the category. Please try again.",
-      });
+      showToast.error((error as Error).message || "Could not save the category. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

@@ -46,7 +46,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { OutletForm } from "./OutletForm";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { deleteOutletAction } from "@/actions/outletActions";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -57,7 +57,6 @@ export default function OutletListClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingOutlet, setEditingOutlet] = useState<Outlet | null>(null);
-  const { toast } = useToast();
   const [currentPage, setCurrentPage] = useState(1);
   const [totalOutlets, setTotalOutlets] = useState(0);
 
@@ -66,11 +65,7 @@ export default function OutletListClient() {
 
     if (!db) {
       setIsLoading(false);
-      toast({
-        variant: "destructive",
-        title: "Database not initialized",
-        description: "Could not connect to the database.",
-      });
+      showToast.error("Could not connect to the database.");
       return;
     }
 
@@ -113,17 +108,13 @@ export default function OutletListClient() {
       },
       (error) => {
         console.error("Error fetching outlets:", error);
-        toast({
-          variant: "destructive",
-          title: "Error fetching outlets",
-          description: "Could not load outlets from the database.",
-        });
+        showToast.error("Could not load outlets from the database.");
         setIsLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [toast]);
+  }, []);
 
   const handleAddNew = () => {
     setEditingOutlet(null);
@@ -138,18 +129,11 @@ export default function OutletListClient() {
   const handleDelete = async (outletId: string) => {
     try {
       await deleteOutletAction(outletId);
-      toast({
-        title: "Outlet Deleted",
-        description: "The outlet has been successfully deleted.",
-      });
+      showToast.success("The outlet has been successfully deleted.");
       // The onSnapshot listener will automatically update the list
     } catch (error) {
       console.error("Error deleting outlet:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Deleting Outlet",
-        description: (error as Error).message || "Could not delete the outlet.",
-      });
+      showToast.error((error as Error).message || "Could not delete the outlet.");
     }
   };
 

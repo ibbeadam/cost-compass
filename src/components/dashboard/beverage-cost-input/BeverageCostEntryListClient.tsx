@@ -17,8 +17,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import { format, isValid } from "date-fns";
+import * as XLSX from 'xlsx';
 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -50,11 +53,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import {
   deleteBeverageCostEntryAction,
   getBeverageCostEntryWithDetailsAction,
   getBeverageCategoriesAction,
+  saveBeverageCostEntryAction,
 } from "@/actions/beverageCostActions";
 import { getOutletsAction } from "@/actions/foodCostActions"; // Re-use
 import type {
@@ -72,11 +76,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 
 const ITEMS_PER_PAGE = 5;
 
+// Excel import interface for beverage cost entries
+interface ExcelBeverageCostRow {
+  date: string;
+  outlet_id: string;
+  outlet_name?: string; // For display/validation
+  categories: {
+    category_id: string;
+    category_name: string;
+    cost: number;
+    description?: string;
+  }[];
+}
+
 export default function BeverageCostEntryListClient() {
-  const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
@@ -102,6 +119,13 @@ export default function BeverageCostEntryListClient() {
 
   const [error, setError] = useState<Error | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Bulk import states
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreviewData, setImportPreviewData] = useState<ExcelBeverageCostRow[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     setIsClient(true);
@@ -178,18 +202,14 @@ export default function BeverageCostEntryListClient() {
       },
       (err) => {
         console.error("Error fetching beverage cost entries:", err);
-        toast({
-          variant: "destructive",
-          title: "Error Fetching Entries",
-          description: "Could not load beverage cost entries.",
-        });
+        showToast.error("Could not load beverage cost entries.");
         setIsLoadingEntries(false);
         setError(err as Error);
       }
     );
 
     return () => unsubscribe();
-  }, [isClient, toast]);
+  }, [isClient]);
 
   const fetchOutletsAndCategories = useCallback(async () => {
     try {
@@ -206,19 +226,13 @@ export default function BeverageCostEntryListClient() {
       setBeverageCategories(categoriesData);
     } catch (err) {
       console.error("Error fetching outlets or categories:", err);
-      toast({
-        variant: "destructive",
-        title: "Error Loading Form Data",
-        description:
-          (err as Error).message ||
-          "Could not load required data for the form.",
-      });
+      showToast.error((err as Error).message || "Could not load required data for the form.");
       setError(err as Error);
     } finally {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, dialogOutletId]);
+  }, [dialogOutletId]);
 
   useEffect(() => {
     if (isClient) {
@@ -236,11 +250,7 @@ export default function BeverageCostEntryListClient() {
 
   const handleEdit = async (listEntry: BeverageCostEntry) => {
     if (!(listEntry.date instanceof Date) || !isValid(listEntry.date)) {
-      toast({
-        title: "Invalid Date for Editing",
-        description: `Cannot edit entry. The date for entry ID ${listEntry.id} is invalid.`,
-        variant: "destructive",
-      });
+      showToast.error(`Cannot edit entry. The date for entry ID ${listEntry.id} is invalid.`);
       return;
     }
     setIsLoadingDetailsForEdit(true);
@@ -259,18 +269,10 @@ export default function BeverageCostEntryListClient() {
         setDialogOutletId(fullEntryWithDetails.outlet_id);
         setIsFormOpen(true);
       } else {
-        toast({
-          title: "Entry Not Found",
-          description: "Could not load details. It might have been deleted.",
-          variant: "destructive",
-        });
+        showToast.error("Could not load details. It might have been deleted.");
       }
     } catch (err) {
-      toast({
-        title: "Error Loading Details",
-        description: (err as Error).message || "Failed to load entry details.",
-        variant: "destructive",
-      });
+      showToast.error((err as Error).message || "Failed to load entry details.");
     } finally {
       setIsLoadingDetailsForEdit(false);
     }
@@ -284,17 +286,220 @@ export default function BeverageCostEntryListClient() {
   const handleDelete = async (entryId: string) => {
     try {
       await deleteBeverageCostEntryAction(entryId);
-      toast({
-        title: "Entry Deleted",
-        description: "The beverage cost entry has been deleted.",
-      });
+      showToast.success("The beverage cost entry has been deleted.");
     } catch (err) {
       console.error("Error deleting beverage cost entry:", err);
-      toast({
-        variant: "destructive",
-        title: "Error Deleting Entry",
-        description: (err as Error).message || "Could not delete entry.",
+      showToast.error((err as Error).message || "Could not delete entry.");
+    }
+  };
+
+  // Bulk import functions
+  const generateExcelTemplate = () => {
+    if (beverageCategories.length === 0) {
+      showToast.error("Please wait for categories to load before downloading template.");
+      return;
+    }
+
+    // Create dynamic headers based on available beverage categories
+    const headers = ['Date', 'Outlet'];
+    
+    // Add category cost and description columns
+    beverageCategories.slice(0, 10).forEach(category => { // Limit to first 10 categories for Excel readability
+      headers.push(`${category.name}_Cost`, `${category.name}_Description`);
+    });
+
+    // Create sample data
+    const sampleData = ['2024-01-01', outlets[0]?.name || 'Sample Outlet'];
+    beverageCategories.slice(0, 10).forEach(() => {
+      sampleData.push(50, 'Sample description'); // Sample cost and description for beverages
+    });
+
+    const template = [headers, sampleData];
+
+    const ws = XLSX.utils.aoa_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Beverage Cost Template');
+    
+    XLSX.writeFile(wb, 'beverage_cost_import_template.xlsx');
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImportFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        parseExcelData(jsonData);
+      } catch (error) {
+        console.error('Error reading Excel file:', error);
+        showToast.error('Error reading Excel file. Please check the format.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const parseExcelData = (jsonData: any[]) => {
+    const errors: string[] = [];
+    const parsedData: ExcelBeverageCostRow[] = [];
+
+    if (jsonData.length < 2) {
+      errors.push('Excel file must contain at least header and one data row');
+      setImportErrors(errors);
+      return;
+    }
+
+    // Parse headers to identify categories (skip header row)
+    const headers = jsonData[0] as string[];
+    
+    // Find category columns dynamically
+    const categoryColumns: { index: number; categoryName: string; costIndex: number; descIndex?: number }[] = [];
+    
+    for (let i = 2; i < headers.length; i++) {
+      const header = String(headers[i]).trim();
+      if (header.endsWith('_Cost')) {
+        const categoryName = header.replace('_Cost', '');
+        const category = beverageCategories.find(c => c.name === categoryName);
+        if (category) {
+          const descIndex = headers.findIndex(h => h === `${categoryName}_Description`);
+          categoryColumns.push({
+            index: i,
+            categoryName: category.name,
+            costIndex: i,
+            descIndex: descIndex >= 0 ? descIndex : undefined
+          });
+        }
+      }
+    }
+
+    if (categoryColumns.length === 0) {
+      errors.push('No valid category columns found. Expected format: CategoryName_Cost, CategoryName_Description');
+      setImportErrors(errors);
+      return;
+    }
+
+    // Process data rows (skip header)
+    for (let rowIndex = 1; rowIndex < jsonData.length; rowIndex++) {
+      const row = jsonData[rowIndex] as any[];
+      const excelRowNumber = rowIndex + 1;
+      
+      const date = row[0];
+      const outletName = row[1];
+      
+      // Validate required fields
+      if (!date) {
+        errors.push(`Row ${excelRowNumber}: Date is required`);
+        continue;
+      }
+      
+      if (!outletName) {
+        errors.push(`Row ${excelRowNumber}: Outlet is required`);
+        continue;
+      }
+
+      // Find outlet by name
+      const outlet = outlets.find(o => o.name === outletName);
+      if (!outlet) {
+        errors.push(`Row ${excelRowNumber}: Outlet '${outletName}' not found`);
+        continue;
+      }
+
+      // Parse categories from columns
+      const categories: { category_id: string; category_name: string; cost: number; description?: string }[] = [];
+      
+      categoryColumns.forEach(col => {
+        const cost = parseFloat(row[col.costIndex]) || 0;
+        if (cost > 0) {
+          const description = col.descIndex !== undefined ? String(row[col.descIndex] || '') : '';
+          const category = beverageCategories.find(c => c.name === col.categoryName);
+          if (category) {
+            categories.push({
+              category_id: category.id,
+              category_name: category.name,
+              cost: cost,
+              description: description
+            });
+          }
+        }
       });
+
+      if (categories.length === 0) {
+        errors.push(`Row ${excelRowNumber}: At least one category cost must be greater than 0`);
+        continue;
+      }
+
+      parsedData.push({
+        date: String(date),
+        outlet_id: outlet.id,
+        outlet_name: outlet.name,
+        categories
+      });
+    }
+
+    setImportErrors(errors);
+    setImportPreviewData(parsedData);
+  };
+
+  const handleBulkImport = async () => {
+    if (importPreviewData.length === 0) {
+      showToast.error('No valid data to import');
+      return;
+    }
+
+    setIsImporting(true);
+    let successCount = 0;
+    let errorCount = 0;
+    const detailedErrors: string[] = [];
+
+    try {
+      for (const row of importPreviewData) {
+        try {
+          const date = new Date(row.date);
+          const items = row.categories.map(cat => ({
+            categoryId: cat.category_id,
+            cost: cat.cost,
+            description: cat.description || ''
+          }));
+
+          await saveBeverageCostEntryAction(date, row.outlet_id, items);
+          successCount++;
+        } catch (error) {
+          errorCount++;
+          detailedErrors.push(`${row.outlet_name} - ${row.date}: ${(error as Error).message}`);
+        }
+      }
+
+      if (successCount > 0) {
+        showToast.success(`Successfully imported ${successCount} beverage cost entries`);
+      }
+
+      if (errorCount > 0) {
+        showToast.error(`Failed to import ${errorCount} entries. Check console for details.`);
+        console.error('Import errors:', detailedErrors);
+      }
+
+      // Reset import state
+      setIsImportDialogOpen(false);
+      setImportFile(null);
+      setImportPreviewData([]);
+      setImportErrors([]);
+      
+      // Reset file input
+      const fileInput = document.getElementById('bulk-import-file') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error) {
+      console.error('Bulk import error:', error);
+      showToast.error('An error occurred during bulk import');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -375,12 +580,21 @@ export default function BeverageCostEntryListClient() {
         <h2 className="text-2xl font-bold font-headline">
           Beverage Cost Entries
         </h2>
-        <Button
-          onClick={handleAddNew}
-          disabled={isLoadingOutlets || isLoadingCategories}
-        >
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsImportDialogOpen(true)}
+            disabled={isLoadingOutlets || isLoadingCategories}
+          >
+            <Upload className="mr-2 h-4 w-4" /> Bulk Import
+          </Button>
+          <Button
+            onClick={handleAddNew}
+            disabled={isLoadingOutlets || isLoadingCategories}
+          >
+            <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
+          </Button>
+        </div>
       </div>
 
       {isLoadingInitialData && currentItems.length === 0 ? (
@@ -666,6 +880,126 @@ export default function BeverageCostEntryListClient() {
                 />
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Import Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Bulk Import Beverage Cost Entries</DialogTitle>
+            <DialogDescription>
+              Upload an Excel file to import multiple beverage cost entries at once.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-4">
+            <div className="flex gap-4">
+              <Button
+                variant="outline"
+                onClick={generateExcelTemplate}
+                disabled={beverageCategories.length === 0}
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download Template
+              </Button>
+              
+              <div className="flex-1">
+                <Input
+                  id="bulk-import-file"
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                  disabled={isImporting}
+                />
+              </div>
+            </div>
+
+            {importErrors.length > 0 && (
+              <div className="bg-destructive/10 border border-destructive rounded-md p-4">
+                <h4 className="font-medium text-destructive mb-2">Import Errors ({importErrors.length}):</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  {importErrors.slice(0, 10).map((error, index) => (
+                    <li key={index} className="text-destructive">{error}</li>
+                  ))}
+                  {importErrors.length > 10 && (
+                    <li className="text-muted-foreground">... and {importErrors.length - 10} more errors</li>
+                  )}
+                </ul>
+              </div>
+            )}
+
+            {importPreviewData.length > 0 && (
+              <div className="border rounded-md">
+                <div className="bg-muted/50 p-4 border-b">
+                  <h4 className="font-medium">Preview ({importPreviewData.length} entries)</h4>
+                </div>
+                <div className="max-h-64 overflow-y-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Outlet</TableHead>
+                        <TableHead>Categories</TableHead>
+                        <TableHead className="text-right">Total Cost</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {importPreviewData.slice(0, 20).map((row, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{row.date}</TableCell>
+                          <TableCell>{row.outlet_name}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {row.categories.map((cat, catIndex) => (
+                                <span
+                                  key={catIndex}
+                                  className="inline-block bg-primary/10 text-primary text-xs px-2 py-1 rounded"
+                                >
+                                  {cat.category_name}: ${cat.cost.toFixed(2)}
+                                </span>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            ${row.categories.reduce((sum, cat) => sum + cat.cost, 0).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {importPreviewData.length > 20 && (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center text-muted-foreground">
+                            ... and {importPreviewData.length - 20} more entries
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsImportDialogOpen(false);
+                setImportFile(null);
+                setImportPreviewData([]);
+                setImportErrors([]);
+              }}
+              disabled={isImporting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkImport}
+              disabled={importPreviewData.length === 0 || importErrors.length > 0 || isImporting}
+            >
+              {isImporting ? 'Importing...' : `Import ${importPreviewData.length} Entries`}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

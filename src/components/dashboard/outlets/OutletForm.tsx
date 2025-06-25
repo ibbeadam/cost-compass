@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input"; 
 import type { Outlet } from "@/types";
 import { addOutletAction, updateOutletAction } from "@/actions/outletActions";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -46,7 +46,6 @@ interface OutletFormProps {
 
 export function OutletForm({ outlet, onSuccess, onCancel }: OutletFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { toast } = useToast();
   const form = useForm<OutletFormValues>({
     resolver: zodResolver(outletFormSchema),
     defaultValues: {
@@ -61,26 +60,16 @@ export function OutletForm({ outlet, onSuccess, onCancel }: OutletFormProps) {
       if (outlet) {
         // Editing existing outlet - ID is not changed, only name
         await updateOutletAction(outlet.id, data.name);
-        toast({
-          title: "Outlet Updated",
-          description: "The outlet has been successfully updated.",
-        });
+        showToast.success("The outlet has been successfully updated.");
       } else {
         // Adding new outlet - ID is provided from the form
         await addOutletAction(data.id, data.name);
-        toast({
-          title: "Outlet Added",
-          description: "The new outlet has been successfully added.",
-        });
+        showToast.success("The new outlet has been successfully added.");
       }
       onSuccess();
     } catch (error) {
       console.error("Error saving outlet:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Saving Outlet",
-        description: (error as Error).message || "Could not save the outlet. Please try again.",
-      });
+      showToast.error((error as Error).message || "Could not save the outlet. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

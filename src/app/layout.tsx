@@ -3,6 +3,8 @@
 // import type { Metadata } from 'next'; // Metadata cannot be exported from Client Components
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
@@ -65,6 +67,18 @@ export default function RootLayout({
                 {children}
               </div>
               <Toaster />
+              <ToastContainer
+                position="top-right"
+                autoClose={5000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="light"
+              />
             </AuthProvider>
           </ThemeProvider>
         </body>
@@ -120,6 +134,18 @@ export default function RootLayout({
               </SidebarProvider>
             )}
             <Toaster />
+            <ToastContainer
+              position="top-right"
+              autoClose={5000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="light"
+            />
           </AuthProvider>
         </ThemeProvider>
       </body>

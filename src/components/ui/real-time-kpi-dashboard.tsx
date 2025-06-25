@@ -22,7 +22,10 @@ import {
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Activity
+  Activity,
+  Calculator,
+  PieChart,
+  BarChart3
 } from "lucide-react";
 
 interface RealTimeKPIDashboardProps {
@@ -139,12 +142,12 @@ export function RealTimeKPIDashboardComponent({ data }: RealTimeKPIDashboardProp
             </div>
             
             <div className="space-y-2">
-              <p className="text-sm font-medium">Average Check</p>
-              <p className="text-2xl font-bold">
-                {renderCurrency(data.currentPeriodKPIs.averageCheck)}
+              <p className="text-sm font-medium">Revenue Variance</p>
+              <p className={`text-2xl font-bold ${data.currentPeriodKPIs.revenueVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {data.currentPeriodKPIs.revenueVariance >= 0 ? '+' : ''}{renderPercentage(data.currentPeriodKPIs.revenueVariance)}
               </p>
               <p className="text-xs text-muted-foreground">
-                {data.currentPeriodKPIs.customersServed} customers served
+                vs Budget Target
               </p>
             </div>
           </div>
@@ -204,28 +207,52 @@ export function RealTimeKPIDashboardComponent({ data }: RealTimeKPIDashboardProp
       <Card>
         <CardHeader>
           <CardTitle className="text-lg font-semibold flex items-center gap-2">
-            <Users className="h-5 w-5" />
+            <BarChart3 className="h-5 w-5" />
             Operational Efficiency
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 border rounded-lg">
-              <Target className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">Table Utilization</p>
-              <p className="text-2xl font-bold">{renderPercentage(data.currentPeriodKPIs.tableUtilization)}</p>
+              <Calculator className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm font-medium">Profit Margin</p>
+              <p className="text-2xl font-bold">{renderPercentage(data.currentPeriodKPIs.profitMargin)}</p>
             </div>
             
             <div className="text-center p-4 border rounded-lg">
-              <Clock className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">Sales per Hour</p>
-              <p className="text-2xl font-bold">{renderCurrency(data.currentPeriodKPIs.salesPerHour)}</p>
+              <PieChart className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm font-medium">Food Revenue %</p>
+              <p className="text-2xl font-bold">{renderPercentage(data.currentPeriodKPIs.foodRevenuePercentage)}</p>
             </div>
             
             <div className="text-center p-4 border rounded-lg">
-              <Users className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">Sales per Employee</p>
-              <p className="text-2xl font-bold">{renderCurrency(data.currentPeriodKPIs.salesPerEmployee)}</p>
+              <Percent className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm font-medium">Cost Efficiency</p>
+              <p className="text-2xl font-bold">{renderPercentage(data.currentPeriodKPIs.costEfficiencyRatio)}</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div className="text-center p-4 border rounded-lg">
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className={`h-6 w-6 mr-2 ${data.currentPeriodKPIs.foodCostVariance <= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                <p className="text-sm font-medium">Food Cost Variance</p>
+              </div>
+              <p className={`text-xl font-bold ${data.currentPeriodKPIs.foodCostVariance <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {data.currentPeriodKPIs.foodCostVariance >= 0 ? '+' : ''}{renderPercentage(data.currentPeriodKPIs.foodCostVariance)}
+              </p>
+              <p className="text-xs text-muted-foreground">vs Budget</p>
+            </div>
+            
+            <div className="text-center p-4 border rounded-lg">
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className={`h-6 w-6 mr-2 ${data.currentPeriodKPIs.beverageCostVariance <= 0 ? 'text-green-500' : 'text-red-500'}`} />
+                <p className="text-sm font-medium">Beverage Cost Variance</p>
+              </div>
+              <p className={`text-xl font-bold ${data.currentPeriodKPIs.beverageCostVariance <= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {data.currentPeriodKPIs.beverageCostVariance >= 0 ? '+' : ''}{renderPercentage(data.currentPeriodKPIs.beverageCostVariance)}
+              </p>
+              <p className="text-xs text-muted-foreground">vs Budget</p>
             </div>
           </div>
         </CardContent>

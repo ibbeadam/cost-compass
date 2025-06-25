@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { subDays, format as formatDateFn } from "date-fns";
 import { cn, formatNumber } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import {
   Select,
   SelectContent,
@@ -126,7 +126,6 @@ export default function ReportsClient() {
     null
   );
 
-  const { toast } = useToast();
 
   // Helper function to render currency
   const renderCurrency = (value: number | null | undefined) => {
@@ -170,25 +169,17 @@ export default function ReportsClient() {
         ]);
       } catch (error) {
         console.error("Error fetching outlets:", error);
-        toast({
-          variant: "destructive",
-          title: "Error fetching outlets",
-          description: (error as Error).message,
-        });
+        showToast.error((error as Error).message);
       } finally {
         setIsFetchingOutlets(false);
       }
     };
     fetchOutlets();
-  }, [toast]);
+  }, []);
 
   const handleGenerateReport = async () => {
     if (!dateRange?.from || !dateRange?.to) {
-      toast({
-        variant: "destructive",
-        title: "Missing Date Range",
-        description: "Please select a date range to generate the report.",
-      });
+      showToast.error("Please select a date range to generate the report.");
       return;
     }
 
@@ -198,11 +189,7 @@ export default function ReportsClient() {
     try {
       if (selectedReport === "detailed_food_cost") {
         if (!dateRange?.from || !dateRange?.to) {
-          toast({
-            variant: "destructive",
-            title: "Missing Report Parameters",
-            description: "Please select a valid date range.",
-          });
+          showToast.error("Please select a valid date range.");
           return;
         }
         console.log("Calling getDetailedFoodCostReportAction from client...");
@@ -224,11 +211,7 @@ export default function ReportsClient() {
         setReportData(data);
       } else if (selectedReport === "monthly_profit_loss") {
         if (!dateRange?.from || !dateRange?.to) {
-          toast({
-            variant: "destructive",
-            title: "Missing Date Range",
-            description: "Please select a date range for the monthly report.",
-          });
+          showToast.error("Please select a date range for the monthly report.");
           return;
         }
         console.log("Calling getMonthlyProfitLossReportAction from client...");
@@ -301,7 +284,9 @@ export default function ReportsClient() {
       } else if (selectedReport === "real_time_kpi") {
         console.log("Calling getRealTimeKPIDashboardAction from client...");
         const data = await getRealTimeKPIDashboardAction(
-          selectedOutletId === "all" ? undefined : selectedOutletId
+          undefined, // Always use all outlets for real-time KPI dashboard
+          dateRange.from,
+          dateRange.to
         );
         console.log("Real-Time KPI Dashboard data:", data);
         setReportData(data);
@@ -331,7 +316,7 @@ export default function ReportsClient() {
         const data = await getForecastingReportAction(
           { from: historicalStart, to: historicalEnd }, // Extended historical period
           { from: forecastStartDate, to: forecastEndDate }, // Forecast period
-          selectedOutletId === "all" ? undefined : selectedOutletId
+          undefined // Always use all outlets for forecasting report
         );
         console.log("Forecasting Report data:", data);
         setReportData(data);
@@ -346,17 +331,10 @@ export default function ReportsClient() {
         setReportData(null); // Clear data for unsupported reports
       }
       setLastRefreshTime(new Date());
-      toast({
-        title: "Report Generated",
-        description: "Your report is ready.",
-      });
+      showToast.success("Your report is ready.");
     } catch (error) {
       console.error("Error generating report:", error);
-      toast({
-        variant: "destructive",
-        title: "Report Generation Error",
-        description: (error as Error).message || "Failed to generate report.",
-      });
+      showToast.error((error as Error).message || "Failed to generate report.");
     } finally {
       setIsLoadingReport(false);
     }
@@ -388,20 +366,12 @@ export default function ReportsClient() {
 
   const handleExportToExcel = () => {
     if (!reportData) {
-      toast({
-        variant: "destructive",
-        title: "No Report Data",
-        description: "Generate a report first before exporting.",
-      });
+      showToast.error("Generate a report first before exporting.");
       return;
     }
 
     if (!dateRange?.from || !dateRange?.to) {
-      toast({
-        variant: "destructive",
-        title: "Missing Date Range",
-        description: "Please select a date range to export the report.",
-      });
+      showToast.error("Please select a date range to export the report.");
       return;
     }
 
@@ -703,10 +673,7 @@ export default function ReportsClient() {
         )}.xlsx`
       );
 
-      toast({
-        title: "Export to Excel",
-        description: "Report successfully exported to Excel.",
-      });
+      showToast.success("Report successfully exported to Excel.");
       return; // Exit early to avoid creating duplicate files
     } else if (
       selectedReport === "cost_analysis_by_category" &&
@@ -879,10 +846,7 @@ export default function ReportsClient() {
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`
       );
 
-      toast({
-        title: "Export to Excel",
-        description: "Report successfully exported to Excel.",
-      });
+      showToast.success("Report successfully exported to Excel.");
       return; // Exit early to avoid creating duplicate files
     } else if (
       selectedReport === "budget_vs_actuals" &&
@@ -992,10 +956,7 @@ export default function ReportsClient() {
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`
       );
 
-      toast({
-        title: "Export to Excel",
-        description: "Report successfully exported to Excel.",
-      });
+      showToast.success("Report successfully exported to Excel.");
     } else if (
       selectedReport === "daily_revenue_trends" &&
       "summary" in reportData
@@ -1108,10 +1069,7 @@ export default function ReportsClient() {
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`
       );
 
-      toast({
-        title: "Export to Excel",
-        description: "Report successfully exported to Excel.",
-      });
+      showToast.success("Report successfully exported to Excel.");
     }
 
     // Only create Excel files for food and beverage reports (monthly profit/loss handled above)
@@ -1140,29 +1098,18 @@ export default function ReportsClient() {
         )}.xlsx`
       );
 
-      toast({
-        title: "Export to Excel",
-        description: "Report successfully exported to Excel.",
-      });
+      showToast.success("Report successfully exported to Excel.");
     }
   };
 
   const handleExportToPDF = () => {
     if (!reportData) {
-      toast({
-        variant: "destructive",
-        title: "No Report Data",
-        description: "Generate a report first before exporting.",
-      });
+      showToast.error("Generate a report first before exporting.");
       return;
     }
 
     if (!dateRange?.from || !dateRange?.to) {
-      toast({
-        variant: "destructive",
-        title: "Missing Date Range",
-        description: "Please select a date range to export the report.",
-      });
+      showToast.error("Please select a date range to export the report.");
       return;
     }
 
@@ -2331,10 +2278,7 @@ export default function ReportsClient() {
       );
     }
 
-    toast({
-      title: "Export to PDF",
-      description: "Report successfully exported to PDF.",
-    });
+    showToast.success("Report successfully exported to PDF.");
   };
 
   return (
@@ -2411,7 +2355,9 @@ export default function ReportsClient() {
               </label>
               {(selectedReport === "detailed_food_cost" ||
                 selectedReport === "detailed_beverage_cost" ||
-                selectedReport === "monthly_profit_loss") && (
+                selectedReport === "monthly_profit_loss" ||
+                selectedReport === "real_time_kpi" ||
+                selectedReport === "forecasting_report") && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2419,8 +2365,8 @@ export default function ReportsClient() {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>
-                        Outlet filter is disabled for Detailed Cost Reports and
-                        Monthly Profit/Loss Report. All outlets will be shown.
+                        Outlet filter is disabled for Detailed Cost Reports, 
+                        Monthly Profit/Loss Report, Real-Time KPI Dashboard, and Forecasting Report. All outlets will be shown.
                       </p>
                     </TooltipContent>
                   </Tooltip>
@@ -2434,7 +2380,9 @@ export default function ReportsClient() {
                 isFetchingOutlets ||
                 selectedReport === "detailed_food_cost" ||
                 selectedReport === "detailed_beverage_cost" ||
-                selectedReport === "monthly_profit_loss"
+                selectedReport === "monthly_profit_loss" ||
+                selectedReport === "real_time_kpi" ||
+                selectedReport === "forecasting_report"
               }
             >
               <SelectTrigger

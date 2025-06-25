@@ -66,7 +66,7 @@ import type {
   BeverageCostDetail,
   Category,
 } from "@/types";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import {
   ChartConfig,
   ChartContainer,
@@ -253,7 +253,6 @@ export default function DashboardClient() {
   const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const { toast } = useToast();
 
   useEffect(() => {
     setDateRange({
@@ -278,17 +277,13 @@ export default function DashboardClient() {
         ]);
       } catch (error) {
         console.error("Error fetching outlets:", error);
-        toast({
-          variant: "destructive",
-          title: "Error fetching outlets",
-          description: (error as Error).message,
-        });
+        showToast.error((error as Error).message);
         setAllOutlets([{ id: "all", name: "All Outlets" }]);
       }
       setIsFetchingOutlets(false);
     };
     fetchFirestoreOutlets();
-  }, [toast]);
+  }, []);
 
   useEffect(() => {
     if (
@@ -315,11 +310,7 @@ export default function DashboardClient() {
         console.error(
           "Firestore 'db' instance is not available. Cannot fetch dashboard data."
         );
-        toast({
-          variant: "destructive",
-          title: "Database Error",
-          description: "Firestore is not initialized.",
-        });
+        showToast.error("Firestore is not initialized.");
         setIsLoadingData(false);
         setIsLoadingAIInsights(false);
         return;
@@ -997,11 +988,7 @@ export default function DashboardClient() {
             setAiError(
               (aiErr as Error).message || "Failed to load AI analysis."
             );
-            toast({
-              variant: "destructive",
-              title: "AI Analysis Error",
-              description: (aiErr as Error).message,
-            });
+            showToast.error((aiErr as Error).message);
             setAiInsights(null);
           }
         } else {
@@ -1009,11 +996,7 @@ export default function DashboardClient() {
         }
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
-        toast({
-          variant: "destructive",
-          title: "Error loading dashboard",
-          description: (err as Error).message,
-        });
+        showToast.error((err as Error).message);
         setDashboardData(null);
         setAiInsights(null);
         setAiError((err as Error).message || "Failed to load dashboard data.");
@@ -1024,7 +1007,7 @@ export default function DashboardClient() {
     }
 
     fetchDataForDashboard();
-  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets, toast]);
+  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets]);
 
   const summaryStatsList: (SummaryStat & { trendData?: number[] })[] =
     useMemo(() => {

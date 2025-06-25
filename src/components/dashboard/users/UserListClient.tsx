@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, ShieldAlert, Edit, Trash2, UserX, UserCheck, Users } from "lucide-react";
 import type { ManagedUser } from "@/types";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ITEMS_PER_PAGE = 10;
@@ -25,7 +25,6 @@ export default function UserListClient() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (!authLoading) {
@@ -48,15 +47,15 @@ export default function UserListClient() {
   }, [users, currentPage]);
 
   const handleEditUser = (userId: string) => {
-    toast({ title: "Action Required", description: "Editing user roles requires backend implementation with Firebase Functions." });
+    showToast.info("Editing user roles requires backend implementation with Firebase Functions.");
   };
 
   const handleToggleDisableUser = (userId: string, isDisabled: boolean | undefined) => {
-     toast({ title: "Action Required", description: `User ${isDisabled ? "enable" : "disable"} action requires backend implementation.` });
+     showToast.info(`User ${isDisabled ? "enable" : "disable"} action requires backend implementation.`);
   };
 
   const handleDeleteUser = (userId: string) => {
-    toast({ title: "Action Required", description: "Deleting users requires backend implementation with Firebase Functions." });
+    showToast.info("Deleting users requires backend implementation with Firebase Functions.");
   };
 
   if (authLoading || isLoading) {

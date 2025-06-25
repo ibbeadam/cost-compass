@@ -14,14 +14,13 @@ import {
   EmailAuthProvider,
 } from "firebase/auth";
 import { db } from "@/lib/firebase";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 
 // Import the shared User type
 import type { User } from "@/types";
 
 export default function ProfilePage() {
   const { user, refreshUserProfile } = useAuth();
-  const { toast } = useToast();
   const [firestoreData, setFirestoreData] = useState<User | null>(null);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [phoneNumber, setPhoneNumber] = useState<string>("");
@@ -53,17 +52,13 @@ export default function ProfilePage() {
         updatedAt: new Date(),
       });
 
-      toast({ title: "Success", description: "Details updated successfully." });
+      showToast.success("Details updated successfully.");
 
       // After updating Firestore, refresh the user profile
       await refreshUserProfile();
     } catch (error) {
       console.error("Error updating details:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update details.",
-        variant: "destructive",
-      });
+      showToast.error("Failed to update details.");
     }
   };
 
@@ -71,11 +66,7 @@ export default function ProfilePage() {
     if (!user || !user.email) return;
 
     if (newPassword !== confirmPassword) {
-      toast({
-        title: "Error",
-        description: "New password and confirm password do not match.",
-        variant: "destructive",
-      });
+      showToast.error("New password and confirm password do not match.");
       return;
     }
 
@@ -83,17 +74,10 @@ export default function ProfilePage() {
       const credential = EmailAuthProvider.credential(user.email, oldPassword);
       await reauthenticateWithCredential(user, credential);
       await updatePassword(user, newPassword);
-      toast({
-        title: "Success",
-        description: "Password changed successfully.",
-      });
+      showToast.success("Password changed successfully.");
     } catch (error) {
       console.error("Error changing password:", error);
-      toast({
-        title: "Error",
-        description: "Failed to change password.",
-        variant: "destructive",
-      });
+      showToast.error("Failed to change password.");
     }
   };
 

@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import DailyFinancialSummaryForm from "./DailyFinancialSummaryForm";
 import DailyFinancialSummaryDetailDialog from "./DailyFinancialSummaryDetailDialog";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { deleteDailyFinancialSummaryAction, getPaginatedDailyFinancialSummariesAction, saveDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
 import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions";
 import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActions";
@@ -93,7 +93,6 @@ export default function DailyFinancialSummaryListClient() {
   const [isImporting, setIsImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
 
-  const { toast } = useToast();
   const [currentPage, setCurrentPage] = useState(1);
   const [totalSummaries, setTotalSummaries] = useState(0);
 
@@ -108,11 +107,11 @@ export default function DailyFinancialSummaryListClient() {
       setTotalSummaries(totalCount);
       setCurrentPage(1); 
     } catch (error) {
-      toast({ variant: "destructive", title: "Error Fetching Summaries", description: (error as Error).message || "Could not load daily financial summaries." });
+      showToast.error((error as Error).message || "Could not load daily financial summaries.");
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
   
   useEffect(() => {
     fetchAllSummaries();
@@ -148,7 +147,7 @@ export default function DailyFinancialSummaryListClient() {
         setDetailedBeverageCosts([]);
       }
     } catch (error) {
-      toast({ variant: "destructive", title: "Error Fetching Details", description: (error as Error).message || "Could not load detailed costs."});
+      showToast.error((error as Error).message || "Could not load detailed costs.");
       setDetailedFoodCosts([]);
       setDetailedBeverageCosts([]);
     } finally {
@@ -160,9 +159,9 @@ export default function DailyFinancialSummaryListClient() {
     try {
       await deleteDailyFinancialSummaryAction(summaryId);
       fetchAllSummaries();
-      toast({ title: "Summary Deleted", description: "The daily financial summary has been deleted." });
+      showToast.success("The daily financial summary has been deleted.");
     } catch (error) {
-      toast({ variant: "destructive", title: "Error Deleting Summary", description: (error as Error).message || "Could not delete summary." });
+      showToast.error((error as Error).message || "Could not delete summary.");
     }
   };
 
@@ -240,11 +239,7 @@ export default function DailyFinancialSummaryListClient() {
         setImportErrors(errors);
         setIsImportDialogOpen(true);
       } catch (error) {
-        toast({ 
-          variant: "destructive", 
-          title: "Import Error", 
-          description: "Failed to read Excel file. Please ensure it's a valid Excel file." 
-        });
+        showToast.error("Failed to read Excel file. Please ensure it's a valid Excel file.");
       }
     };
     reader.readAsArrayBuffer(file);
@@ -293,10 +288,7 @@ export default function DailyFinancialSummaryListClient() {
       }
 
       if (successCount > 0) {
-        toast({ 
-          title: "Import Successful", 
-          description: `Successfully imported ${successCount} summaries.${errors.length > 0 ? ` ${errors.length} errors occurred.` : ''}` 
-        });
+        showToast.success(`Successfully imported ${successCount} summaries.${errors.length > 0 ? ` ${errors.length} errors occurred.` : ''}`);
         fetchAllSummaries();
         setIsImportDialogOpen(false);
         setImportedData([]);
@@ -307,11 +299,7 @@ export default function DailyFinancialSummaryListClient() {
         setImportErrors(errors);
       }
     } catch (error) {
-      toast({ 
-        variant: "destructive", 
-        title: "Import Failed", 
-        description: error instanceof Error ? error.message : "Failed to import data" 
-      });
+      showToast.error(error instanceof Error ? error.message : "Failed to import data");
     } finally {
       setIsImporting(false);
     }
@@ -507,7 +495,7 @@ export default function DailyFinancialSummaryListClient() {
             <Table className="min-w-[1000px] w-full text-sm text-left border-collapse devide-y devide-border">
               <TableHeader className="bg-muted/50">
                 <TableRow>
-                  <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap px-2 py-3" onClick={() => toast({ title: "Tip", description: "Click any data cell in a row to view full details."})}>
+                  <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap px-2 py-3" onClick={() => showToast.info("Click any data cell in a row to view full details.")}>
                     Date
                   </TableHead>
                   <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food Rev.</TableHead>

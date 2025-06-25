@@ -48,7 +48,7 @@ import {
   getPaginatedCategoriesAction,
   initializeDefaultCategoriesAction,
 } from "@/actions/categoryActions";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { deleteCategoryAction } from "@/actions/categoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -77,7 +77,6 @@ export default function CategoryListClient() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
-  const { toast } = useToast();
 
   const fetchAllCategories = useCallback(async () => {
     setIsLoading(true);
@@ -90,34 +89,21 @@ export default function CategoryListClient() {
       setCurrentPage(1); // Reset to first page
     } catch (error) {
       console.error("Error fetching all categories:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Fetching Categories",
-        description: "Could not load categories from the database.",
-      });
+      showToast.error("Could not load categories from the database.");
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, []);
 
   const handleInitializeDefaultCategories = async () => {
     setIsInitializing(true);
     try {
       const result = await initializeDefaultCategoriesAction();
-      toast({
-        title: "Categories Initialized",
-        description: `Successfully created ${result.created} default categories. Total categories: ${result.total}`,
-      });
+      showToast.success(`Successfully created ${result.created} default categories. Total categories: ${result.total}`);
       await fetchAllCategories(); // Refresh the list
     } catch (error) {
       console.error("Error initializing categories:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Initializing Categories",
-        description:
-          (error as Error).message ||
-          "Could not initialize default categories.",
-      });
+      showToast.error((error as Error).message || "Could not initialize default categories.");
     } finally {
       setIsInitializing(false);
     }
@@ -140,19 +126,11 @@ export default function CategoryListClient() {
   const handleDelete = async (categoryId: string) => {
     try {
       await deleteCategoryAction(categoryId);
-      toast({
-        title: "Category Deleted",
-        description: "The category has been successfully deleted.",
-      });
+      showToast.success("The category has been successfully deleted.");
       fetchAllCategories(); // Re-fetch all categories to update the list
     } catch (error) {
       console.error("Error deleting category:", error);
-      toast({
-        variant: "destructive",
-        title: "Error Deleting Category",
-        description:
-          (error as Error).message || "Could not delete the category.",
-      });
+      showToast.error((error as Error).message || "Could not delete the category.");
     }
   };
 

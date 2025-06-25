@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import { Compass } from "lucide-react"; 
 
 export default function LoginPage() {
@@ -18,7 +18,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const { toast } = useToast();
 
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -26,7 +25,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      toast({ title: "Login Successful", description: "Welcome back!" });
+      showToast.success("Welcome back! Login successful.");
       router.push("/dashboard"); 
     } catch (err: any) {
       let errorMessage = "Failed to log in. Please check your credentials.";
@@ -36,7 +35,7 @@ export default function LoginPage() {
         errorMessage = "Please enter a valid email address.";
       }
       setError(errorMessage);
-      toast({ variant: "destructive", title: "Login Failed", description: errorMessage });
+      showToast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

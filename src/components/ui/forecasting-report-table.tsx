@@ -105,15 +105,18 @@ export function ForecastingReportTable({ data }: ForecastingReportTableProps) {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Customer Forecast</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Avg Daily Cost</CardTitle>
+            <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatNumber(data.demandForecast.predictedCustomers)}
+              {data.costForecast.daily && data.costForecast.daily.length > 0 
+                ? renderCurrency(data.costForecast.daily.reduce((sum, d) => sum + d.predictedTotalCost, 0) / data.costForecast.daily.length)
+                : "$0"
+              }
             </div>
             <p className="text-xs text-muted-foreground">
-              Expected daily customers
+              Predicted daily average
             </p>
           </CardContent>
         </Card>
@@ -159,10 +162,10 @@ export function ForecastingReportTable({ data }: ForecastingReportTableProps) {
             </div>
             
             <div className="text-center p-4 border rounded-lg">
-              <h4 className="font-medium mb-2">Labor Cost %</h4>
-              <p className="text-3xl font-bold">{renderPercentage(data.costForecast.predictedLaborCostPct)}</p>
-              <Badge variant="secondary">
-                Estimated
+              <h4 className="font-medium mb-2">Cost Efficiency</h4>
+              <p className="text-3xl font-bold">{renderPercentage(data.costForecast.costEfficiencyRatio || 0)}</p>
+              <Badge variant={(data.costForecast.costEfficiencyRatio || 0) > 80 ? "destructive" : (data.costForecast.costEfficiencyRatio || 0) > 70 ? "outline" : "default"}>
+                {(data.costForecast.costEfficiencyRatio || 0) > 80 ? "Poor" : (data.costForecast.costEfficiencyRatio || 0) > 70 ? "Moderate" : "Good"}
               </Badge>
             </div>
           </div>
@@ -205,7 +208,7 @@ export function ForecastingReportTable({ data }: ForecastingReportTableProps) {
         </CardContent>
       </Card>
 
-      {/* Monthly Forecast */}
+      {/* Monthly Revenue Forecast */}
       {data.revenueForecast.monthly.length > 0 && (
         <Card>
           <CardHeader>
@@ -246,55 +249,154 @@ export function ForecastingReportTable({ data }: ForecastingReportTableProps) {
         </Card>
       )}
 
-      {/* Demand Forecast */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg font-semibold">Demand Forecast</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h4 className="font-medium mb-3">Customer Metrics</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-sm">Expected Daily Customers:</span>
-                  <span className="font-mono font-medium">{formatNumber(data.demandForecast.predictedCustomers)}</span>
+      {/* Daily Cost Forecast */}
+      {data.costForecast.daily && data.costForecast.daily.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Daily Cost Forecast (Next 7 Days)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Food Cost</TableHead>
+                  <TableHead className="text-right">Beverage Cost</TableHead>
+                  <TableHead className="text-right">Total Cost</TableHead>
+                  <TableHead className="text-right">Confidence Range</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.costForecast.daily.slice(0, 7).map((forecast, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">
+                      {forecast.date.toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {renderCurrency(forecast.predictedFoodCost)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {renderCurrency(forecast.predictedBeverageCost)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {renderCurrency(forecast.predictedTotalCost)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {renderCurrency(forecast.confidenceInterval.lower)} - {renderCurrency(forecast.confidenceInterval.upper)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Monthly Cost Forecast */}
+      {data.costForecast.monthly && data.costForecast.monthly.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">Monthly Cost Forecast</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Month</TableHead>
+                  <TableHead className="text-right">Food Cost</TableHead>
+                  <TableHead className="text-right">Beverage Cost</TableHead>
+                  <TableHead className="text-right">Total Cost</TableHead>
+                  <TableHead className="text-right">Seasonal Factor</TableHead>
+                  <TableHead className="text-right">Confidence Range</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.costForecast.monthly.map((forecast, index) => (
+                  <TableRow key={index}>
+                    <TableCell className="font-medium">
+                      {forecast.month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {renderCurrency(forecast.predictedFoodCost)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {renderCurrency(forecast.predictedBeverageCost)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {renderCurrency(forecast.predictedTotalCost)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={forecast.seasonalFactor > 1.02 ? "default" : forecast.seasonalFactor < 0.98 ? "outline" : "secondary"}>
+                        {(forecast.seasonalFactor * 100).toFixed(0)}%
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {renderCurrency(forecast.confidenceInterval.lower)} - {renderCurrency(forecast.confidenceInterval.upper)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Business Forecast */}
+      {data.businessForecast && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-semibold">Business Performance Forecast</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium mb-3">Revenue Mix Forecast</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Food Revenue:</span>
+                    <span className="font-mono font-medium">{renderPercentage(data.businessForecast.revenueMixForecast.foodRevenuePercentage)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Beverage Revenue:</span>
+                    <span className="font-mono font-medium">{renderPercentage(data.businessForecast.revenueMixForecast.beverageRevenuePercentage)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Revenue Growth Rate:</span>
+                    <span className={`font-mono font-medium ${data.businessForecast.revenueGrowthRate >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {data.businessForecast.revenueGrowthRate >= 0 ? '+' : ''}{renderPercentage(data.businessForecast.revenueGrowthRate)}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm">Predicted Average Check:</span>
-                  <span className="font-mono font-medium">{renderCurrency(data.demandForecast.predictedAverageCheck)}</span>
+              </div>
+              
+              <div>
+                <h4 className="font-medium mb-3">Cost Variance Forecast</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm">Food Cost Variance:</span>
+                    <span className={`font-mono font-medium ${data.businessForecast.costVarianceForecast.foodCostVariance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {data.businessForecast.costVarianceForecast.foodCostVariance >= 0 ? '+' : ''}{renderPercentage(data.businessForecast.costVarianceForecast.foodCostVariance)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Beverage Cost Variance:</span>
+                    <span className={`font-mono font-medium ${data.businessForecast.costVarianceForecast.beverageCostVariance >= 0 ? 'text-red-600' : 'text-green-600'}`}>
+                      {data.businessForecast.costVarianceForecast.beverageCostVariance >= 0 ? '+' : ''}{renderPercentage(data.businessForecast.costVarianceForecast.beverageCostVariance)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm">Break-Even Revenue:</span>
+                    <span className="font-mono font-medium">{renderCurrency(data.businessForecast.breakEvenRevenue)}</span>
+                  </div>
                 </div>
               </div>
             </div>
-            
-            <div>
-              <h4 className="font-medium mb-3">Peak Hours</h4>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-sm font-medium">Peak Hours:</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {data.demandForecast.peakHours.map((hour, index) => (
-                      <Badge key={index} variant="default" className="text-xs">
-                        {hour}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <span className="text-sm font-medium">Slow Hours:</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {data.demandForecast.slowHours.map((hour, index) => (
-                      <Badge key={index} variant="outline" className="text-xs">
-                        {hour}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Assumptions & Risk Factors */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

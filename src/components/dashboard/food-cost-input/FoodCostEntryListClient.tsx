@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   collection,
   onSnapshot,
@@ -16,8 +16,11 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Upload,
+  FileSpreadsheet,
 } from "lucide-react";
 import { format, isValid } from "date-fns";
+import * as XLSX from 'xlsx';
 
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -49,12 +52,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
+import { showToast } from "@/lib/toast";
 import {
   deleteFoodCostEntryAction,
   getFoodCostEntryWithDetailsAction,
   getOutletsAction,
   getFoodCategoriesAction,
+  saveFoodCostEntryAction,
 } from "@/actions/foodCostActions";
 import type { Outlet, Category, FoodCostEntry, FoodCostDetail } from "@/types";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -69,8 +73,20 @@ import { Label } from "@/components/ui/label";
 
 const ITEMS_PER_PAGE = 5;
 
+// Excel import interface for food cost entries
+interface ExcelFoodCostRow {
+  date: string;
+  outlet_id: string;
+  outlet_name?: string; // For display/validation
+  categories: {
+    category_id: string;
+    category_name: string;
+    cost: number;
+    description?: string;
+  }[];
+}
+
 export default function FoodCostEntryListClient() {
-  const { toast } = useToast();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
@@ -96,6 +112,15 @@ export default function FoodCostEntryListClient() {
 
   const [error, setError] = useState<Error | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Excel import states
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importedData, setImportedData] = useState<ExcelFoodCostRow[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+
+  // File input ref
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -179,18 +204,14 @@ export default function FoodCostEntryListClient() {
       },
       (err) => {
         console.error("Error fetching food cost entries:", err);
-        toast({
-          variant: "destructive",
-          title: "Error Fetching Entries",
-          description: "Could not load food cost entries.",
-        });
+        showToast.error("Could not load food cost entries.");
         setIsLoadingEntries(false);
         setError(err as Error);
       }
     );
 
     return () => unsubscribe();
-  }, [isClient, toast]);
+  }, [isClient]);
 
   const fetchOutletsAndCategories = useCallback(async () => {
     try {
@@ -207,19 +228,13 @@ export default function FoodCostEntryListClient() {
       setFoodCategories(categoriesData);
     } catch (err) {
       console.error("Error fetching outlets or categories:", err);
-      toast({
-        variant: "destructive",
-        title: "Error Loading Form Data",
-        description:
-          (err as Error).message ||
-          "Could not load required data for the form.",
-      });
+      showToast.error((err as Error).message || "Could not load required data for the form.");
       setError(err as Error);
     } finally {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [toast, dialogOutletId]);
+  }, [dialogOutletId]);
 
   useEffect(() => {
     if (isClient) {
@@ -237,11 +252,7 @@ export default function FoodCostEntryListClient() {
 
   const handleEdit = async (listEntry: FoodCostEntry) => {
     if (!(listEntry.date instanceof Date) || !isValid(listEntry.date)) {
-      toast({
-        title: "Invalid Date for Editing",
-        description: `Cannot edit entry. The date for entry ID ${listEntry.id} is invalid. Please check the data. Date value: ${listEntry.date}`,
-        variant: "destructive",
-      });
+      showToast.error(`Cannot edit entry. The date for entry ID ${listEntry.id} is invalid. Please check the data. Date value: ${listEntry.date}`);
       return;
     }
     setIsLoadingDetailsForEdit(true);
@@ -262,20 +273,10 @@ export default function FoodCostEntryListClient() {
         setDialogOutletId(fullEntryWithDetails.outlet_id);
         setIsFormOpen(true);
       } else {
-        toast({
-          title: "Entry Not Found",
-          description:
-            "Could not load the details for the selected entry. It might have been deleted.",
-          variant: "destructive",
-        });
+        showToast.error("Could not load the details for the selected entry. It might have been deleted.");
       }
     } catch (err) {
-      toast({
-        title: "Error Loading Details",
-        description:
-          (err as Error).message || "Failed to load entry details for editing.",
-        variant: "destructive",
-      });
+      showToast.error((err as Error).message || "Failed to load entry details for editing.");
     } finally {
       setIsLoadingDetailsForEdit(false);
     }
@@ -290,19 +291,211 @@ export default function FoodCostEntryListClient() {
   const handleDelete = async (entryId: string) => {
     try {
       await deleteFoodCostEntryAction(entryId);
-      toast({
-        title: "Entry Deleted",
-        description: "The food cost entry has been deleted.",
-      });
+      showToast.success("The food cost entry has been deleted.");
       // Data will be re-fetched by onSnapshot
     } catch (err) {
       console.error("Error deleting food cost entry:", err);
-      toast({
-        variant: "destructive",
-        title: "Error Deleting Entry",
-        description: (err as Error).message || "Could not delete entry.",
-      });
+      showToast.error((err as Error).message || "Could not delete entry.");
     }
+  };
+
+  // Excel import functions
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Parse headers to identify categories
+        const headers = jsonData[0] as string[];
+        const processedData: ExcelFoodCostRow[] = [];
+        const errors: string[] = [];
+
+        // Find category columns dynamically
+        const categoryColumns: { index: number; categoryName: string; costIndex: number; descIndex?: number }[] = [];
+        
+        for (let i = 2; i < headers.length; i++) {
+          const header = String(headers[i]).trim();
+          if (header.includes('_Cost') || header.includes(' Cost')) {
+            const categoryName = header.replace(/_Cost|Cost/g, '').trim();
+            const descIndex = headers.findIndex((h, idx) => idx > i && String(h).includes(categoryName) && (String(h).includes('Description') || String(h).includes('Desc')));
+            
+            categoryColumns.push({
+              index: i,
+              categoryName,
+              costIndex: i,
+              descIndex: descIndex > 0 ? descIndex : undefined
+            });
+          }
+        }
+
+        if (categoryColumns.length === 0) {
+          errors.push("No category cost columns found. Expected columns with '_Cost' or ' Cost' suffix.");
+        }
+
+        // Process data rows
+        for (let i = 1; i < jsonData.length; i++) {
+          const row = jsonData[i] as any[];
+          if (!row || row.length < 3) {
+            errors.push(`Row ${i + 1}: Insufficient columns. Expected at least Date, Outlet, and category costs.`);
+            continue;
+          }
+
+          try {
+            const dateStr = String(row[0]).trim();
+            const outletName = String(row[1]).trim();
+            const date = new Date(dateStr);
+            
+            if (isNaN(date.getTime())) {
+              errors.push(`Row ${i + 1}: Invalid date format - ${dateStr}`);
+              continue;
+            }
+
+            // Find outlet by name
+            const outlet = outlets.find(o => o.name.toLowerCase() === outletName.toLowerCase());
+            if (!outlet) {
+              errors.push(`Row ${i + 1}: Outlet "${outletName}" not found`);
+              continue;
+            }
+
+            // Process categories
+            const categories: ExcelFoodCostRow['categories'] = [];
+            for (const col of categoryColumns) {
+              const costValue = parseFloat(row[col.costIndex]) || 0;
+              if (costValue > 0) {
+                // Find category by name
+                const category = foodCategories.find(c => 
+                  c.name.toLowerCase().includes(col.categoryName.toLowerCase()) ||
+                  col.categoryName.toLowerCase().includes(c.name.toLowerCase())
+                );
+                
+                if (!category) {
+                  errors.push(`Row ${i + 1}: Category "${col.categoryName}" not found`);
+                  continue;
+                }
+
+                categories.push({
+                  category_id: category.id,
+                  category_name: category.name,
+                  cost: costValue,
+                  description: col.descIndex ? String(row[col.descIndex] || '').trim() : undefined
+                });
+              }
+            }
+
+            if (categories.length > 0) {
+              const excelRow: ExcelFoodCostRow = {
+                date: date.toISOString().split('T')[0],
+                outlet_id: outlet.id,
+                outlet_name: outlet.name,
+                categories
+              };
+
+              processedData.push(excelRow);
+            }
+          } catch (error) {
+            errors.push(`Row ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+
+        setImportedData(processedData);
+        setImportErrors(errors);
+        setIsImportDialogOpen(true);
+      } catch (error) {
+        showToast.error("Failed to read Excel file. Please ensure it's a valid Excel file.");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportData = async () => {
+    if (importedData.length === 0) return;
+
+    setIsImporting(true);
+    const errors: string[] = [];
+    let successCount = 0;
+
+    try {
+      for (const row of importedData) {
+        try {
+          // Create food cost entry using correct parameter format
+          const items = row.categories.map(cat => ({
+            categoryId: cat.category_id,
+            cost: cat.cost,
+            description: cat.description || undefined
+          }));
+
+          await saveFoodCostEntryAction(
+            new Date(row.date),  // date parameter
+            row.outlet_id,       // outletId parameter  
+            items                // items parameter
+          );
+          successCount++;
+        } catch (error) {
+          errors.push(`${row.outlet_name} - ${row.date}: ${error instanceof Error ? error.message : 'Failed to save'}`);
+        }
+      }
+
+      if (successCount > 0) {
+        showToast.success(`Successfully imported ${successCount} food cost entries.${errors.length > 0 ? ` ${errors.length} errors occurred.` : ''}`);
+        setIsImportDialogOpen(false);
+        setImportedData([]);
+        setImportErrors([]);
+      }
+
+      if (errors.length > 0) {
+        setImportErrors(errors);
+      }
+    } catch (error) {
+      showToast.error(error instanceof Error ? error.message : "Failed to import data");
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportCancel = () => {
+    setIsImportDialogOpen(false);
+    setImportedData([]);
+    setImportErrors([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    if (foodCategories.length === 0) {
+      showToast.error("Please wait for categories to load before downloading template.");
+      return;
+    }
+
+    // Create dynamic headers based on available food categories
+    const headers = ['Date', 'Outlet'];
+    
+    // Add category cost and description columns
+    foodCategories.slice(0, 10).forEach(category => { // Limit to first 10 categories for Excel readability
+      headers.push(`${category.name}_Cost`, `${category.name}_Description`);
+    });
+
+    // Create sample data
+    const sampleData = ['2024-01-01', outlets[0]?.name || 'Sample Outlet'];
+    foodCategories.slice(0, 10).forEach(() => {
+      sampleData.push(100, 'Sample description'); // Sample cost and description
+    });
+
+    const template = [headers, sampleData];
+
+    const ws = XLSX.utils.aoa_to_sheet(template);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Food Cost Template');
+    
+    XLSX.writeFile(wb, 'food_cost_import_template.xlsx');
   };
 
   const totalEntries = allFoodCostEntries.length;
@@ -376,14 +569,45 @@ export default function FoodCostEntryListClient() {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h2 className="text-2xl font-bold font-headline">Food Cost Entries</h2>
-        <Button
-          onClick={handleAddNew}
-          disabled={isLoadingOutlets || isLoadingCategories}
-        >
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            onClick={downloadTemplate} 
+            variant="outline" 
+            size="sm" 
+            className="text-xs sm:text-sm"
+            disabled={isLoadingCategories || foodCategories.length === 0}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Download Template
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button 
+            onClick={() => fileInputRef.current?.click()} 
+            variant="outline"
+            size="sm"
+            className="text-xs sm:text-sm"
+            disabled={isLoadingOutlets || isLoadingCategories}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Import Excel
+          </Button>
+          <Button
+            onClick={handleAddNew}
+            disabled={isLoadingOutlets || isLoadingCategories}
+            size="sm"
+            className="text-xs sm:text-sm"
+          >
+            <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
+          </Button>
+        </div>
       </div>
 
       {isLoadingInitialData && currentItems.length === 0 ? (
@@ -677,6 +901,110 @@ export default function FoodCostEntryListClient() {
                 />
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col bg-card">
+          <DialogHeader>
+            <DialogTitle className="font-headline text-xl flex items-center">
+              <FileSpreadsheet className="mr-2 h-5 w-5" />
+              Import Food Cost Entries
+            </DialogTitle>
+            <DialogDescription>
+              Review the data from your Excel file before importing. Make sure all dates, outlets, and categories are correct.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-grow min-h-0 overflow-y-auto">
+            {importErrors.length > 0 && (
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                <h4 className="font-medium text-destructive mb-2">Import Errors ({importErrors.length})</h4>
+                <div className="max-h-32 overflow-y-auto text-sm">
+                  {importErrors.map((error, index) => (
+                    <div key={index} className="text-destructive mb-1">• {error}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {importedData.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-medium">Preview ({importedData.length} records)</h4>
+                  <div className="text-sm text-muted-foreground">
+                    {importedData.length} food cost entries ready to import
+                  </div>
+                </div>
+                
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Outlet</TableHead>
+                          <TableHead>Categories</TableHead>
+                          <TableHead className="text-right">Total Cost</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {importedData.slice(0, 10).map((row, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-code">{row.date}</TableCell>
+                            <TableCell>{row.outlet_name}</TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <div className="space-y-1">
+                                {row.categories.slice(0, 3).map((cat, catIndex) => (
+                                  <div key={catIndex} className="text-xs">
+                                    {cat.category_name}: ${cat.cost.toFixed(2)}
+                                  </div>
+                                ))}
+                                {row.categories.length > 3 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    +{row.categories.length - 3} more...
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-code">
+                              ${row.categories.reduce((sum, cat) => sum + cat.cost, 0).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {importedData.length > 10 && (
+                    <div className="p-3 bg-muted/30 text-center text-sm text-muted-foreground">
+                      Showing first 10 of {importedData.length} records
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={handleImportCancel} disabled={isImporting}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleImportData} 
+              disabled={isImporting || importedData.length === 0}
+              className="min-w-[100px]"
+            >
+              {isImporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Importing...
+                </>
+              ) : (
+                `Import ${importedData.length} Records`
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

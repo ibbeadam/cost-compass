@@ -1422,38 +1422,35 @@ function getMonthName(month: number): string {
 
 // Real-Time KPI Dashboard
 export async function getRealTimeKPIDashboardAction(
-  outletId?: string
+  outletId?: string,
+  fromDate?: Date,
+  toDate?: Date
 ): Promise<RealTimeKPIDashboard> {
   try {
-    // Get today's data and recent trend data
+    // Use provided date range or default to current period (last 7 days)
     const today = new Date();
-    const yesterdayStart = new Date(today);
-    yesterdayStart.setDate(today.getDate() - 1);
-    yesterdayStart.setHours(0, 0, 0, 0);
+    const defaultFromDate = new Date(today);
+    defaultFromDate.setDate(today.getDate() - 7);
     
-    const yesterdayEnd = new Date(today);
-    yesterdayEnd.setDate(today.getDate() - 1);
-    yesterdayEnd.setHours(23, 59, 59, 999);
+    const actualFromDate = fromDate || defaultFromDate;
+    const actualToDate = toDate || today;
     
-    const last7Days = new Date(today);
-    last7Days.setDate(today.getDate() - 7);
-    
-    // Get most recent day's data (simulate "real-time")
-    const latestData = await getLatestDailyData(outletId);
+    // Get aggregated data for the period (same as dashboard approach)
+    const aggregatedData = await getAggregatedPeriodData(actualFromDate, actualToDate, outletId);
     const previousPeriodData = await getPreviousPeriodData(7, outletId); // Last 7 days for trends
     
-    // Calculate current period KPIs
-    const currentPeriodKPIs = calculateCurrentPeriodKPIs(latestData);
+    // Calculate current period KPIs using aggregated data
+    const currentPeriodKPIs = calculateCurrentPeriodKPIs(aggregatedData);
     
     // Calculate trending KPIs
-    const trendingKPIs = calculateTrendingKPIs(latestData, previousPeriodData);
+    const trendingKPIs = calculateTrendingKPIs(aggregatedData, previousPeriodData);
     
     // Generate alerts
-    const alerts = generateKPIAlerts(latestData, currentPeriodKPIs);
+    const alerts = generateKPIAlerts(aggregatedData, currentPeriodKPIs);
     
     return {
       outletId,
-      outletName: latestData?.outletName || "All Outlets",
+      outletName: aggregatedData?.outletName || "All Outlets",
       lastUpdated: new Date(),
       currentPeriodKPIs,
       trendingKPIs,
@@ -1463,6 +1460,87 @@ export async function getRealTimeKPIDashboardAction(
     console.error("Error generating real-time KPI dashboard:", error);
     throw new Error(`Failed to generate KPI dashboard: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+async function getAggregatedPeriodData(fromDate: Date, toDate: Date, outletId?: string) {
+  // Get all daily financial summaries for the period (same approach as dashboard)
+  let q = query(
+    collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
+    where("date", ">=", Timestamp.fromDate(fromDate)),
+    where("date", "<=", Timestamp.fromDate(toDate)),
+    orderBy("date", "desc")
+  );
+  
+  if (outletId && outletId !== "all") {
+    q = query(q, where("outlet_id", "==", outletId));
+  }
+  
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  
+  const dailySummaries = snapshot.docs.map(doc => doc.data() as DailyFinancialSummary);
+  
+  // Aggregate totals (same as dashboard calculation)
+  let totalFoodRevenue = 0;
+  let totalBeverageRevenue = 0;
+  let totalFoodCost = 0;
+  let totalBeverageCost = 0;
+  let totalBudgetFoodRevenue = 0;
+  let totalBudgetBeverageRevenue = 0;
+  let sumOfBudgetFoodCostPct = 0;
+  let sumOfBudgetBeverageCostPct = 0;
+  let countBudgetFoodCostPct = 0;
+  let countBudgetBeverageCostPct = 0;
+  let totalCovers = 0;
+
+  dailySummaries.forEach((summary) => {
+    totalFoodRevenue += summary.actual_food_revenue || 0;
+    totalBeverageRevenue += summary.actual_beverage_revenue || 0;
+    totalFoodCost += summary.actual_food_cost || 0;
+    totalBeverageCost += summary.actual_beverage_cost || 0;
+    totalBudgetFoodRevenue += summary.budget_food_revenue || 0;
+    totalBudgetBeverageRevenue += summary.budget_beverage_revenue || 0;
+    totalCovers += summary.total_covers || 0;
+    
+    if (summary.budget_food_cost_pct != null) {
+      sumOfBudgetFoodCostPct += summary.budget_food_cost_pct;
+      countBudgetFoodCostPct++;
+    }
+    if (summary.budget_beverage_cost_pct != null) {
+      sumOfBudgetBeverageCostPct += summary.budget_beverage_cost_pct;
+      countBudgetBeverageCostPct++;
+    }
+  });
+
+  const avgBudgetFoodCostPct = countBudgetFoodCostPct > 0 ? sumOfBudgetFoodCostPct / countBudgetFoodCostPct : 0;
+  const avgBudgetBeverageCostPct = countBudgetBeverageCostPct > 0 ? sumOfBudgetBeverageCostPct / countBudgetBeverageCostPct : 0;
+
+  // Get outlet name if needed
+  let outletName = "All Outlets";
+  if (outletId && outletId !== "all") {
+    try {
+      const outlets = await getOutletsAction();
+      const outlet = outlets.find(o => o.id === outletId);
+      outletName = outlet?.name || "Unknown Outlet";
+    } catch (error) {
+      console.warn("Could not fetch outlet name:", error);
+    }
+  }
+  
+  // Return aggregated data in the format expected by calculateCurrentPeriodKPIs
+  return {
+    actual_food_revenue: totalFoodRevenue,
+    actual_beverage_revenue: totalBeverageRevenue,
+    actual_food_cost: totalFoodCost,
+    actual_beverage_cost: totalBeverageCost,
+    budget_food_revenue: totalBudgetFoodRevenue,
+    budget_beverage_revenue: totalBudgetBeverageRevenue,
+    budget_food_cost_pct: avgBudgetFoodCostPct,
+    budget_beverage_cost_pct: avgBudgetBeverageCostPct,
+    total_covers: totalCovers,
+    average_check: totalCovers > 0 ? (totalFoodRevenue + totalBeverageRevenue) / totalCovers : 0,
+    outletName,
+  };
 }
 
 async function getLatestDailyData(outletId?: string) {
@@ -1544,34 +1622,50 @@ function calculateCurrentPeriodKPIs(latestData: any) {
   const revenueTarget = (latestData.budget_food_revenue || 0) + (latestData.budget_beverage_revenue || 0);
   const revenueAchievement = revenueTarget > 0 ? (todayRevenue / revenueTarget) * 100 : 0;
   
-  const currentFoodCostPct = latestData.actual_food_cost_pct || 0;
-  const currentBeverageCostPct = latestData.actual_beverage_cost_pct || 0;
+  // Calculate cost percentages the same way as dashboard: (actualCost / actualRevenue) * 100
+  // This ensures consistency between dashboard and KPI dashboard cost percentages
+  const actualFoodRevenue = latestData.actual_food_revenue || 0;
+  const actualBeverageRevenue = latestData.actual_beverage_revenue || 0;
+  const actualFoodCost = latestData.actual_food_cost || 0;
+  const actualBeverageCost = latestData.actual_beverage_cost || 0;
+  
+  const currentFoodCostPct = actualFoodRevenue > 0 ? (actualFoodCost / actualFoodRevenue) * 100 : 0;
+  const currentBeverageCostPct = actualBeverageRevenue > 0 ? (actualBeverageCost / actualBeverageRevenue) * 100 : 0;
   const targetFoodCostPct = latestData.budget_food_cost_pct || 0;
   const targetBeverageCostPct = latestData.budget_beverage_cost_pct || 0;
   
-  const customersServed = latestData.total_covers || 0;
-  const averageCheck = latestData.average_check || (customersServed > 0 ? todayRevenue / customersServed : 0);
+  // Calculate useful operational efficiency metrics using actual data
+  const totalCost = actualFoodCost + actualBeverageCost;
+  const profitMargin = todayRevenue > 0 ? ((todayRevenue - totalCost) / todayRevenue) * 100 : 0;
   
-  // Simulate other KPIs (these would come from additional data sources in real implementation)
-  const tableUtilization = Math.min(100, Math.max(0, (customersServed / 100) * 100)); // Assuming 100 seat capacity
-  const salesPerHour = todayRevenue / 12; // Assuming 12 hour operation
-  const salesPerEmployee = todayRevenue / 10; // Assuming 10 employees
-  const orderAccuracy = 95 + Math.random() * 4; // Simulated 95-99%
+  // Revenue mix analysis
+  const foodRevenuePercentage = todayRevenue > 0 ? (actualFoodRevenue / todayRevenue) * 100 : 0;
+  const beverageRevenuePercentage = todayRevenue > 0 ? (actualBeverageRevenue / todayRevenue) * 100 : 0;
+  
+  // Cost variance from budget
+  const foodCostVariance = targetFoodCostPct > 0 ? currentFoodCostPct - targetFoodCostPct : 0;
+  const beverageCostVariance = targetBeverageCostPct > 0 ? currentBeverageCostPct - targetBeverageCostPct : 0;
+  
+  // Revenue efficiency and variance
+  const revenuePerDay = todayRevenue; // Could be average if period > 1 day
+  const costEfficiencyRatio = todayRevenue > 0 ? (totalCost / todayRevenue) * 100 : 0;
+  const revenueVariance = revenueTarget > 0 ? ((todayRevenue - revenueTarget) / revenueTarget) * 100 : 0;
   
   return {
     todayRevenue,
     revenueTarget,
     revenueAchievement,
+    revenueVariance,
     currentFoodCostPct,
     currentBeverageCostPct,
     targetFoodCostPct,
     targetBeverageCostPct,
-    customersServed,
-    averageCheck,
-    tableUtilization,
-    salesPerHour,
-    salesPerEmployee,
-    orderAccuracy,
+    profitMargin,
+    foodRevenuePercentage,
+    beverageRevenuePercentage,
+    foodCostVariance,
+    beverageCostVariance,
+    costEfficiencyRatio,
   };
 }
 
@@ -1585,53 +1679,72 @@ function calculateTrendingKPIs(latestData: any, historicalData: any[]) {
     sum + (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0), 0
   ) / historicalData.length;
   
-  const avgFoodCostPct = historicalData.reduce((sum, d) => 
-    sum + (d.actual_food_cost_pct || 0), 0
-  ) / historicalData.length;
+  // Calculate cost percentages the same way as dashboard for historical data
+  const avgFoodCostPct = historicalData.reduce((sum, d) => {
+    const foodRevenue = d.actual_food_revenue || 0;
+    const foodCost = d.actual_food_cost || 0;
+    const costPct = foodRevenue > 0 ? (foodCost / foodRevenue) * 100 : 0;
+    return sum + costPct;
+  }, 0) / historicalData.length;
   
-  const avgBeverageCostPct = historicalData.reduce((sum, d) => 
-    sum + (d.actual_beverage_cost_pct || 0), 0
-  ) / historicalData.length;
+  const avgBeverageCostPct = historicalData.reduce((sum, d) => {
+    const beverageRevenue = d.actual_beverage_revenue || 0;
+    const beverageCost = d.actual_beverage_cost || 0;
+    const costPct = beverageRevenue > 0 ? (beverageCost / beverageRevenue) * 100 : 0;
+    return sum + costPct;
+  }, 0) / historicalData.length;
   
   const avgCovers = historicalData.reduce((sum, d) => 
     sum + (d.total_covers || 0), 0
   ) / historicalData.length;
   
   const currentRevenue = (latestData.actual_food_revenue || 0) + (latestData.actual_beverage_revenue || 0);
-  const currentFoodCostPct = latestData.actual_food_cost_pct || 0;
-  const currentBeverageCostPct = latestData.actual_beverage_cost_pct || 0;
+  
+  // Calculate current cost percentages the same way as dashboard
+  const currentFoodRevenue = latestData.actual_food_revenue || 0;
+  const currentBeverageRevenue = latestData.actual_beverage_revenue || 0;
+  const currentFoodCost = latestData.actual_food_cost || 0;
+  const currentBeverageCost = latestData.actual_beverage_cost || 0;
+  
+  const currentFoodCostPct = currentFoodRevenue > 0 ? (currentFoodCost / currentFoodRevenue) * 100 : 0;
+  const currentBeverageCostPct = currentBeverageRevenue > 0 ? (currentBeverageCost / currentBeverageRevenue) * 100 : 0;
   const currentCovers = latestData.total_covers || 0;
   
+  // Get budget targets (same as main KPI section)
+  const budgetFoodCostPct = latestData.budget_food_cost_pct || 0;
+  const budgetBeverageCostPct = latestData.budget_beverage_cost_pct || 0;
+  const budgetRevenue = (latestData.budget_food_revenue || 0) + (latestData.budget_beverage_revenue || 0);
+
   return [
     {
       name: "Daily Revenue",
       value: currentRevenue,
-      target: avgRevenue,
-      trend: (currentRevenue > avgRevenue ? "up" : currentRevenue < avgRevenue ? "down" : "stable") as "up" | "down" | "stable",
-      trendPercentage: avgRevenue > 0 ? ((currentRevenue - avgRevenue) / avgRevenue) * 100 : 0,
-      status: (currentRevenue > avgRevenue * 1.1 ? "excellent" : 
-              currentRevenue > avgRevenue * 0.9 ? "good" : 
-              currentRevenue > avgRevenue * 0.8 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
+      target: budgetRevenue || avgRevenue, // Use budget target, fallback to historical average
+      trend: (currentRevenue > (budgetRevenue || avgRevenue) ? "up" : currentRevenue < (budgetRevenue || avgRevenue) ? "down" : "stable") as "up" | "down" | "stable",
+      trendPercentage: (budgetRevenue || avgRevenue) > 0 ? ((currentRevenue - (budgetRevenue || avgRevenue)) / (budgetRevenue || avgRevenue)) * 100 : 0,
+      status: (currentRevenue > (budgetRevenue || avgRevenue) * 1.1 ? "excellent" : 
+              currentRevenue > (budgetRevenue || avgRevenue) * 0.9 ? "good" : 
+              currentRevenue > (budgetRevenue || avgRevenue) * 0.8 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
     },
     {
       name: "Food Cost %",
       value: currentFoodCostPct,
-      target: avgFoodCostPct,
-      trend: (currentFoodCostPct < avgFoodCostPct ? "up" : currentFoodCostPct > avgFoodCostPct ? "down" : "stable") as "up" | "down" | "stable", // Lower is better for costs
-      trendPercentage: avgFoodCostPct > 0 ? ((avgFoodCostPct - currentFoodCostPct) / avgFoodCostPct) * 100 : 0, // Inverted for cost
-      status: (currentFoodCostPct < avgFoodCostPct * 0.9 ? "excellent" : 
-              currentFoodCostPct < avgFoodCostPct * 1.1 ? "good" : 
-              currentFoodCostPct < avgFoodCostPct * 1.2 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
+      target: budgetFoodCostPct || avgFoodCostPct, // Use budget target, fallback to historical average
+      trend: (currentFoodCostPct < (budgetFoodCostPct || avgFoodCostPct) ? "up" : currentFoodCostPct > (budgetFoodCostPct || avgFoodCostPct) ? "down" : "stable") as "up" | "down" | "stable", // Lower is better for costs
+      trendPercentage: (budgetFoodCostPct || avgFoodCostPct) > 0 ? ((currentFoodCostPct - (budgetFoodCostPct || avgFoodCostPct)) / (budgetFoodCostPct || avgFoodCostPct)) * 100 : 0, // Standard calculation: current vs target
+      status: (currentFoodCostPct < (budgetFoodCostPct || avgFoodCostPct) * 0.9 ? "excellent" : 
+              currentFoodCostPct < (budgetFoodCostPct || avgFoodCostPct) * 1.1 ? "good" : 
+              currentFoodCostPct < (budgetFoodCostPct || avgFoodCostPct) * 1.2 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
     },
     {
-      name: "Customer Count",
-      value: currentCovers,
-      target: avgCovers,
-      trend: (currentCovers > avgCovers ? "up" : currentCovers < avgCovers ? "down" : "stable") as "up" | "down" | "stable",
-      trendPercentage: avgCovers > 0 ? ((currentCovers - avgCovers) / avgCovers) * 100 : 0,
-      status: (currentCovers > avgCovers * 1.1 ? "excellent" : 
-              currentCovers > avgCovers * 0.9 ? "good" : 
-              currentCovers > avgCovers * 0.8 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
+      name: "Beverage Cost %",
+      value: currentBeverageCostPct,
+      target: budgetBeverageCostPct || avgBeverageCostPct, // Use budget target, fallback to historical average
+      trend: (currentBeverageCostPct < (budgetBeverageCostPct || avgBeverageCostPct) ? "up" : currentBeverageCostPct > (budgetBeverageCostPct || avgBeverageCostPct) ? "down" : "stable") as "up" | "down" | "stable", // Lower is better for costs
+      trendPercentage: (budgetBeverageCostPct || avgBeverageCostPct) > 0 ? ((currentBeverageCostPct - (budgetBeverageCostPct || avgBeverageCostPct)) / (budgetBeverageCostPct || avgBeverageCostPct)) * 100 : 0, // Standard calculation: current vs target
+      status: (currentBeverageCostPct < (budgetBeverageCostPct || avgBeverageCostPct) * 0.9 ? "excellent" : 
+              currentBeverageCostPct < (budgetBeverageCostPct || avgBeverageCostPct) * 1.1 ? "good" : 
+              currentBeverageCostPct < (budgetBeverageCostPct || avgBeverageCostPct) * 1.2 ? "warning" : "critical") as "excellent" | "good" | "warning" | "critical",
     },
   ];
 }
@@ -1703,14 +1816,28 @@ export async function getForecastingReportAction(
     
     // Calculate trend coefficients
     const revenueTrend = calculateLinearTrend(historicalData.map(d => (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0)));
-    const foodCostTrend = calculateLinearTrend(historicalData.map(d => d.actual_food_cost_pct || 0));
-    const beverageCostTrend = calculateLinearTrend(historicalData.map(d => d.actual_beverage_cost_pct || 0));
+    
+    // Calculate cost percentages on the fly from actual costs and revenues
+    const foodCostPercentages = historicalData.map(d => {
+      const foodRevenue = d.actual_food_revenue || 0;
+      const foodCost = d.actual_food_cost || 0;
+      return foodRevenue > 0 ? (foodCost / foodRevenue) * 100 : 0;
+    });
+    
+    const beverageCostPercentages = historicalData.map(d => {
+      const beverageRevenue = d.actual_beverage_revenue || 0;
+      const beverageCost = d.actual_beverage_cost || 0;
+      return beverageRevenue > 0 ? (beverageCost / beverageRevenue) * 100 : 0;
+    });
+    
+    const foodCostTrend = calculateLinearTrend(foodCostPercentages);
+    const beverageCostTrend = calculateLinearTrend(beverageCostPercentages);
     const customerTrend = calculateLinearTrend(historicalData.map(d => d.total_covers || 0));
     
     // Generate forecasts
     const revenueForecast = generateRevenueForecast(forecastPeriod, revenueTrend, historicalData);
-    const costForecast = generateCostForecast(foodCostTrend, beverageCostTrend, isLimitedData);
-    const demandForecast = generateDemandForecast(customerTrend, revenueTrend, historicalData);
+    const costForecast = generateCostForecast(foodCostTrend, beverageCostTrend, revenueTrend, historicalData, isLimitedData, forecastPeriod);
+    const businessForecast = generateBusinessForecast(historicalData, revenueTrend, foodCostTrend, beverageCostTrend);
     
     // Generate insights
     const assumptions = generateForecastAssumptions(isLimitedData, historicalData.length);
@@ -1724,7 +1851,7 @@ export async function getForecastingReportAction(
       outletName: "All Outlets", // Would be fetched from outlet data
       revenueForecast,
       costForecast,
-      demandForecast,
+      businessForecast,
       assumptions,
       riskFactors,
       recommendations,
@@ -1832,35 +1959,201 @@ function generateRevenueForecast(
 function generateCostForecast(
   foodCostTrend: { slope: number; intercept: number },
   beverageCostTrend: { slope: number; intercept: number },
-  isLimitedData = false
+  revenueTrend: { slope: number; intercept: number },
+  historicalData: DailyFinancialSummary[],
+  isLimitedData = false,
+  forecastPeriod?: { from: Date; to: Date }
 ) {
+  const predictedFoodCostPct = Math.max(0, Math.min(100, foodCostTrend.intercept + foodCostTrend.slope * 30));
+  const predictedBeverageCostPct = Math.max(0, Math.min(100, beverageCostTrend.intercept + beverageCostTrend.slope * 30));
+  
+  // Calculate average cost efficiency from historical data
+  const avgCostEfficiency = historicalData.reduce((sum, d) => {
+    const totalRevenue = (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0);
+    const totalCost = (d.actual_food_cost || 0) + (d.actual_beverage_cost || 0);
+    return sum + (totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0);
+  }, 0) / historicalData.length;
+  
+  // Project future cost efficiency ratio
+  const costEfficiencyRatio = avgCostEfficiency + ((predictedFoodCostPct + predictedBeverageCostPct) / 2 - avgCostEfficiency) * 0.5;
+  
+  // Calculate predicted profit margin
+  const predictedProfitMargin = Math.max(0, 100 - costEfficiencyRatio);
+  
+  // Calculate historical averages for cost forecasting
+  const avgFoodCost = historicalData.reduce((sum, d) => sum + (d.actual_food_cost || 0), 0) / historicalData.length;
+  const avgBeverageCost = historicalData.reduce((sum, d) => sum + (d.actual_beverage_cost || 0), 0) / historicalData.length;
+  const avgTotalCost = avgFoodCost + avgBeverageCost;
+  
+  // Calculate cost standard deviations for confidence intervals
+  const foodCostStdDev = Math.sqrt(
+    historicalData.reduce((sum, d) => {
+      const cost = d.actual_food_cost || 0;
+      return sum + Math.pow(cost - avgFoodCost, 2);
+    }, 0) / historicalData.length
+  );
+  
+  const beverageCostStdDev = Math.sqrt(
+    historicalData.reduce((sum, d) => {
+      const cost = d.actual_beverage_cost || 0;
+      return sum + Math.pow(cost - avgBeverageCost, 2);
+    }, 0) / historicalData.length
+  );
+  
+  // Generate daily cost forecasts
+  const dailyCostForecasts = [];
+  const monthlyCostForecasts = [];
+  
+  if (forecastPeriod) {
+    const daysDiff = Math.ceil((forecastPeriod.to.getTime() - forecastPeriod.from.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Daily forecasts
+    for (let i = 0; i <= daysDiff; i++) {
+      const forecastDate = new Date(forecastPeriod.from);
+      forecastDate.setDate(forecastDate.getDate() + i);
+      
+      // Predict based on revenue forecast and cost percentage trends
+      const dayIndex = historicalData.length + i;
+      const predictedRevenue = Math.max(0, revenueTrend.intercept + (revenueTrend.slope * dayIndex));
+      
+      // Calculate cost percentages for this day
+      const dayFoodCostPct = Math.max(0, Math.min(100, foodCostTrend.intercept + (foodCostTrend.slope * dayIndex)));
+      const dayBeverageCostPct = Math.max(0, Math.min(100, beverageCostTrend.intercept + (beverageCostTrend.slope * dayIndex)));
+      
+      // Estimate revenue split (use historical average)
+      const historicalFoodRevenueRatio = historicalData.reduce((sum, d) => {
+        const totalRev = (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0);
+        return sum + (totalRev > 0 ? (d.actual_food_revenue || 0) / totalRev : 0.6); // Default 60% food
+      }, 0) / historicalData.length;
+      
+      const predictedFoodRevenue = predictedRevenue * historicalFoodRevenueRatio;
+      const predictedBeverageRevenue = predictedRevenue * (1 - historicalFoodRevenueRatio);
+      
+      // Calculate predicted costs
+      const predictedFoodCost = (predictedFoodRevenue * dayFoodCostPct) / 100;
+      const predictedBeverageCost = (predictedBeverageRevenue * dayBeverageCostPct) / 100;
+      const predictedTotalCost = predictedFoodCost + predictedBeverageCost;
+      
+      // Calculate confidence intervals
+      const confidenceRange = (foodCostStdDev + beverageCostStdDev) * 1.96; // 95% confidence
+      
+      dailyCostForecasts.push({
+        date: forecastDate,
+        predictedFoodCost,
+        predictedBeverageCost,
+        predictedTotalCost,
+        confidenceInterval: {
+          lower: Math.max(0, predictedTotalCost - confidenceRange),
+          upper: predictedTotalCost + confidenceRange,
+        },
+      });
+    }
+    
+    // Monthly forecasts
+    const monthsInPeriod = Math.ceil(daysDiff / 30);
+    for (let i = 0; i < monthsInPeriod; i++) {
+      const monthDate = new Date(forecastPeriod.from);
+      monthDate.setMonth(monthDate.getMonth() + i);
+      
+      // Calculate monthly averages from daily forecasts in this month
+      const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+      const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+      
+      const dailyForecastsInMonth = dailyCostForecasts.filter(forecast => 
+        forecast.date >= monthStart && forecast.date <= monthEnd
+      );
+      
+      if (dailyForecastsInMonth.length > 0) {
+        const avgFoodCost = dailyForecastsInMonth.reduce((sum, f) => sum + f.predictedFoodCost, 0) / dailyForecastsInMonth.length;
+        const avgBeverageCost = dailyForecastsInMonth.reduce((sum, f) => sum + f.predictedBeverageCost, 0) / dailyForecastsInMonth.length;
+        const avgTotalCost = avgFoodCost + avgBeverageCost;
+        
+        // Apply seasonal factor (similar to revenue forecasting)
+        const seasonalFactor = 1 + (Math.sin((monthDate.getMonth() / 12) * 2 * Math.PI) * 0.05); // 5% seasonal variation for costs
+        
+        const monthlyFoodCost = avgFoodCost * seasonalFactor * 30; // Monthly total
+        const monthlyBeverageCost = avgBeverageCost * seasonalFactor * 30;
+        const monthlyTotalCost = monthlyFoodCost + monthlyBeverageCost;
+        
+        monthlyCostForecasts.push({
+          month: monthDate,
+          predictedFoodCost: monthlyFoodCost,
+          predictedBeverageCost: monthlyBeverageCost,
+          predictedTotalCost: monthlyTotalCost,
+          confidenceInterval: {
+            lower: Math.max(0, monthlyTotalCost * 0.85),
+            upper: monthlyTotalCost * 1.15,
+          },
+          seasonalFactor,
+        });
+      }
+    }
+  }
+  
   return {
-    predictedFoodCostPct: Math.max(0, Math.min(100, foodCostTrend.intercept + foodCostTrend.slope * 30)),
-    predictedBeverageCostPct: Math.max(0, Math.min(100, beverageCostTrend.intercept + beverageCostTrend.slope * 30)),
-    predictedLaborCostPct: 25, // Placeholder - would need labor data
-    confidenceLevel: isLimitedData ? 50 : 75, // Lower confidence for limited data
+    predictedFoodCostPct,
+    predictedBeverageCostPct,
+    predictedProfitMargin,
+    costEfficiencyRatio,
+    confidenceLevel: isLimitedData ? 50 : 75,
+    daily: dailyCostForecasts,
+    monthly: monthlyCostForecasts,
   };
 }
 
-function generateDemandForecast(
-  customerTrend: { slope: number; intercept: number },
+function generateBusinessForecast(
+  historicalData: DailyFinancialSummary[],
   revenueTrend: { slope: number; intercept: number },
-  historicalData: DailyFinancialSummary[]
+  foodCostTrend: { slope: number; intercept: number },
+  beverageCostTrend: { slope: number; intercept: number }
 ) {
-  const avgCustomers = historicalData.reduce((sum, d) => sum + (d.total_covers || 0), 0) / historicalData.length;
+  // Calculate current revenue mix from historical data
+  const totalHistoricalFoodRevenue = historicalData.reduce((sum, d) => sum + (d.actual_food_revenue || 0), 0);
+  const totalHistoricalBeverageRevenue = historicalData.reduce((sum, d) => sum + (d.actual_beverage_revenue || 0), 0);
+  const totalHistoricalRevenue = totalHistoricalFoodRevenue + totalHistoricalBeverageRevenue;
+  
+  const currentFoodMix = totalHistoricalRevenue > 0 ? (totalHistoricalFoodRevenue / totalHistoricalRevenue) * 100 : 50;
+  const currentBeverageMix = totalHistoricalRevenue > 0 ? (totalHistoricalBeverageRevenue / totalHistoricalRevenue) * 100 : 50;
+  
+  // Calculate revenue growth rate (annualized from daily slope)
+  const dailyGrowthRate = revenueTrend.slope;
   const avgRevenue = historicalData.reduce((sum, d) => 
     sum + (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0), 0
   ) / historicalData.length;
+  const revenueGrowthRate = avgRevenue > 0 ? (dailyGrowthRate / avgRevenue) * 365 * 100 : 0; // Annualized growth %
   
-  const predictedCustomers = Math.max(0, customerTrend.intercept + customerTrend.slope * 30);
-  const predictedRevenue = Math.max(0, revenueTrend.intercept + revenueTrend.slope * 30);
-  const predictedAverageCheck = predictedCustomers > 0 ? predictedRevenue / predictedCustomers : avgRevenue / avgCustomers;
+  // Calculate average budget cost percentages for variance forecast
+  const avgBudgetFoodCostPct = historicalData.reduce((sum, d) => sum + (d.budget_food_cost_pct || 0), 0) / historicalData.length;
+  const avgBudgetBeverageCostPct = historicalData.reduce((sum, d) => sum + (d.budget_beverage_cost_pct || 0), 0) / historicalData.length;
+  
+  const predictedFoodCostPct = Math.max(0, Math.min(100, foodCostTrend.intercept + foodCostTrend.slope * 30));
+  const predictedBeverageCostPct = Math.max(0, Math.min(100, beverageCostTrend.intercept + beverageCostTrend.slope * 30));
+  
+  // Calculate cost variances from budget
+  const foodCostVariance = avgBudgetFoodCostPct > 0 ? predictedFoodCostPct - avgBudgetFoodCostPct : 0;
+  const beverageCostVariance = avgBudgetBeverageCostPct > 0 ? predictedBeverageCostPct - avgBudgetBeverageCostPct : 0;
+  
+  // Calculate break-even revenue (assuming fixed cost structure)
+  const avgCostRatio = historicalData.reduce((sum, d) => {
+    const revenue = (d.actual_food_revenue || 0) + (d.actual_beverage_revenue || 0);
+    const cost = (d.actual_food_cost || 0) + (d.actual_beverage_cost || 0);
+    return sum + (revenue > 0 ? cost / revenue : 0);
+  }, 0) / historicalData.length;
+  
+  const projectedCostRatio = (predictedFoodCostPct * currentFoodMix/100 + predictedBeverageCostPct * currentBeverageMix/100) / 100;
+  const breakEvenRevenue = avgRevenue * (projectedCostRatio / avgCostRatio); // Revenue needed to maintain current profit levels
   
   return {
-    predictedCustomers,
-    predictedAverageCheck,
-    peakHours: ["12:00-14:00", "18:00-21:00"], // Industry standard
-    slowHours: ["14:00-17:00", "21:00-23:00"],
+    revenueMixForecast: {
+      foodRevenuePercentage: currentFoodMix,
+      beverageRevenuePercentage: currentBeverageMix,
+    },
+    revenueGrowthRate: Math.round(revenueGrowthRate * 100) / 100, // Round to 2 decimal places
+    breakEvenRevenue,
+    costVarianceForecast: {
+      foodCostVariance: Math.round(foodCostVariance * 100) / 100,
+      beverageCostVariance: Math.round(beverageCostVariance * 100) / 100,
+    },
   };
 }
 

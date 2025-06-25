@@ -833,58 +833,111 @@ export async function getCostAnalysisByCategoryReportAction(
       });
     });
 
-    const totalCost = totalFoodCost + totalBeverageCost;
-    console.log('Total food cost:', totalFoodCost);
-    console.log('Total beverage cost:', totalBeverageCost);
-    console.log('Total cost:', totalCost);
+    // Get adjustment data from daily financial summaries to match dashboard calculations
+    let totalOcFood = 0;
+    let totalEntFood = 0;
+    let totalOtherAdjustmentsFood = 0;
+    let totalOcBeverage = 0;
+    let totalEntBeverage = 0;
+    let totalOtherAdjustmentsBeverage = 0;
+    
+    dailySummariesSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (!outletId || outletId === "all" || data.outlet_id === outletId) {
+        totalOcFood += data.oc_food || 0;
+        totalEntFood += data.ent_food || 0;
+        totalOtherAdjustmentsFood += data.other_food_adjustment || 0;
+        totalOcBeverage += data.officer_check_comp_beverage || 0;
+        totalEntBeverage += data.entertainment_beverage_cost || 0;
+        totalOtherAdjustmentsBeverage += data.other_beverage_adjustments || 0;
+      }
+    });
+    
+    // Calculate net costs (after adjustments) to match dashboard
+    // Formula: actual_cost = gross_cost - ent - oc + other_adjustment
+    const netFoodCost = totalFoodCost - totalOcFood - totalEntFood + totalOtherAdjustmentsFood;
+    const netBeverageCost = totalBeverageCost - totalOcBeverage - totalEntBeverage + totalOtherAdjustmentsBeverage;
+    const totalCost = netFoodCost + netBeverageCost;
+    
+    console.log('Raw food cost:', totalFoodCost);
+    console.log('Food adjustments - OC:', totalOcFood, 'ENT:', totalEntFood, 'Other:', totalOtherAdjustmentsFood);
+    console.log('Net food cost:', netFoodCost);
+    console.log('Raw beverage cost:', totalBeverageCost);
+    console.log('Beverage adjustments - OC:', totalOcBeverage, 'ENT:', totalEntBeverage, 'Other:', totalOtherAdjustmentsBeverage);
+    console.log('Net beverage cost:', netBeverageCost);
+    console.log('Total net cost:', totalCost);
 
     // Calculate number of days in the range
     const daysInRange = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    // Build food categories analysis
+    // Calculate adjustment ratios to apply proportionally
+    // Adjustment = (oc + ent - other_adjustment) / gross_cost
+    const foodAdjustmentRatio = totalFoodCost > 0 ? (totalOcFood + totalEntFood - totalOtherAdjustmentsFood) / totalFoodCost : 0;
+    const beverageAdjustmentRatio = totalBeverageCost > 0 ? (totalOcBeverage + totalEntBeverage - totalOtherAdjustmentsBeverage) / totalBeverageCost : 0;
+    
+    console.log('Food adjustment ratio:', foodAdjustmentRatio);
+    console.log('Beverage adjustment ratio:', beverageAdjustmentRatio);
+
+    // Build food categories analysis with proportional adjustments
     const foodCategories = Object.entries(foodCategoryData).map(([categoryId, outletCosts]) => {
-      const categoryTotalCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
+      const categoryRawCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
+      const categoryAdjustment = categoryRawCost * foodAdjustmentRatio;
+      const categoryNetCost = categoryRawCost - categoryAdjustment;
+      
       const outletBreakdown = Object.entries(outletCosts).map(([outletId, cost]) => {
         const outlet = outlets.find(o => o.id === outletId);
+        const netCostForOutlet = cost - (cost * foodAdjustmentRatio);
         return {
           outletName: outlet?.name || 'Unknown Outlet',
           outletId,
-          cost,
-          percentageOfOutletFoodCost: totalFoodCost > 0 ? (cost / totalFoodCost) * 100 : 0
+          cost: netCostForOutlet,
+          rawCost: cost,
+          adjustment: cost * foodAdjustmentRatio,
+          percentageOfOutletFoodCost: netFoodCost > 0 ? (netCostForOutlet / netFoodCost) * 100 : 0
         };
       });
 
       return {
         categoryName: foodCategoryNames[categoryId],
         categoryId,
-        totalCost: categoryTotalCost,
-        percentageOfTotalFoodCost: totalFoodCost > 0 ? (categoryTotalCost / totalFoodCost) * 100 : 0,
-        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryTotalCost / totalRevenue) * 100 : 0,
-        averageDailyCost: categoryTotalCost / daysInRange,
+        totalCost: categoryNetCost,
+        rawCost: categoryRawCost,
+        adjustment: categoryAdjustment,
+        percentageOfTotalFoodCost: netFoodCost > 0 ? (categoryNetCost / netFoodCost) * 100 : 0,
+        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryNetCost / totalRevenue) * 100 : 0,
+        averageDailyCost: categoryNetCost / daysInRange,
         outletBreakdown
       };
     }).sort((a, b) => b.totalCost - a.totalCost);
 
-    // Build beverage categories analysis
+    // Build beverage categories analysis with proportional adjustments
     const beverageCategories = Object.entries(beverageCategoryData).map(([categoryId, outletCosts]) => {
-      const categoryTotalCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
+      const categoryRawCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
+      const categoryAdjustment = categoryRawCost * beverageAdjustmentRatio;
+      const categoryNetCost = categoryRawCost - categoryAdjustment;
+      
       const outletBreakdown = Object.entries(outletCosts).map(([outletId, cost]) => {
         const outlet = outlets.find(o => o.id === outletId);
+        const netCostForOutlet = cost - (cost * beverageAdjustmentRatio);
         return {
           outletName: outlet?.name || 'Unknown Outlet',
           outletId,
-          cost,
-          percentageOfOutletBeverageCost: totalBeverageCost > 0 ? (cost / totalBeverageCost) * 100 : 0
+          cost: netCostForOutlet,
+          rawCost: cost,
+          adjustment: cost * beverageAdjustmentRatio,
+          percentageOfOutletBeverageCost: netBeverageCost > 0 ? (netCostForOutlet / netBeverageCost) * 100 : 0
         };
       });
 
       return {
         categoryName: beverageCategoryNames[categoryId],
         categoryId,
-        totalCost: categoryTotalCost,
-        percentageOfTotalBeverageCost: totalBeverageCost > 0 ? (categoryTotalCost / totalBeverageCost) * 100 : 0,
-        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryTotalCost / totalRevenue) * 100 : 0,
-        averageDailyCost: categoryTotalCost / daysInRange,
+        totalCost: categoryNetCost,
+        rawCost: categoryRawCost,
+        adjustment: categoryAdjustment,
+        percentageOfTotalBeverageCost: netBeverageCost > 0 ? (categoryNetCost / netBeverageCost) * 100 : 0,
+        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryNetCost / totalRevenue) * 100 : 0,
+        averageDailyCost: categoryNetCost / daysInRange,
         outletBreakdown
       };
     }).sort((a, b) => b.totalCost - a.totalCost);
@@ -915,11 +968,25 @@ export async function getCostAnalysisByCategoryReportAction(
       totalRevenue,
       foodCategories,
       beverageCategories,
-      totalFoodCost,
-      totalBeverageCost,
+      totalFoodCost: netFoodCost,
+      totalBeverageCost: netBeverageCost,
       totalCost,
-      overallFoodCostPercentage: totalFoodRevenue > 0 ? (totalFoodCost / totalFoodRevenue) * 100 : 0,
-      overallBeverageCostPercentage: totalBeverageRevenue > 0 ? (totalBeverageCost / totalBeverageRevenue) * 100 : 0,
+      rawFoodCost: totalFoodCost, // Keep raw costs for reference
+      rawBeverageCost: totalBeverageCost,
+      foodAdjustments: {
+        oc: totalOcFood,
+        entertainment: totalEntFood,
+        other: totalOtherAdjustmentsFood,
+        total: totalOcFood + totalEntFood - totalOtherAdjustmentsFood
+      },
+      beverageAdjustments: {
+        oc: totalOcBeverage,
+        entertainment: totalEntBeverage,
+        other: totalOtherAdjustmentsBeverage,
+        total: totalOcBeverage + totalEntBeverage - totalOtherAdjustmentsBeverage
+      },
+      overallFoodCostPercentage: totalFoodRevenue > 0 ? (netFoodCost / totalFoodRevenue) * 100 : 0,
+      overallBeverageCostPercentage: totalBeverageRevenue > 0 ? (netBeverageCost / totalBeverageRevenue) * 100 : 0,
       overallCostPercentage: totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0,
       topFoodCategories,
       topBeverageCategories
