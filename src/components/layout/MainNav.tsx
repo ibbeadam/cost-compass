@@ -102,7 +102,7 @@ export function MainNav() {
     if (pathname === href) {
       return true;
     }
-    if (href !== "/dashboard" && pathname.startsWith(href + "/")) {
+    if (href !== "/dashboard" && pathname?.startsWith(href + "/")) {
       return true;
     }
     return false;
@@ -140,7 +140,7 @@ export function MainNav() {
               isActive={isActive(item.href)}
               disabled={item.disabled}
               className={cn(
-                "justify-start",
+                "justify-start group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0",
                 isActive(item.href)
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -150,12 +150,19 @@ export function MainNav() {
               tooltip={{
                 children: item.label,
                 side: "right",
-                className: "bg-card text-card-foreground border-border",
+                sideOffset: 24,
+                align: "center",
+                avoidCollisions: true,
+                className:
+                  "bg-sidebar text-sidebar-foreground border-sidebar-border shadow-lg z-50",
               }}
             >
-              <a onClick={handleNavClick}>
-                <item.icon className="h-5 w-5 mr-3 flex-shrink-0" />
-                <span className="group-data-[state=collapsed]:hidden">
+              <a
+                onClick={handleNavClick}
+                className="flex items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:h-full"
+              >
+                <item.icon className="h-6 w-6 mr-3 group-data-[collapsible=icon]:mr-0 flex-shrink-0" />
+                <span className="group-data-[collapsible=icon]:hidden">
                   {item.label}
                 </span>
               </a>
@@ -170,14 +177,15 @@ export function MainNav() {
                       asChild
                       isActive={isMounted && pathname === subItem.href}
                       className={cn(
+                        "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0",
                         isMounted && pathname === subItem.href
                           ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
                           : "hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground"
                       )}
                     >
-                      <a>
-                        <subItem.icon className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span className="group-data-[state=collapsed]:hidden">
+                      <a className="flex items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:h-full">
+                        <subItem.icon className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0 flex-shrink-0" />
+                        <span className="group-data-[collapsible=icon]:hidden">
                           {subItem.label}
                         </span>
                       </a>

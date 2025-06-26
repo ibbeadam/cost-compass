@@ -13,8 +13,11 @@ import { MainNav } from "./MainNav";
 
 export function AppSidebar() {
   return (
-    <Sidebar className="bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
-      <SidebarHeader className="p-4 border-b border-sidebar-border h-16 flex items-center">
+    <Sidebar 
+      className="bg-sidebar text-sidebar-foreground border-r border-sidebar-border"
+      collapsible="icon"
+    >
+      <SidebarHeader className="p-4 border-b border-sidebar-border h-16 flex items-center justify-center group-data-[state=expanded]:justify-start">
         <AppBrand />
       </SidebarHeader>
       <SidebarContent className="p-2">

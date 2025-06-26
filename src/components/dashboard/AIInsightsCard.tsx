@@ -121,7 +121,18 @@ export function AIInsightsCard({ isLoading, insights, error }: AIInsightsCardPro
             <h3 className="font-semibold text-md mb-2 flex items-center"><Info className="mr-2 h-5 w-5 text-primary/80"/>Key Insights</h3>
             <ul className="list-disc list-inside space-y-1 pl-2">
               {insights.keyInsights.map((insight, index) => (
-                <li key={index} className="text-sm text-muted-foreground">{insight}</li>
+                <li key={index} className="text-sm text-muted-foreground">
+                  {typeof insight === 'object' ? insight.insight : insight}
+                  {typeof insight === 'object' && insight.impact && (
+                    <span className={`ml-2 text-xs px-1.5 py-0.5 rounded ${
+                      insight.impact === 'high' ? 'bg-red-100 text-red-700' :
+                      insight.impact === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {insight.impact}
+                    </span>
+                  )}
+                </li>
               ))}
             </ul>
           </div>
@@ -130,9 +141,32 @@ export function AIInsightsCard({ isLoading, insights, error }: AIInsightsCardPro
         {insights.recommendations && insights.recommendations.length > 0 && (
           <div className="p-4 rounded-md bg-background border">
             <h3 className="font-semibold text-md mb-2 flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary/80"/>Recommendations</h3>
-            <ul className="list-disc list-inside space-y-1 pl-2">
+            <ul className="list-disc list-inside space-y-2 pl-2">
               {insights.recommendations.map((rec, index) => (
-                <li key={index} className="text-sm text-muted-foreground">{rec}</li>
+                <li key={index} className="text-sm text-muted-foreground">
+                  <div className="flex flex-col space-y-1">
+                    <span>{typeof rec === 'object' ? rec.action : rec}</span>
+                    {typeof rec === 'object' && (rec.priority || rec.estimatedImpact) && (
+                      <div className="flex gap-2 text-xs">
+                        {rec.priority && (
+                          <span className={`px-1.5 py-0.5 rounded ${
+                            rec.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                            rec.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                            rec.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-blue-100 text-blue-700'
+                          }`}>
+                            {rec.priority}
+                          </span>
+                        )}
+                        {rec.estimatedImpact && (
+                          <span className="text-muted-foreground">
+                            Impact: {rec.estimatedImpact}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </li>
               ))}
             </ul>
           </div>

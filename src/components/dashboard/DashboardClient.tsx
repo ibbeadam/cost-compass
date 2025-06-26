@@ -99,6 +99,10 @@ import {
   type DashboardAdvisorInput,
   type DashboardAdvisorOutput,
 } from "@/ai/flows/dashboard-cost-advisor-flow";
+import {
+  runEnhancedCostAnalysis,
+  generateSmartNotifications,
+} from "@/ai/integrations/enhanced-cost-advisor-integration";
 import { AIInsightsCard } from "./AIInsightsCard";
 import { getFoodCategoriesAction } from "@/actions/foodCostActions";
 import { getBeverageCategoriesAction } from "@/actions/beverageCostActions";
@@ -968,31 +972,100 @@ export default function DashboardClient() {
           currentDashboardData.summaryStats.totalFoodRevenue > 0 &&
           currentDashboardData.summaryStats.totalBeverageRevenue > 0
         ) {
-          const aiInput: DashboardAdvisorInput = {
-            numberOfDays: numberOfDaysInPeriod,
-            totalFoodRevenue:
-              currentDashboardData.summaryStats.totalFoodRevenue,
-            budgetFoodCostPct: avgBudgetFoodCostPct,
-            actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
-            totalBeverageRevenue:
-              currentDashboardData.summaryStats.totalBeverageRevenue,
-            budgetBeverageCostPct: avgBudgetBeverageCostPct,
-            actualBeverageCostPct:
-              currentDashboardData.summaryStats.avgBeverageCostPct,
-          };
           try {
-            const analysisResult = await analyzeDashboardData(aiInput);
-            setAiInsights(analysisResult);
+            // Try enhanced analysis first if outlet is selected
+            if (selectedOutletId && selectedOutletId !== "all") {
+              console.log("Running enhanced cost analysis with real data integration");
+              
+              const analysisResult = await runEnhancedCostAnalysis(
+                selectedOutletId,
+                dateRange?.from || new Date(),
+                dateRange?.to || new Date(),
+                {
+                  totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+                  budgetFoodCostPct: avgBudgetFoodCostPct,
+                  actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
+                  totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+                  budgetBeverageCostPct: avgBudgetBeverageCostPct,
+                  actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+                },
+                {
+                  // Add business context based on current date
+                  specialEvents: [],
+                  marketConditions: "Normal market conditions",
+                  staffingLevel: "normal"
+                }
+              );
+              
+              setAiInsights(analysisResult);
+              
+              // Show success notification for enhanced analysis
+              showToast.success(
+                `Enhanced AI analysis completed - Alert Level: ${analysisResult.alertLevel.toUpperCase()}`
+              );
+              
+            } else {
+              // Fallback to basic analysis for "all outlets" view
+              console.log("Running basic cost analysis for multi-outlet view");
+              
+              const aiInput: DashboardAdvisorInput = {
+                numberOfDays: numberOfDaysInPeriod,
+                totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+                budgetFoodCostPct: avgBudgetFoodCostPct,
+                actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
+                totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+                budgetBeverageCostPct: avgBudgetBeverageCostPct,
+                actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+              };
+              
+              const analysisResult = await analyzeDashboardData(aiInput);
+              setAiInsights(analysisResult);
+            }
+            
           } catch (aiErr) {
             console.error("Error fetching AI insights:", aiErr);
-            setAiError(
-              (aiErr as Error).message || "Failed to load AI analysis."
-            );
-            showToast.error((aiErr as Error).message);
-            setAiInsights(null);
+            
+            // Try fallback to basic analysis if enhanced fails
+            if (selectedOutletId && selectedOutletId !== "all") {
+              console.log("Enhanced analysis failed, falling back to basic analysis");
+              try {
+                const aiInput: DashboardAdvisorInput = {
+                  numberOfDays: numberOfDaysInPeriod,
+                  totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+                  budgetFoodCostPct: avgBudgetFoodCostPct,
+                  actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
+                  totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+                  budgetBeverageCostPct: avgBudgetBeverageCostPct,
+                  actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+                };
+                
+                const analysisResult = await analyzeDashboardData(aiInput);
+                setAiInsights(analysisResult);
+                
+                showToast.warning(
+                  "Using basic analysis mode - enhanced features unavailable"
+                );
+                
+              } catch (fallbackErr) {
+                console.error("Fallback analysis also failed:", fallbackErr);
+                setAiError(
+                  "AI analysis failed. Please try again later."
+                );
+                showToast.error("AI analysis failed");
+                setAiInsights(null);
+              }
+            } else {
+              setAiError(
+                (aiErr as Error).message || "Failed to load AI analysis."
+              );
+              showToast.error((aiErr as Error).message);
+              setAiInsights(null);
+            }
           }
         } else {
+          console.log("Insufficient data for AI analysis");
           setAiInsights(null);
+          setAiError("Insufficient data for cost analysis. Please ensure there is revenue data for the selected period.");
         }
       } catch (err) {
         console.error("Error fetching dashboard data:", err);

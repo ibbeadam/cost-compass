@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   collection,
   onSnapshot,
@@ -126,6 +126,9 @@ export default function BeverageCostEntryListClient() {
   const [importPreviewData, setImportPreviewData] = useState<ExcelBeverageCostRow[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
+
+  // File input ref
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setIsClient(true);
@@ -338,6 +341,7 @@ export default function BeverageCostEntryListClient() {
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
         parseExcelData(jsonData);
+        setIsImportDialogOpen(true);
       } catch (error) {
         console.error('Error reading Excel file:', error);
         showToast.error('Error reading Excel file. Please check the format.');
@@ -477,29 +481,29 @@ export default function BeverageCostEntryListClient() {
       }
 
       if (successCount > 0) {
-        showToast.success(`Successfully imported ${successCount} beverage cost entries`);
+        showToast.success(`Successfully imported ${successCount} beverage cost entries.${errorCount > 0 ? ` ${errorCount} errors occurred.` : ''}`);
+        setIsImportDialogOpen(false);
+        setImportPreviewData([]);
+        setImportErrors([]);
       }
 
       if (errorCount > 0) {
-        showToast.error(`Failed to import ${errorCount} entries. Check console for details.`);
-        console.error('Import errors:', detailedErrors);
+        setImportErrors(detailedErrors);
       }
-
-      // Reset import state
-      setIsImportDialogOpen(false);
-      setImportFile(null);
-      setImportPreviewData([]);
-      setImportErrors([]);
-      
-      // Reset file input
-      const fileInput = document.getElementById('bulk-import-file') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
-
     } catch (error) {
       console.error('Bulk import error:', error);
       showToast.error('An error occurred during bulk import');
     } finally {
       setIsImporting(false);
+    }
+  };
+
+  const handleImportCancel = () => {
+    setIsImportDialogOpen(false);
+    setImportPreviewData([]);
+    setImportErrors([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -576,21 +580,41 @@ export default function BeverageCostEntryListClient() {
 
   return (
     <>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold font-headline">
-          Beverage Cost Entries
-        </h2>
-        <div className="flex gap-2">
-          <Button
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h2 className="text-2xl font-bold font-headline">Beverage Cost Entries</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            onClick={generateExcelTemplate} 
+            variant="outline" 
+            size="sm" 
+            className="text-xs sm:text-sm"
+            disabled={isLoadingCategories || beverageCategories.length === 0}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Download Template
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+          <Button 
+            onClick={() => fileInputRef.current?.click()} 
             variant="outline"
-            onClick={() => setIsImportDialogOpen(true)}
+            size="sm"
+            className="text-xs sm:text-sm"
             disabled={isLoadingOutlets || isLoadingCategories}
           >
-            <Upload className="mr-2 h-4 w-4" /> Bulk Import
+            <Upload className="mr-2 h-4 w-4" />
+            Import Excel
           </Button>
           <Button
             onClick={handleAddNew}
             disabled={isLoadingOutlets || isLoadingCategories}
+            size="sm"
+            className="text-xs sm:text-sm"
           >
             <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
           </Button>
@@ -884,121 +908,105 @@ export default function BeverageCostEntryListClient() {
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Import Dialog */}
+      {/* Import Dialog */}
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col bg-card">
           <DialogHeader>
-            <DialogTitle>Bulk Import Beverage Cost Entries</DialogTitle>
+            <DialogTitle className="font-headline text-xl flex items-center">
+              <FileSpreadsheet className="mr-2 h-5 w-5" />
+              Import Beverage Cost Entries
+            </DialogTitle>
             <DialogDescription>
-              Upload an Excel file to import multiple beverage cost entries at once.
+              Review the data from your Excel file before importing. Make sure all dates, outlets, and categories are correct.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 overflow-y-auto space-y-4">
-            <div className="flex gap-4">
-              <Button
-                variant="outline"
-                onClick={generateExcelTemplate}
-                disabled={beverageCategories.length === 0}
-              >
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Download Template
-              </Button>
-              
-              <div className="flex-1">
-                <Input
-                  id="bulk-import-file"
-                  type="file"
-                  accept=".xlsx,.xls"
-                  onChange={handleFileUpload}
-                  disabled={isImporting}
-                />
-              </div>
-            </div>
-
+          <div className="flex-grow min-h-0 overflow-y-auto">
             {importErrors.length > 0 && (
-              <div className="bg-destructive/10 border border-destructive rounded-md p-4">
-                <h4 className="font-medium text-destructive mb-2">Import Errors ({importErrors.length}):</h4>
-                <ul className="list-disc list-inside space-y-1 text-sm">
-                  {importErrors.slice(0, 10).map((error, index) => (
-                    <li key={index} className="text-destructive">{error}</li>
+              <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+                <h4 className="font-medium text-destructive mb-2">Import Errors ({importErrors.length})</h4>
+                <div className="max-h-32 overflow-y-auto text-sm">
+                  {importErrors.map((error, index) => (
+                    <div key={index} className="text-destructive mb-1">• {error}</div>
                   ))}
-                  {importErrors.length > 10 && (
-                    <li className="text-muted-foreground">... and {importErrors.length - 10} more errors</li>
-                  )}
-                </ul>
+                </div>
               </div>
             )}
 
             {importPreviewData.length > 0 && (
-              <div className="border rounded-md">
-                <div className="bg-muted/50 p-4 border-b">
-                  <h4 className="font-medium">Preview ({importPreviewData.length} entries)</h4>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="font-medium">Preview ({importPreviewData.length} records)</h4>
+                  <div className="text-sm text-muted-foreground">
+                    {importPreviewData.length} beverage cost entries ready to import
+                  </div>
                 </div>
-                <div className="max-h-64 overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Outlet</TableHead>
-                        <TableHead>Categories</TableHead>
-                        <TableHead className="text-right">Total Cost</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {importPreviewData.slice(0, 20).map((row, index) => (
-                        <TableRow key={index}>
-                          <TableCell>{row.date}</TableCell>
-                          <TableCell>{row.outlet_name}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-wrap gap-1">
-                              {row.categories.map((cat, catIndex) => (
-                                <span
-                                  key={catIndex}
-                                  className="inline-block bg-primary/10 text-primary text-xs px-2 py-1 rounded"
-                                >
-                                  {cat.category_name}: ${cat.cost.toFixed(2)}
-                                </span>
-                              ))}
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            ${row.categories.reduce((sum, cat) => sum + cat.cost, 0).toFixed(2)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {importPreviewData.length > 20 && (
+                
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center text-muted-foreground">
-                            ... and {importPreviewData.length - 20} more entries
-                          </TableCell>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Outlet</TableHead>
+                          <TableHead>Categories</TableHead>
+                          <TableHead className="text-right">Total Cost</TableHead>
                         </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {importPreviewData.slice(0, 10).map((row, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-code">{row.date}</TableCell>
+                            <TableCell>{row.outlet_name}</TableCell>
+                            <TableCell className="max-w-[200px]">
+                              <div className="space-y-1">
+                                {row.categories.slice(0, 3).map((cat, catIndex) => (
+                                  <div key={catIndex} className="text-xs">
+                                    {cat.category_name}: ${cat.cost.toFixed(2)}
+                                  </div>
+                                ))}
+                                {row.categories.length > 3 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    +{row.categories.length - 3} more...
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-code">
+                              ${row.categories.reduce((sum, cat) => sum + cat.cost, 0).toFixed(2)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {importPreviewData.length > 10 && (
+                    <div className="p-3 bg-muted/30 text-center text-sm text-muted-foreground">
+                      Showing first 10 of {importPreviewData.length} records
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
           <div className="flex justify-end gap-2 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsImportDialogOpen(false);
-                setImportFile(null);
-                setImportPreviewData([]);
-                setImportErrors([]);
-              }}
-              disabled={isImporting}
-            >
+            <Button variant="outline" onClick={handleImportCancel} disabled={isImporting}>
               Cancel
             </Button>
-            <Button
-              onClick={handleBulkImport}
-              disabled={importPreviewData.length === 0 || importErrors.length > 0 || isImporting}
+            <Button 
+              onClick={handleBulkImport} 
+              disabled={isImporting || importPreviewData.length === 0}
+              className="min-w-[100px]"
             >
-              {isImporting ? 'Importing...' : `Import ${importPreviewData.length} Entries`}
+              {isImporting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Importing...
+                </>
+              ) : (
+                `Import ${importPreviewData.length} Records`
+              )}
             </Button>
           </div>
         </DialogContent>

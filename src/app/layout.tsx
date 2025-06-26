@@ -11,6 +11,8 @@ import { AppHeader } from "@/components/layout/AppHeader";
 import { AppFooter } from "@/components/layout/AppFooter";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
+import { NotificationToastContainer } from "@/components/notifications/NotificationToast";
 import { usePathname } from "next/navigation"; // Added
 import { useEffect, useState } from "react"; // Added for isMounted pattern
 
@@ -45,6 +47,11 @@ export default function RootLayout({
             content="Daily Food and Beverage Cost Monitoring"
           />
           {/* Default description */}
+          {/* Favicon */}
+          <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+          <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+          <link rel="apple-touch-icon" href="/favicon.svg" />
+          <meta name="theme-color" content="#2563eb" />
           <link rel="preconnect" href="https://fonts.googleapis.com" />
           <link
             rel="preconnect"
@@ -63,22 +70,24 @@ export default function RootLayout({
         <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
           <ThemeProvider>
             <AuthProvider>
-              <div className="flex min-h-screen w-full items-center justify-center">
-                {children}
-              </div>
-              <Toaster />
-              <ToastContainer
-                position="top-right"
-                autoClose={5000}
-                hideProgressBar={false}
-                newestOnTop={false}
-                closeOnClick
-                rtl={false}
-                pauseOnFocusLoss
-                draggable
-                pauseOnHover
-                theme="light"
-              />
+              <NotificationProvider>
+                <div className="flex min-h-screen w-full items-center justify-center">
+                  {children}
+                </div>
+                <Toaster />
+                <ToastContainer
+                  position="top-right"
+                  autoClose={5000}
+                  hideProgressBar={false}
+                  newestOnTop={false}
+                  closeOnClick
+                  rtl={false}
+                  pauseOnFocusLoss
+                  draggable
+                  pauseOnHover
+                  theme="light"
+                />
+              </NotificationProvider>
             </AuthProvider>
           </ThemeProvider>
         </body>
@@ -97,6 +106,11 @@ export default function RootLayout({
           name="description"
           content="Daily Food and Beverage Cost Monitoring"
         />
+        {/* Favicon */}
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/favicon.svg" />
+        <meta name="theme-color" content="#2563eb" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -115,6 +129,7 @@ export default function RootLayout({
       <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
         <ThemeProvider>
           <AuthProvider>
+            <NotificationProvider>
             {isAuthPage ? (
               <div className="flex min-h-screen w-full items-center justify-center overflow-x-hidden">
                 {children}
@@ -133,6 +148,7 @@ export default function RootLayout({
                 </div>
               </SidebarProvider>
             )}
+            <NotificationToastContainer />
             <Toaster />
             <ToastContainer
               position="top-right"
@@ -146,6 +162,7 @@ export default function RootLayout({
               pauseOnHover
               theme="light"
             />
+            </NotificationProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>
