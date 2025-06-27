@@ -68,6 +68,11 @@ import type {
 } from "@/types";
 import { showToast } from "@/lib/toast";
 import {
+  useNotifications,
+  createCostAlert,
+  createBusinessInsight,
+} from "@/contexts/NotificationContext";
+import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
@@ -104,6 +109,7 @@ import {
   generateSmartNotifications,
 } from "@/ai/integrations/enhanced-cost-advisor-integration";
 import { AIInsightsCard } from "./AIInsightsCard";
+import { EnhancedCostAdvisorSection } from "./EnhancedCostAdvisorSection";
 import { getFoodCategoriesAction } from "@/actions/foodCostActions";
 import { getBeverageCategoriesAction } from "@/actions/beverageCostActions";
 import dynamic from "next/dynamic";
@@ -240,6 +246,173 @@ const costDistributionChartColors = [
 ];
 
 export default function DashboardClient() {
+  const { addNotification } = useNotifications();
+
+  // Helper function to create notifications based on AI analysis results
+  const createAnalysisNotifications = async (
+    analysisResult: DashboardAdvisorOutput,
+    outletName: string
+  ) => {
+    try {
+      let smartNotifications: any[] = [];
+
+      // Try to generate smart notifications using the enhanced integration
+      try {
+        smartNotifications = await generateSmartNotifications(analysisResult, {
+          enableAlerts: true,
+          enableInsights: true,
+          enableRecommendations: true,
+          minAlertLevel: "low",
+          maxNotificationsPerSession: 3,
+        });
+      } catch (enhancedError) {
+        console.log(
+          "Enhanced notifications failed, using fallback",
+          enhancedError
+        );
+        // Fallback to basic notification creation
+        smartNotifications = [];
+      }
+
+      // Create notifications in the notification center
+      smartNotifications.forEach((notification, index) => {
+        setTimeout(() => {
+          if (notification.type === "alert") {
+            addNotification(
+              createCostAlert(notification.title, notification.message, {
+                alertLevel: analysisResult.alertLevel,
+                outlet: outletName,
+                performanceScore:
+                  analysisResult.performanceMetrics.overallScore,
+                actionRequired: notification.action,
+              })
+            );
+          } else {
+            addNotification(
+              createBusinessInsight(notification.title, notification.message, {
+                type: notification.type,
+                priority: notification.priority,
+                outlet: outletName,
+                actionRequired: notification.action,
+              })
+            );
+          }
+        }, index * 1000); // Stagger notifications by 1 second each
+      });
+
+      // Always create a basic notification for critical/high alerts
+      if (
+        analysisResult.alertLevel === "critical" ||
+        (analysisResult.alertLevel === "high" &&
+          smartNotifications.length === 0)
+      ) {
+        setTimeout(() => {
+          addNotification(
+            createCostAlert(
+              `${
+                analysisResult.alertLevel.charAt(0).toUpperCase() +
+                analysisResult.alertLevel.slice(1)
+              } Cost Alert`,
+              `${
+                analysisResult.alertLevel === "critical"
+                  ? "Immediate"
+                  : "Urgent"
+              } attention required for ${outletName}. Overall performance score: ${
+                analysisResult.performanceMetrics.overallScore
+              }/100. Budget compliance: ${analysisResult.performanceMetrics.budgetCompliance.toFixed(
+                1
+              )}%.`,
+              {
+                alertLevel: analysisResult.alertLevel,
+                outlet: outletName,
+                performanceScore:
+                  analysisResult.performanceMetrics.overallScore,
+                budgetCompliance:
+                  analysisResult.performanceMetrics.budgetCompliance,
+                nextStep:
+                  (analysisResult.nextSteps && analysisResult.nextSteps[0]) ||
+                  "Review cost analysis details",
+              }
+            )
+          );
+        }, 500);
+      }
+
+      // Create notification for urgent recommendations
+      if (
+        analysisResult.recommendations &&
+        analysisResult.recommendations.length > 0
+      ) {
+        const urgentRecommendations = analysisResult.recommendations.filter(
+          (rec) => rec.priority === "urgent" || rec.priority === "high"
+        );
+        if (
+          urgentRecommendations.length > 0 &&
+          smartNotifications.length === 0
+        ) {
+          setTimeout(() => {
+            addNotification(
+              createBusinessInsight(
+                "Priority Action Required",
+                urgentRecommendations[0].action,
+                {
+                  type: "recommendation",
+                  priority: urgentRecommendations[0].priority,
+                  outlet: outletName,
+                  impact: urgentRecommendations[0].estimatedImpact,
+                  timeframe: urgentRecommendations[0].timeframe,
+                }
+              )
+            );
+          }, 1500);
+        }
+      }
+
+      // Create notification for high-impact insights
+      if (analysisResult.keyInsights && analysisResult.keyInsights.length > 0) {
+        const highImpactInsights = analysisResult.keyInsights.filter(
+          (insight) => insight.impact === "high"
+        );
+        if (highImpactInsights.length > 0 && smartNotifications.length === 0) {
+          setTimeout(() => {
+            addNotification(
+              createBusinessInsight(
+                "Critical Business Insight",
+                highImpactInsights[0].insight,
+                {
+                  type: "insight",
+                  category: highImpactInsights[0].category,
+                  impact: highImpactInsights[0].impact,
+                  outlet: outletName,
+                }
+              )
+            );
+          }, 2500);
+        }
+      }
+
+      console.log(
+        `Created notifications for ${outletName} - Alert Level: ${analysisResult.alertLevel}, Smart Notifications: ${smartNotifications.length}`
+      );
+    } catch (error) {
+      console.error("Error creating analysis notifications:", error);
+
+      // Final fallback - create a basic notification regardless
+      setTimeout(() => {
+        addNotification(
+          createBusinessInsight(
+            "Cost Analysis Complete",
+            `Cost analysis completed for ${outletName}. Alert level: ${analysisResult.alertLevel}. Performance score: ${analysisResult.performanceMetrics.overallScore}/100.`,
+            {
+              type: "analysis_complete",
+              outlet: outletName,
+              alertLevel: analysisResult.alertLevel,
+            }
+          )
+        );
+      }, 100);
+    }
+  };
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(
@@ -256,7 +429,6 @@ export default function DashboardClient() {
   );
   const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-
 
   useEffect(() => {
     setDateRange({
@@ -975,82 +1147,108 @@ export default function DashboardClient() {
           try {
             // Try enhanced analysis first if outlet is selected
             if (selectedOutletId && selectedOutletId !== "all") {
-              console.log("Running enhanced cost analysis with real data integration");
-              
+              console.log(
+                "Running enhanced cost analysis with real data integration"
+              );
+
               const analysisResult = await runEnhancedCostAnalysis(
                 selectedOutletId,
                 dateRange?.from || new Date(),
                 dateRange?.to || new Date(),
                 {
-                  totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+                  totalFoodRevenue:
+                    currentDashboardData.summaryStats.totalFoodRevenue,
                   budgetFoodCostPct: avgBudgetFoodCostPct,
-                  actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
-                  totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+                  actualFoodCostPct:
+                    currentDashboardData.summaryStats.avgFoodCostPct,
+                  totalBeverageRevenue:
+                    currentDashboardData.summaryStats.totalBeverageRevenue,
                   budgetBeverageCostPct: avgBudgetBeverageCostPct,
-                  actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+                  actualBeverageCostPct:
+                    currentDashboardData.summaryStats.avgBeverageCostPct,
                 },
                 {
                   // Add business context based on current date
                   specialEvents: [],
                   marketConditions: "Normal market conditions",
-                  staffingLevel: "normal"
+                  staffingLevel: "normal",
                 }
               );
-              
+
               setAiInsights(analysisResult);
-              
+
+              // Create notifications for the analysis results
+              const outletName =
+                allOutlets.find((o) => o.id === selectedOutletId)?.name ||
+                "Selected Outlet";
+              await createAnalysisNotifications(analysisResult, outletName);
+
               // Show success notification for enhanced analysis
               showToast.success(
                 `Enhanced AI analysis completed - Alert Level: ${analysisResult.alertLevel.toUpperCase()}`
               );
-              
             } else {
               // Fallback to basic analysis for "all outlets" view
               console.log("Running basic cost analysis for multi-outlet view");
-              
+
               const aiInput: DashboardAdvisorInput = {
                 numberOfDays: numberOfDaysInPeriod,
-                totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+                totalFoodRevenue:
+                  currentDashboardData.summaryStats.totalFoodRevenue,
                 budgetFoodCostPct: avgBudgetFoodCostPct,
-                actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
-                totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+                actualFoodCostPct:
+                  currentDashboardData.summaryStats.avgFoodCostPct,
+                totalBeverageRevenue:
+                  currentDashboardData.summaryStats.totalBeverageRevenue,
                 budgetBeverageCostPct: avgBudgetBeverageCostPct,
-                actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+                actualBeverageCostPct:
+                  currentDashboardData.summaryStats.avgBeverageCostPct,
               };
-              
+
               const analysisResult = await analyzeDashboardData(aiInput);
               setAiInsights(analysisResult);
+
+              // Create notifications for basic analysis results
+              await createAnalysisNotifications(analysisResult, "All Outlets");
             }
-            
           } catch (aiErr) {
             console.error("Error fetching AI insights:", aiErr);
-            
+
             // Try fallback to basic analysis if enhanced fails
             if (selectedOutletId && selectedOutletId !== "all") {
-              console.log("Enhanced analysis failed, falling back to basic analysis");
+              console.log(
+                "Enhanced analysis failed, falling back to basic analysis"
+              );
               try {
                 const aiInput: DashboardAdvisorInput = {
                   numberOfDays: numberOfDaysInPeriod,
-                  totalFoodRevenue: currentDashboardData.summaryStats.totalFoodRevenue,
+                  totalFoodRevenue:
+                    currentDashboardData.summaryStats.totalFoodRevenue,
                   budgetFoodCostPct: avgBudgetFoodCostPct,
-                  actualFoodCostPct: currentDashboardData.summaryStats.avgFoodCostPct,
-                  totalBeverageRevenue: currentDashboardData.summaryStats.totalBeverageRevenue,
+                  actualFoodCostPct:
+                    currentDashboardData.summaryStats.avgFoodCostPct,
+                  totalBeverageRevenue:
+                    currentDashboardData.summaryStats.totalBeverageRevenue,
                   budgetBeverageCostPct: avgBudgetBeverageCostPct,
-                  actualBeverageCostPct: currentDashboardData.summaryStats.avgBeverageCostPct,
+                  actualBeverageCostPct:
+                    currentDashboardData.summaryStats.avgBeverageCostPct,
                 };
-                
+
                 const analysisResult = await analyzeDashboardData(aiInput);
                 setAiInsights(analysisResult);
-                
+
+                // Create notifications for fallback analysis results
+                const outletName =
+                  allOutlets.find((o) => o.id === selectedOutletId)?.name ||
+                  "Selected Outlet";
+                await createAnalysisNotifications(analysisResult, outletName);
+
                 showToast.warning(
                   "Using basic analysis mode - enhanced features unavailable"
                 );
-                
               } catch (fallbackErr) {
                 console.error("Fallback analysis also failed:", fallbackErr);
-                setAiError(
-                  "AI analysis failed. Please try again later."
-                );
+                setAiError("AI analysis failed. Please try again later.");
                 showToast.error("AI analysis failed");
                 setAiInsights(null);
               }
@@ -1065,7 +1263,9 @@ export default function DashboardClient() {
         } else {
           console.log("Insufficient data for AI analysis");
           setAiInsights(null);
-          setAiError("Insufficient data for cost analysis. Please ensure there is revenue data for the selected period.");
+          setAiError(
+            "Insufficient data for cost analysis. Please ensure there is revenue data for the selected period."
+          );
         }
       } catch (err) {
         console.error("Error fetching dashboard data:", err);
@@ -1352,11 +1552,32 @@ export default function DashboardClient() {
         />
       </div>
 
-      {/* AI Insights Card */}
-      <AIInsightsCard
+      {/* Enhanced AI Cost Advisor Section */}
+      <EnhancedCostAdvisorSection
         isLoading={isLoadingAIInsights}
         insights={aiInsights}
         error={aiError}
+        outletName={
+          selectedOutletId === "all"
+            ? "All Outlets"
+            : allOutlets.find((o) => o.id === selectedOutletId)?.name ||
+              "Selected Outlet"
+        }
+        dateRange={
+          dateRange
+            ? `${formatDateFn(dateRange.from!, "MMM dd")} - ${formatDateFn(
+                dateRange.to!,
+                "MMM dd, yyyy"
+              )}`
+            : ""
+        }
+        onRefresh={() => {
+          // Manually trigger data refetch
+          setIsLoadingData(true);
+          setIsLoadingAIInsights(true);
+          // The useEffect will automatically trigger when these states change
+        }}
+        showRefreshButton={!isLoadingAIInsights}
       />
 
       {/* Charts Grid */}
