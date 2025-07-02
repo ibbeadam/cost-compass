@@ -16,6 +16,7 @@ import {
   ListChecks,
   Apple,
   Martini,
+  Building,
 } from "lucide-react";
 import {
   subDays,
@@ -25,14 +26,6 @@ import {
   isValid as isValidDate,
 } from "date-fns";
 import type { DateRange } from "react-day-picker";
-import {
-  collection,
-  getDocs,
-  query,
-  where,
-  orderBy,
-  Timestamp,
-} from "firebase/firestore";
 
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import {
@@ -50,9 +43,17 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { db } from "@/lib/firebase";
+import { getAllOutletsAction, getOutletsByPropertyAccessAction } from "@/actions/prismaOutletActions";
+import { getPropertiesAction } from "@/actions/propertyActions";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUserPropertyAccess } from "@/hooks/useUserPropertyAccess";
+import { getAllCategoriesAction } from "@/actions/prismaCategoryActions";
+import { getFoodCostEntriesByDateRangeAction } from "@/actions/foodCostActions";
+import { getBeverageCostEntriesByDateRangeAction } from "@/actions/beverageCostActions";
+import { getDailyFinancialSummariesByDateRangeAction } from "@/actions/dailyFinancialSummaryActions";
 import type {
   Outlet,
+  Property,
   DashboardReportData,
   SummaryStat,
   ChartDataPoint,
@@ -116,7 +117,7 @@ import dynamic from "next/dynamic";
 const ReactApexChart = dynamic(() => import("react-apexcharts"), {
   ssr: false,
 });
-import { getCategoryIcon } from "./TopCategoryIcons";
+import { getCategoryIcon, getContextualFallback } from "./TopCategoryIcons";
 
 const StatCard: React.FC<
   SummaryStat & { isLoading?: boolean; trendData?: number[] }
@@ -415,9 +416,13 @@ export default function DashboardClient() {
   };
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
+  const [allProperties, setAllProperties] = useState<Property[]>([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | undefined>("all");
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(
     "all"
   );
+  const { userProfile } = useAuth();
+  const { filterPropertiesByAccess, isSuperAdmin, getDefaultPropertyId } = useUserPropertyAccess();
 
   const [dashboardData, setDashboardData] =
     useState<DashboardReportData | null>(null);
@@ -430,6 +435,26 @@ export default function DashboardClient() {
   const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // Generate welcome message based on user role and property access
+  const getWelcomeMessage = () => {
+    if (!userProfile) return "Welcome to Cost Compass Dashboard";
+    
+    if (isSuperAdmin) {
+      return "Welcome to Cost Compass Admin Dashboard";
+    }
+    
+    // For property-specific users, get their property name
+    const defaultPropId = getDefaultPropertyId;
+    if (defaultPropId && allProperties.length > 0) {
+      const userProperty = allProperties.find(p => p.id === defaultPropId);
+      if (userProperty && userProperty.name !== "All Properties") {
+        return `Welcome to ${userProperty.name} Cost Compass Dashboard`;
+      }
+    }
+    
+    return "Welcome to Cost Compass Dashboard";
+  };
+
   useEffect(() => {
     setDateRange({
       from: subDays(new Date(), 29),
@@ -438,28 +463,121 @@ export default function DashboardClient() {
   }, []);
 
   useEffect(() => {
-    const fetchFirestoreOutlets = async () => {
+    const fetchOutletsAndProperties = async () => {
+      console.log("useEffect [fetchOutletsAndProperties] triggered:");
+      console.log("  userProfile?.email:", userProfile?.email);
+      console.log("  userProfile?.role:", userProfile?.role);
+      console.log("  isSuperAdmin:", isSuperAdmin);
+      
       setIsFetchingOutlets(true);
       try {
-        const outletsCol = collection(db!, "outlets");
-        const outletsSnapshot = await getDocs(outletsCol);
-        const fetchedOutletsFromDB = outletsSnapshot.docs.map(
-          (doc) => ({ id: doc.id, ...doc.data() } as Outlet)
-        );
+        // Fetch outlets with fallback mechanism
+        let fetchedOutletsFromDB;
+        try {
+          if (userProfile?.email && userProfile.role !== "super_admin") {
+            console.log("  Fetching outlets by property access for:", userProfile.email);
+            fetchedOutletsFromDB = await getOutletsByPropertyAccessAction(userProfile.email);
+          } else {
+            console.log("  Fetching all outlets (super admin)");
+            fetchedOutletsFromDB = await getAllOutletsAction();
+          }
+        } catch (outletError) {
+          console.warn("Property-aware outlet fetch failed in dashboard, falling back:", outletError);
+          fetchedOutletsFromDB = await getAllOutletsAction();
+        }
 
-        setAllOutlets([
+        console.log("  fetchedOutletsFromDB:", fetchedOutletsFromDB.map(o => ({ 
+          id: o.id, 
+          name: o.name, 
+          propertyId: o.propertyId 
+        })));
+
+        const fetchedPropertiesFromDB = await getPropertiesAction();
+        console.log("  fetchedPropertiesFromDB:", fetchedPropertiesFromDB.map(p => ({ 
+          id: p.id, 
+          name: p.name 
+        })));
+
+        const outletsWithAll = [
           { id: "all", name: "All Outlets" },
           ...fetchedOutletsFromDB,
-        ]);
+        ];
+        
+        console.log("  Setting allOutlets to:", outletsWithAll.map(o => ({ 
+          id: o.id, 
+          name: o.name, 
+          propertyId: o.propertyId 
+        })));
+        
+        setAllOutlets(outletsWithAll);
+        
+        // Filter properties based on user access
+        const accessibleProperties = filterPropertiesByAccess(fetchedPropertiesFromDB);
+        
+        // Set properties based on user role
+        if (isSuperAdmin) {
+          setAllProperties([
+            { id: "all", name: "All Properties" },
+            ...accessibleProperties,
+          ]);
+        } else {
+          // For non-super admin users, don't include "All Properties" option
+          setAllProperties(accessibleProperties);
+          
+          // Auto-select the user's default property
+          const defaultPropId = getDefaultPropertyId;
+          if (defaultPropId && accessibleProperties.length > 0) {
+            setSelectedPropertyId(defaultPropId.toString());
+          } else if (accessibleProperties.length === 1) {
+            setSelectedPropertyId(accessibleProperties[0].id.toString());
+          }
+        }
       } catch (error) {
-        console.error("Error fetching outlets:", error);
+        console.error("Error fetching outlets and properties:", error);
         showToast.error((error as Error).message);
         setAllOutlets([{ id: "all", name: "All Outlets" }]);
+        if (isSuperAdmin) {
+          setAllProperties([{ id: "all", name: "All Properties" }]);
+        } else {
+          setAllProperties([]);
+        }
       }
       setIsFetchingOutlets(false);
     };
-    fetchFirestoreOutlets();
-  }, []);
+    fetchOutletsAndProperties();
+  }, [userProfile?.email, userProfile?.role, filterPropertiesByAccess, isSuperAdmin, getDefaultPropertyId]);
+
+  // Reset outlet selection when property changes for super admin users
+  useEffect(() => {
+    console.log("useEffect [outlet reset] triggered:");
+    console.log("  isSuperAdmin:", isSuperAdmin);
+    console.log("  selectedPropertyId:", selectedPropertyId);
+    console.log("  allOutlets.length:", allOutlets.length);
+    console.log("  selectedOutletId:", selectedOutletId);
+    
+    if (isSuperAdmin && selectedPropertyId && allOutlets.length > 0) {
+      const availableOutlets = allOutlets.filter((outlet) => {
+        if (selectedPropertyId === "all") return true;
+        if (outlet.id === "all") return true;
+        
+        // Use same logic as main filtering: try both string and number comparison
+        const propertyIdMatch = outlet.propertyId?.toString() === selectedPropertyId || 
+                              outlet.propertyId === parseInt(selectedPropertyId || "0");
+        return propertyIdMatch;
+      });
+      
+      console.log("  availableOutlets:", availableOutlets.map(o => ({ id: o.id, name: o.name })));
+      
+      // If currently selected outlet is not available for the new property, reset to "all"
+      const currentOutletStillAvailable = availableOutlets.some(outlet => outlet.id === selectedOutletId);
+      console.log("  currentOutletStillAvailable:", currentOutletStillAvailable);
+      
+      if (!currentOutletStillAvailable) {
+        console.log("  Resetting selectedOutletId to 'all'");
+        setSelectedOutletId("all");
+      }
+    }
+  }, [selectedPropertyId, allOutlets, isSuperAdmin, selectedOutletId]);
 
   useEffect(() => {
     if (
@@ -482,15 +600,6 @@ export default function DashboardClient() {
     setAiError(null);
 
     async function fetchDataForDashboard() {
-      if (!db) {
-        console.error(
-          "Firestore 'db' instance is not available. Cannot fetch dashboard data."
-        );
-        showToast.error("Firestore is not initialized.");
-        setIsLoadingData(false);
-        setIsLoadingAIInsights(false);
-        return;
-      }
       if (!dateRange?.from || !dateRange?.to) {
         console.warn(
           "fetchDataForDashboard: Date range is undefined. Skipping data fetch."
@@ -504,76 +613,45 @@ export default function DashboardClient() {
 
       setIsLoadingAIInsights(true);
       try {
-        const from = Timestamp.fromDate(dateRange.from);
-        const to = Timestamp.fromDate(dateRange.to);
+        // Determine which outlets to include based on property and outlet selection
+        let outletFilter: string | undefined;
+        if (selectedOutletId !== "all") {
+          outletFilter = selectedOutletId;
+        } else if (selectedPropertyId !== "all") {
+          // Get all outlets for the selected property
+          const propertyOutlets = allOutlets.filter(o => 
+            o.id !== "all" && o.propertyId?.toString() === selectedPropertyId
+          );
+          if (propertyOutlets.length > 0) {
+            // Note: We'll need to modify the actions to handle property-level filtering
+            // For now, we'll fetch all data and filter in the frontend
+          }
+        }
 
-        const summariesQuery = query(
-          collection(db!, "dailyFinancialSummaries"),
-          where("date", ">=", from),
-          where("date", "<=", to),
-          orderBy("date", "asc")
-        );
-        const summariesSnapshot = await getDocs(summariesQuery);
-        const dailySummaries: DailyFinancialSummary[] =
-          summariesSnapshot.docs.map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              date:
-                data.date instanceof Timestamp ? data.date.toDate() : data.date,
-              createdAt: data.createdAt
-                ? data.createdAt instanceof Timestamp
-                  ? data.createdAt.toDate()
-                  : data.createdAt
-                : undefined,
-              updatedAt: data.updatedAt
-                ? data.updatedAt instanceof Timestamp
-                  ? data.updatedAt.toDate()
-                  : data.updatedAt
-                : undefined,
-            } as DailyFinancialSummary;
-          });
+        // Fetch data using Prisma actions with property filtering
+        const [dailySummaries, foodCostEntries, beverageCostEntries] = await Promise.all([
+          getDailyFinancialSummariesByDateRangeAction(dateRange.from, dateRange.to, outletFilter, selectedPropertyId),
+          getFoodCostEntriesByDateRangeAction(dateRange.from, dateRange.to, outletFilter ? parseInt(outletFilter) : undefined, selectedPropertyId),
+          getBeverageCostEntriesByDateRangeAction(dateRange.from, dateRange.to, outletFilter ? parseInt(outletFilter) : undefined, selectedPropertyId)
+        ]);
+
+        // Since we're filtering by property at the database level, we only need to filter by outlet if a specific outlet is selected
+        const filterByOutlet = <T extends { outletId?: string }>(items: T[]): T[] => {
+          if (selectedOutletId !== "all") {
+            return items.filter(item => item.outletId === selectedOutletId);
+          }
+          return items;
+        };
+
+        // Filter data based on outlet selection (property filtering is already done at database level)
+        const filteredDailySummaries = filterByOutlet(dailySummaries);
+        const filteredFoodCostEntries = filterByOutlet(foodCostEntries);
+        const filteredBeverageCostEntries = filterByOutlet(beverageCostEntries);
 
         const summariesMap = new Map<string, DailyFinancialSummary>();
-        dailySummaries.forEach((s) =>
+        filteredDailySummaries.forEach((s) =>
           summariesMap.set(formatDateFn(s.date as Date, "yyyy-MM-dd"), s)
         );
-
-        const foodCostQuery = query(
-          collection(db!, "foodCostEntries"),
-          where("date", ">=", from),
-          where("date", "<=", to)
-        );
-        const foodCostSnapshot = await getDocs(foodCostQuery);
-        const foodCostEntries: FoodCostEntry[] = foodCostSnapshot.docs.map(
-          (doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              date:
-                data.date instanceof Timestamp ? data.date.toDate() : data.date,
-            } as FoodCostEntry;
-          }
-        );
-
-        const beverageCostQuery = query(
-          collection(db!, "beverageCostEntries"),
-          where("date", ">=", from),
-          where("date", "<=", to)
-        );
-        const beverageCostSnapshot = await getDocs(beverageCostQuery);
-        const beverageCostEntries: BeverageCostEntry[] =
-          beverageCostSnapshot.docs.map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              ...data,
-              date:
-                data.date instanceof Timestamp ? data.date.toDate() : data.date,
-            } as BeverageCostEntry;
-          });
 
         const daysInInterval = eachDayOfInterval({
           start: dateRange.from,
@@ -591,17 +669,17 @@ export default function DashboardClient() {
         let countBudgetFoodCostPct = 0;
         let countBudgetBeverageCostPct = 0;
 
-        dailySummaries.forEach((summary) => {
-          totalHotelFoodRevenue += summary.actual_food_revenue || 0;
-          totalHotelBeverageRevenue += summary.actual_beverage_revenue || 0;
-          totalHotelActualFoodCost += summary.actual_food_cost || 0;
-          totalHotelActualBeverageCost += summary.actual_beverage_cost || 0;
-          if (summary.budget_food_cost_pct != null) {
-            sumOfBudgetFoodCostPct += summary.budget_food_cost_pct;
+        filteredDailySummaries.forEach((summary) => {
+          totalHotelFoodRevenue += summary.actualFoodRevenue || 0;
+          totalHotelBeverageRevenue += summary.actualBeverageRevenue || 0;
+          totalHotelActualFoodCost += summary.actualFoodCost || 0;
+          totalHotelActualBeverageCost += summary.actualBeverageCost || 0;
+          if (summary.budgetFoodCostPct != null) {
+            sumOfBudgetFoodCostPct += summary.budgetFoodCostPct;
             countBudgetFoodCostPct++;
           }
-          if (summary.budget_beverage_cost_pct != null) {
-            sumOfBudgetBeverageCostPct += summary.budget_beverage_cost_pct;
+          if (summary.budgetBeverageCostPct != null) {
+            sumOfBudgetBeverageCostPct += summary.budgetBeverageCostPct;
             countBudgetBeverageCostPct++;
           }
         });
@@ -626,21 +704,19 @@ export default function DashboardClient() {
         if (selectedOutletId && selectedOutletId !== "all") {
           let outletTotalFoodCost = 0;
           let outletTotalFoodRevenueSumForPct = 0;
-          foodCostEntries
-            .filter((fce) => fce.outlet_id === selectedOutletId)
+          filteredFoodCostEntries
+            .filter((fce) => fce.outletId === selectedOutletId)
             .forEach((fce) => {
-              outletTotalFoodCost += fce.total_food_cost;
+              outletTotalFoodCost += fce.totalFoodCost;
               const daySummary = summariesMap.get(
                 formatDateFn(
-                  fce.date instanceof Timestamp
-                    ? fce.date.toDate()
-                    : (fce.date as Date),
+                  new Date(fce.date),
                   "yyyy-MM-dd"
                 )
               );
               if (daySummary)
                 outletTotalFoodRevenueSumForPct +=
-                  daySummary.actual_food_revenue || 0;
+                  daySummary.actualFoodRevenue || 0;
             });
           avgActualFoodCostPctVal =
             outletTotalFoodRevenueSumForPct > 0
@@ -649,21 +725,19 @@ export default function DashboardClient() {
 
           let outletTotalBeverageCost = 0;
           let outletTotalBeverageRevenueSumForPct = 0;
-          beverageCostEntries
-            .filter((bce) => bce.outlet_id === selectedOutletId)
+          filteredBeverageCostEntries
+            .filter((bce) => bce.outletId === selectedOutletId)
             .forEach((bce) => {
-              outletTotalBeverageCost += bce.total_beverage_cost;
+              outletTotalBeverageCost += bce.totalBeverageCost;
               const daySummary = summariesMap.get(
                 formatDateFn(
-                  bce.date instanceof Timestamp
-                    ? bce.date.toDate()
-                    : (bce.date as Date),
+                  (bce.date as Date),
                   "yyyy-MM-dd"
                 )
               );
               if (daySummary)
                 outletTotalBeverageRevenueSumForPct +=
-                  daySummary.actual_beverage_revenue || 0;
+                  daySummary.actualBeverageRevenue || 0;
             });
           avgActualBeverageCostPctVal =
             outletTotalBeverageRevenueSumForPct > 0
@@ -690,10 +764,10 @@ export default function DashboardClient() {
           (day) => {
             const dayStr = formatDateFn(day, "MMM dd");
             const summary = summariesMap.get(formatDateFn(day, "yyyy-MM-dd")); // Use full date for map key
-            const foodRev = summary?.actual_food_revenue || 0;
-            const bevRev = summary?.actual_beverage_revenue || 0;
-            const actualFoodCost = summary?.actual_food_cost || 0;
-            const actualBevCost = summary?.actual_beverage_cost || 0;
+            const foodRev = summary?.actualFoodRevenue || 0;
+            const bevRev = summary?.actualBeverageRevenue || 0;
+            const actualFoodCost = summary?.actualFoodCost || 0;
+            const actualBevCost = summary?.actualBeverageCost || 0;
             return {
               date: dayStr,
               foodCostPct:
@@ -713,32 +787,28 @@ export default function DashboardClient() {
           costTrendsChartDataResult = daysInInterval.map((day) => {
             const dayStr = formatDateFn(day, "yyyy-MM-dd");
             const summary = summariesMap.get(dayStr);
-            const foodRev = summary?.actual_food_revenue || 0;
-            const bevRev = summary?.actual_beverage_revenue || 0;
-            const outletDayFoodCost = foodCostEntries
+            const foodRev = summary?.actualFoodRevenue || 0;
+            const bevRev = summary?.actualBeverageRevenue || 0;
+            const outletDayFoodCost = filteredFoodCostEntries
               .filter(
                 (fce) =>
-                  fce.outlet_id === selectedOutletId &&
+                  fce.outletId === selectedOutletId &&
                   formatDateFn(
-                    fce.date instanceof Timestamp
-                      ? fce.date.toDate()
-                      : fce.date,
+                    fce.date,
                     "yyyy-MM-dd"
                   ) === dayStr
               )
-              .reduce((sum, fce) => sum + fce.total_food_cost, 0);
-            const outletDayBeverageCost = beverageCostEntries
+              .reduce((sum, fce) => sum + fce.totalFoodCost, 0);
+            const outletDayBeverageCost = filteredBeverageCostEntries
               .filter(
                 (bce) =>
-                  bce.outlet_id === selectedOutletId &&
+                  bce.outletId === selectedOutletId &&
                   formatDateFn(
-                    bce.date instanceof Timestamp
-                      ? bce.date.toDate()
-                      : bce.date,
+                    bce.date,
                     "yyyy-MM-dd"
                   ) === dayStr
               )
-              .reduce((sum, bce) => sum + bce.total_beverage_cost, 0);
+              .reduce((sum, bce) => sum + bce.totalBeverageCost, 0);
             return {
               date: formatDateFn(day, "MMM dd"),
               foodCostPct:
@@ -762,25 +832,25 @@ export default function DashboardClient() {
           { totalCost: number; name: string }
         > = {};
         const outletDetailsMap = new Map(allOutlets.map((o) => [o.id, o.name]));
-        foodCostEntries.forEach((fce) => {
+        filteredFoodCostEntries.forEach((fce) => {
           const outletName =
-            outletDetailsMap.get(fce.outlet_id) || fce.outlet_id;
-          if (!costByOutletMap[fce.outlet_id])
-            costByOutletMap[fce.outlet_id] = {
+            outletDetailsMap.get(fce.outletId) || fce.outletId;
+          if (!costByOutletMap[fce.outletId])
+            costByOutletMap[fce.outletId] = {
               totalCost: 0,
               name: outletName.split(" - ")[0],
             };
-          costByOutletMap[fce.outlet_id].totalCost += fce.total_food_cost;
+          costByOutletMap[fce.outletId].totalCost += fce.totalFoodCost;
         });
-        beverageCostEntries.forEach((bce) => {
+        filteredBeverageCostEntries.forEach((bce) => {
           const outletName =
-            outletDetailsMap.get(bce.outlet_id) || bce.outlet_id;
-          if (!costByOutletMap[bce.outlet_id])
-            costByOutletMap[bce.outlet_id] = {
+            outletDetailsMap.get(bce.outletId) || bce.outletId;
+          if (!costByOutletMap[bce.outletId])
+            costByOutletMap[bce.outletId] = {
               totalCost: 0,
               name: outletName.split(" - ")[0],
             };
-          costByOutletMap[bce.outlet_id].totalCost += bce.total_beverage_cost;
+          costByOutletMap[bce.outletId].totalCost += bce.totalBeverageCost;
         });
         const costDistributionChartDataResult: DonutChartDataPoint[] =
           Object.values(costByOutletMap)
@@ -803,24 +873,22 @@ export default function DashboardClient() {
             let daysWithFoodCost = 0;
             daysInInterval.forEach((day) => {
               const dayStr = formatDateFn(day, "yyyy-MM-dd");
-              const dailyFoodCostForOutlet = foodCostEntries
+              const dailyFoodCostForOutlet = filteredFoodCostEntries
                 .filter(
                   (fce) =>
-                    fce.outlet_id === outlet.id &&
+                    fce.outletId === outlet.id &&
                     formatDateFn(
-                      fce.date instanceof Timestamp
-                        ? fce.date.toDate()
-                        : fce.date,
+                      new Date(fce.date),
                       "yyyy-MM-dd"
                     ) === dayStr
                 )
-                .reduce((sum, fce) => sum + fce.total_food_cost, 0);
+                .reduce((sum, fce) => sum + fce.totalFoodCost, 0);
               if (dailyFoodCostForOutlet > 0) {
                 totalOutletFoodCost += dailyFoodCostForOutlet;
                 const summary = summariesMap.get(dayStr);
-                if (summary && summary.actual_food_revenue)
+                if (summary && summary.actualFoodRevenue)
                   totalHotelFoodRevenueOnOutletDays +=
-                    summary.actual_food_revenue;
+                    summary.actualFoodRevenue;
                 daysWithFoodCost++;
               }
             });
@@ -849,89 +917,44 @@ export default function DashboardClient() {
           .sort((a, b) => b.metricValue - a.metricValue)
           .slice(0, 3);
 
-        // --- Fetch and Process Top Categories ---
-        async function fetchDetailsInBatches<
-          T extends FoodCostDetail | BeverageCostDetail
-        >(
-          entryIds: string[],
-          collectionName: "foodCostDetails" | "beverageCostDetails",
-          idFieldName: "food_cost_entry_id" | "beverage_cost_entry_id"
-        ): Promise<T[]> {
-          const details: T[] = [];
-          const BATCH_SIZE = 25;
-          for (let i = 0; i < entryIds.length; i += BATCH_SIZE) {
-            const batchIds = entryIds.slice(i, i + BATCH_SIZE);
-            if (batchIds.length > 0) {
-              const detailsQuery = query(
-                collection(db!, collectionName),
-                where(idFieldName, "in", batchIds)
-              );
-              const snapshot = await getDocs(detailsQuery);
-              snapshot.docs.forEach((doc) => {
-                const data = doc.data();
-                details.push({
-                  id: doc.id,
-                  ...data,
-                  // Ensure category_id exists, provide a fallback if necessary for typing
-                  category_id: data.category_id || "unknown_category",
-                } as T);
-              });
-            }
-          }
-          return details;
-        }
+        // --- Extract Details from Prisma Data (details are already included) ---
 
         const relevantFoodEntries =
           selectedOutletId && selectedOutletId !== "all"
-            ? foodCostEntries.filter((e) => e.outlet_id === selectedOutletId)
-            : foodCostEntries;
+            ? filteredFoodCostEntries.filter((e) => e.outletId === selectedOutletId)
+            : filteredFoodCostEntries;
         const foodEntryIds = relevantFoodEntries.map((e) => e.id);
 
         const relevantBeverageEntries =
           selectedOutletId && selectedOutletId !== "all"
-            ? beverageCostEntries.filter(
-                (e) => e.outlet_id === selectedOutletId
+            ? filteredBeverageCostEntries.filter(
+                (e) => e.outletId === selectedOutletId
               )
-            : beverageCostEntries;
+            : filteredBeverageCostEntries;
         const beverageEntryIds = relevantBeverageEntries.map((e) => e.id);
 
-        const [
-          allFoodCategories,
-          allBeverageCategories,
-          allFoodDetailsData,
-          allBeverageDetailsData,
-        ] = await Promise.all([
+        const [allFoodCategories, allBeverageCategories] = await Promise.all([
           getFoodCategoriesAction(),
           getBeverageCategoriesAction(),
-          foodEntryIds.length > 0
-            ? fetchDetailsInBatches<FoodCostDetail>(
-                foodEntryIds,
-                "foodCostDetails",
-                "food_cost_entry_id"
-              )
-            : Promise.resolve([]),
-          beverageEntryIds.length > 0
-            ? fetchDetailsInBatches<BeverageCostDetail>(
-                beverageEntryIds,
-                "beverageCostDetails",
-                "beverage_cost_entry_id"
-              )
-            : Promise.resolve([]),
         ]);
+
+        // Extract details from the already loaded entries (Prisma includes details)
+        const allFoodDetailsData: FoodCostDetail[] = relevantFoodEntries.flatMap(entry => entry.details || []);
+        const allBeverageDetailsData: BeverageCostDetail[] = relevantBeverageEntries.flatMap(entry => entry.details || []);
 
         const foodCategoryMap = new Map(
           allFoodCategories.map((c) => [c.id, c.name])
         );
         const foodCategoryCosts: Record<string, number> = {};
         allFoodDetailsData.forEach((detail) => {
-          foodCategoryCosts[detail.category_id] =
-            (foodCategoryCosts[detail.category_id] || 0) + detail.cost;
+          foodCategoryCosts[detail.categoryId] =
+            (foodCategoryCosts[detail.categoryId] || 0) + detail.cost;
         });
         const topFoodCategoriesData: TopCategoryDataPoint[] = Object.entries(
           foodCategoryCosts
         )
           .map(([categoryId, totalCost]) => ({
-            name: foodCategoryMap.get(categoryId) || "Unknown Category",
+            name: foodCategoryMap.get(Number(categoryId)) || "Unknown Category",
             value: parseFloat(totalCost.toFixed(2)),
           }))
           .sort((a, b) => b.value - a.value)
@@ -942,13 +965,13 @@ export default function DashboardClient() {
         );
         const beverageCategoryCosts: Record<string, number> = {};
         allBeverageDetailsData.forEach((detail) => {
-          beverageCategoryCosts[detail.category_id] =
-            (beverageCategoryCosts[detail.category_id] || 0) + detail.cost;
+          beverageCategoryCosts[detail.categoryId] =
+            (beverageCategoryCosts[detail.categoryId] || 0) + detail.cost;
         });
         const topBeverageCategoriesData: TopCategoryDataPoint[] =
           Object.entries(beverageCategoryCosts)
             .map(([categoryId, totalCost]) => ({
-              name: beverageCategoryMap.get(categoryId) || "Unknown Category",
+              name: beverageCategoryMap.get(Number(categoryId)) || "Unknown Category",
               value: parseFloat(totalCost.toFixed(2)),
             }))
             .sort((a, b) => b.value - a.value)
@@ -965,26 +988,26 @@ export default function DashboardClient() {
             dailyCosts: { date: string; cost: number }[];
           }
         > = {};
-        foodCostEntries.forEach((fce) => {
-          if (!outletFoodCostMap[fce.outlet_id]) {
+        filteredFoodCostEntries.forEach((fce) => {
+          if (!outletFoodCostMap[fce.outletId]) {
             const outletName =
-              outletDetailsMap.get(fce.outlet_id) || fce.outlet_id;
-            outletFoodCostMap[fce.outlet_id] = {
+              outletDetailsMap.get(fce.outletId) || fce.outletId;
+            outletFoodCostMap[fce.outletId] = {
               name: outletName.split(" - ")[0],
               total: 0,
               days: new Set(),
               dailyCosts: [],
             };
           }
-          outletFoodCostMap[fce.outlet_id].total += fce.total_food_cost;
+          outletFoodCostMap[fce.outletId].total += fce.totalFoodCost;
           const dayStr = formatDateFn(
-            fce.date instanceof Timestamp ? fce.date.toDate() : fce.date,
+            fce.date,
             "yyyy-MM-dd"
           );
-          outletFoodCostMap[fce.outlet_id].days.add(dayStr);
-          outletFoodCostMap[fce.outlet_id].dailyCosts.push({
+          outletFoodCostMap[fce.outletId].days.add(dayStr);
+          outletFoodCostMap[fce.outletId].dailyCosts.push({
             date: dayStr,
-            cost: fce.total_food_cost,
+            cost: fce.totalFoodCost,
           });
         });
         const totalHotelFoodCost = Object.values(outletFoodCostMap).reduce(
@@ -1048,26 +1071,26 @@ export default function DashboardClient() {
             dailyCosts: { date: string; cost: number }[];
           }
         > = {};
-        beverageCostEntries.forEach((bce) => {
-          if (!outletBeverageCostMap[bce.outlet_id]) {
+        filteredBeverageCostEntries.forEach((bce) => {
+          if (!outletBeverageCostMap[bce.outletId]) {
             const outletName =
-              outletDetailsMap.get(bce.outlet_id) || bce.outlet_id;
-            outletBeverageCostMap[bce.outlet_id] = {
+              outletDetailsMap.get(bce.outletId) || bce.outletId;
+            outletBeverageCostMap[bce.outletId] = {
               name: outletName.split(" - ")[0],
               total: 0,
               days: new Set(),
               dailyCosts: [],
             };
           }
-          outletBeverageCostMap[bce.outlet_id].total += bce.total_beverage_cost;
+          outletBeverageCostMap[bce.outletId].total += bce.totalBeverageCost;
           const dayStr = formatDateFn(
-            bce.date instanceof Timestamp ? bce.date.toDate() : bce.date,
+            bce.date,
             "yyyy-MM-dd"
           );
-          outletBeverageCostMap[bce.outlet_id].days.add(dayStr);
-          outletBeverageCostMap[bce.outlet_id].dailyCosts.push({
+          outletBeverageCostMap[bce.outletId].days.add(dayStr);
+          outletBeverageCostMap[bce.outletId].dailyCosts.push({
             date: dayStr,
-            cost: bce.total_beverage_cost,
+            cost: bce.totalBeverageCost,
           });
         });
         const totalHotelBeverageCost = Object.values(
@@ -1280,7 +1303,7 @@ export default function DashboardClient() {
     }
 
     fetchDataForDashboard();
-  }, [dateRange, selectedOutletId, allOutlets, isFetchingOutlets]);
+  }, [dateRange, selectedOutletId, selectedPropertyId, allOutlets, isFetchingOutlets]);
 
   const summaryStatsList: (SummaryStat & { trendData?: number[] })[] =
     useMemo(() => {
@@ -1322,11 +1345,11 @@ export default function DashboardClient() {
         dashboardData.overviewChartData?.map((d) => d.beverageCostPct) || [];
       // For revenue trends, use dailySummaries if available
       const foodRevenueTrend = dashboardData.dailySummaries
-        ? dashboardData.dailySummaries.map((s) => s.actual_food_revenue || 0)
+        ? dashboardData.dailySummaries.map((s) => s.actualFoodRevenue || 0)
         : [];
       const beverageRevenueTrend = dashboardData.dailySummaries
         ? dashboardData.dailySummaries.map(
-            (s) => s.actual_beverage_revenue || 0
+            (s) => s.actualBeverageRevenue || 0
           )
         : [];
       return [
@@ -1406,7 +1429,13 @@ export default function DashboardClient() {
                     .find((o) => o.id === selectedOutletId)
                     ?.name.split(" - ")[0]
                 }`
-              : ""}
+              : selectedPropertyId && selectedPropertyId !== "all"
+              ? ` for ${
+                  allProperties
+                    .find((p) => p.id === selectedPropertyId)
+                    ?.name
+                }`
+              : ""} 
             .
           </CardDescription>
         </CardHeader>
@@ -1415,7 +1444,7 @@ export default function DashboardClient() {
             <ul className="space-y-2.5">
               {data.map((cat, idx) => (
                 <li
-                  key={cat.name}
+                  key={`${cat.name}-${idx}-${cat.value}`}
                   className="flex justify-between items-center text-sm group hover:bg-muted/60 rounded px-2 py-1 transition cursor-pointer"
                   tabIndex={0}
                   title={`$${cat.value.toFixed(2)} (${(
@@ -1427,7 +1456,7 @@ export default function DashboardClient() {
                     <span className="text-lg">
                       {getCategoryIcon(
                         cat.name,
-                        itemType === "Food" ? "🍎" : "🍸"
+                        getContextualFallback(itemType)
                       )}
                     </span>
                     <span className="text-muted-foreground truncate pr-2">
@@ -1462,10 +1491,31 @@ export default function DashboardClient() {
 
   return (
     <div className="flex flex-col flex-grow w-full space-y-6">
+      {/* Welcome Message */}
+      <Card className="shadow-sm bg-card border-l-4 border-l-primary">
+        <CardContent className="p-4">
+          <h1 className="text-2xl font-bold text-foreground">
+            {getWelcomeMessage()}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isSuperAdmin 
+              ? "Manage and monitor all properties and outlets from this central dashboard."
+              : "Monitor your cost analytics, trends, and performance metrics."
+            }
+          </p>
+          {!isSuperAdmin && allProperties.length > 0 && (
+            <div className="mt-3 inline-flex items-center px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">
+              <Building className="h-3 w-3 mr-1" />
+              Viewing: {allProperties.find(p => p.id.toString() === selectedPropertyId)?.name || 'Property Data'}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Filters Row */}
       <Card className="shadow-sm bg-card">
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+          <div className={`grid gap-4 items-end ${isSuperAdmin ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2'}`}>
             <div>
               <label
                 htmlFor="date-range-picker"
@@ -1479,6 +1529,41 @@ export default function DashboardClient() {
                 <DateRangePicker date={dateRange} setDate={setDateRange} />
               )}
             </div>
+            {isSuperAdmin && (
+              <div>
+                <label
+                  htmlFor="property-select-dashboard"
+                  className="block text-sm font-medium text-foreground mb-1"
+                >
+                  Select Property
+                </label>
+                {isFetchingOutlets ? (
+                  <Skeleton className="h-10 w-full bg-muted" />
+                ) : (
+                  <Select
+                    value={selectedPropertyId}
+                    onValueChange={(value) => {
+                      setSelectedPropertyId(value);
+                      setSelectedOutletId("all"); // Reset outlet selection when property changes
+                    }}
+                  >
+                    <SelectTrigger
+                      id="property-select-dashboard"
+                      className="w-full text-base md:text-sm"
+                    >
+                      <SelectValue placeholder="Select a property" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allProperties.map((property) => (
+                        <SelectItem key={property.id} value={property.id.toString()}>
+                          {property.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
             <div>
               <label
                 htmlFor="outlet-select-dashboard"
@@ -1500,11 +1585,37 @@ export default function DashboardClient() {
                     <SelectValue placeholder="Select an outlet" />
                   </SelectTrigger>
                   <SelectContent>
-                    {allOutlets.map((outlet) => (
-                      <SelectItem key={outlet.id} value={outlet.id}>
-                        {outlet.name}
-                      </SelectItem>
-                    ))}
+                    {(() => {
+                      // Debug logging
+                      console.log("Debug outlet filtering:");
+                      console.log("selectedPropertyId:", selectedPropertyId, typeof selectedPropertyId);
+                      console.log("allOutlets:", allOutlets.map(o => ({
+                        id: o.id,
+                        name: o.name,
+                        propertyId: o.propertyId,
+                        propertyIdType: typeof o.propertyId
+                      })));
+                      
+                      const filteredOutlets = allOutlets.filter((outlet) => {
+                        if (selectedPropertyId === "all") return true;
+                        if (outlet.id === "all") return true;
+                        
+                        // Try both string and number comparison
+                        const propertyIdMatch = outlet.propertyId?.toString() === selectedPropertyId || 
+                                              outlet.propertyId === parseInt(selectedPropertyId || "0");
+                        
+                        console.log(`Outlet ${outlet.name} (${outlet.id}): propertyId=${outlet.propertyId}, selectedPropertyId=${selectedPropertyId}, match=${propertyIdMatch}`);
+                        return propertyIdMatch;
+                      });
+                      
+                      console.log("Filtered outlets:", filteredOutlets.map(o => ({ id: o.id, name: o.name })));
+                      
+                      return filteredOutlets.map((outlet) => (
+                        <SelectItem key={outlet.id} value={outlet.id}>
+                          {outlet.name}
+                        </SelectItem>
+                      ));
+                    })()}
                   </SelectContent>
                 </Select>
               )}
@@ -1559,7 +1670,9 @@ export default function DashboardClient() {
         error={aiError}
         outletName={
           selectedOutletId === "all"
-            ? "All Outlets"
+            ? selectedPropertyId === "all"
+              ? "All Outlets"
+              : `${allProperties.find((p) => p.id === selectedPropertyId)?.name || "Selected Property"} - All Outlets`
             : allOutlets.find((o) => o.id === selectedOutletId)?.name ||
               "Selected Outlet"
         }
@@ -1665,6 +1778,11 @@ export default function DashboardClient() {
                     allOutlets.find((o) => o.id === selectedOutletId)?.name ||
                     "selected outlet"
                   } (vs Hotel Revenue).`
+                : selectedPropertyId && selectedPropertyId !== "all"
+                ? `Average daily cost % trends for ${
+                    allProperties.find((p) => p.id === selectedPropertyId)?.name ||
+                    "selected property"
+                  }.`
                 : "Average daily hotel cost % trends."}
             </CardDescription>
           </CardHeader>
