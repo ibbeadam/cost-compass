@@ -38,6 +38,7 @@ interface EnhancedCostAdvisorSectionProps {
   dateRange?: string;
   onRefresh?: () => void;
   showRefreshButton?: boolean;
+  onRequestNotifications?: () => void;
 }
 
 export function EnhancedCostAdvisorSection({ 
@@ -47,7 +48,8 @@ export function EnhancedCostAdvisorSection({
   outletName = 'Current Outlet',
   dateRange = '',
   onRefresh,
-  showRefreshButton = false
+  showRefreshButton = false,
+  onRequestNotifications
 }: EnhancedCostAdvisorSectionProps) {
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
@@ -440,6 +442,18 @@ export function EnhancedCostAdvisorSection({
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            {onRequestNotifications && (
+              <Button 
+                variant="default" 
+                size="sm"
+                onClick={onRequestNotifications}
+                className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700"
+                title="Get instant alerts and notifications for this analysis"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                Get Alerts
+              </Button>
+            )}
             <Button 
               variant="outline" 
               size="sm"

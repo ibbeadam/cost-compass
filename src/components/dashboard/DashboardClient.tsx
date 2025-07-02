@@ -434,6 +434,65 @@ export default function DashboardClient() {
   );
   const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  
+  // Track notification state to prevent spam
+  const [lastNotificationTime, setLastNotificationTime] = useState<number>(0);
+  const [notifiedAnalysisIds, setNotifiedAnalysisIds] = useState<Set<string>>(new Set());
+  const [forceNotifications, setForceNotifications] = useState<boolean>(false);
+
+  // Helper function to determine if notifications should be shown
+  const shouldShowNotifications = (analysisResult: DashboardAdvisorOutput | any, outletName: string): boolean => {
+    const now = Date.now();
+    const timeSinceLastNotification = now - lastNotificationTime;
+    const minNotificationInterval = 5 * 60 * 1000; // 5 minutes
+    
+    // Create unique ID for this analysis context
+    const analysisId = `${selectedPropertyId}-${selectedOutletId}-${dateRange?.from?.toISOString()}-${dateRange?.to?.toISOString()}`;
+    
+    // If notifications are forced (user clicked "Get Alerts" button), always show them
+    if (forceNotifications) {
+      console.log(`Showing forced notifications for ${outletName} - user requested alerts`);
+      setLastNotificationTime(now);
+      setNotifiedAnalysisIds(prev => new Set([...prev, analysisId]));
+      setForceNotifications(false); // Reset flag after use
+      return true;
+    }
+    
+    // Don't show notifications if:
+    // 1. We've already notified for this exact analysis context
+    if (notifiedAnalysisIds.has(analysisId)) {
+      console.log("Skipping notifications: already notified for this analysis context");
+      return false;
+    }
+    
+    // 2. Too recent since last notification (rate limiting)
+    if (timeSinceLastNotification < minNotificationInterval) {
+      console.log(`Skipping notifications: only ${Math.round(timeSinceLastNotification / 1000)}s since last notification`);
+      return false;
+    }
+    
+    // 3. Alert level is not significant enough (only show for medium+ alerts)
+    if (analysisResult?.alertLevel && !['medium', 'high', 'critical'].includes(analysisResult.alertLevel)) {
+      console.log(`Skipping notifications: alert level '${analysisResult.alertLevel}' not significant enough`);
+      return false;
+    }
+    
+    console.log(`Showing notifications for ${outletName} - significant analysis with alert level: ${analysisResult?.alertLevel}`);
+    
+    // Update tracking state
+    setLastNotificationTime(now);
+    setNotifiedAnalysisIds(prev => new Set([...prev, analysisId]));
+    
+    return true;
+  };
+
+  // Function to manually trigger notifications
+  const requestNotifications = () => {
+    setForceNotifications(true);
+    // Trigger data refresh to re-run analysis and notifications
+    setIsLoadingData(true);
+    setIsLoadingAIInsights(true);
+  };
 
   // Generate welcome message based on user role and property access
   const getWelcomeMessage = () => {
@@ -1200,16 +1259,21 @@ export default function DashboardClient() {
 
               setAiInsights(analysisResult);
 
-              // Create notifications for the analysis results
+              // Create notifications for the analysis results (with smart filtering)
               const outletName =
                 allOutlets.find((o) => o.id === selectedOutletId)?.name ||
                 "Selected Outlet";
-              await createAnalysisNotifications(analysisResult, outletName);
+              
+              if (shouldShowNotifications(analysisResult, outletName)) {
+                await createAnalysisNotifications(analysisResult, outletName);
+              }
 
-              // Show success notification for enhanced analysis
-              showToast.success(
-                `Enhanced AI analysis completed - Alert Level: ${analysisResult.alertLevel.toUpperCase()}`
-              );
+              // Show success notification for enhanced analysis (only for significant alerts)
+              if (['medium', 'high', 'critical'].includes(analysisResult.alertLevel)) {
+                showToast.success(
+                  `Enhanced AI analysis completed - Alert Level: ${analysisResult.alertLevel.toUpperCase()}`
+                );
+              }
             } else {
               // Fallback to basic analysis for "all outlets" view
               console.log("Running basic cost analysis for multi-outlet view");
@@ -1231,8 +1295,10 @@ export default function DashboardClient() {
               const analysisResult = await analyzeDashboardData(aiInput);
               setAiInsights(analysisResult);
 
-              // Create notifications for basic analysis results
-              await createAnalysisNotifications(analysisResult, "All Outlets");
+              // Create notifications for basic analysis results (with smart filtering)
+              if (shouldShowNotifications(analysisResult, "All Outlets")) {
+                await createAnalysisNotifications(analysisResult, "All Outlets");
+              }
             }
           } catch (aiErr) {
             console.error("Error fetching AI insights:", aiErr);
@@ -1260,11 +1326,14 @@ export default function DashboardClient() {
                 const analysisResult = await analyzeDashboardData(aiInput);
                 setAiInsights(analysisResult);
 
-                // Create notifications for fallback analysis results
+                // Create notifications for fallback analysis results (with smart filtering)
                 const outletName =
                   allOutlets.find((o) => o.id === selectedOutletId)?.name ||
                   "Selected Outlet";
-                await createAnalysisNotifications(analysisResult, outletName);
+                
+                if (shouldShowNotifications(analysisResult, outletName)) {
+                  await createAnalysisNotifications(analysisResult, outletName);
+                }
 
                 showToast.warning(
                   "Using basic analysis mode - enhanced features unavailable"
@@ -1691,6 +1760,7 @@ export default function DashboardClient() {
           // The useEffect will automatically trigger when these states change
         }}
         showRefreshButton={!isLoadingAIInsights}
+        onRequestNotifications={requestNotifications}
       />
 
       {/* Charts Grid */}
