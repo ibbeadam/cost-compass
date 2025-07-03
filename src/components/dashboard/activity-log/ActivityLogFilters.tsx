@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, CalendarIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
+import { format } from "date-fns";
 
 import type { AuditLogFilters } from "@/types";
 import {
@@ -22,7 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 
 interface ActivityLogFiltersProps {
   open: boolean;
@@ -38,6 +45,7 @@ export function ActivityLogFilters({
   onFiltersChange,
 }: ActivityLogFiltersProps) {
   const [localFilters, setLocalFilters] = useState<AuditLogFilters>(filters);
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
   
   // Convert the filter dateRange to DateRange format for the date range picker
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -87,6 +95,7 @@ export function ActivityLogFilters({
     };
     setLocalFilters(clearedFilters);
     setDateRange(undefined);
+    setDateRangeOpen(false);
     onFiltersChange(clearedFilters);
     onOpenChange(false);
   };
@@ -232,11 +241,50 @@ export function ActivityLogFilters({
           {/* Date Range */}
           <div className="space-y-2 md:col-span-2">
             <Label>Date Range</Label>
-            <DateRangePicker
-              date={dateRange}
-              setDate={handleDateRangeChange}
-              className="w-full"
-            />
+            <Popover open={dateRangeOpen} onOpenChange={setDateRangeOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !dateRange && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      <>
+                        {format(dateRange.from, "LLL dd, y")} -{" "}
+                        {format(dateRange.to, "LLL dd, y")}
+                      </>
+                    ) : (
+                      format(dateRange.from, "LLL dd, y")
+                    )
+                  ) : (
+                    <span>Pick a date range</span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  initialFocus
+                  mode="range"
+                  defaultMonth={dateRange?.from || new Date()}
+                  selected={dateRange}
+                  onSelect={(newDateRange) => {
+                    handleDateRangeChange(newDateRange);
+                    // Close the popover when both dates are selected or same date is clicked twice
+                    if (newDateRange?.from && newDateRange?.to) {
+                      setDateRangeOpen(false);
+                    }
+                  }}
+                  numberOfMonths={2}
+                  disabled={(date) =>
+                    date > new Date() || date < new Date("1900-01-01")
+                  }
+                />
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
@@ -248,6 +296,7 @@ export function ActivityLogFilters({
               size="sm"
               onClick={() => {
                 setDateRange(undefined);
+                setDateRangeOpen(false);
                 setLocalFilters({
                   ...localFilters,
                   dateRange: undefined,
