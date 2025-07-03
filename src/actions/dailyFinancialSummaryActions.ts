@@ -1,355 +1,550 @@
 "use server";
 
-import { doc, setDoc, getDoc, serverTimestamp, Timestamp, deleteDoc, collection, query, where, getDocs, limit as firestoreLimit, orderBy, startAfter, DocumentSnapshot, writeBatch } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import type { DailyFinancialSummary, FoodCostEntry, BeverageCostEntry } from "@/types"; 
 import { format } from "date-fns";
+import type { DailyFinancialSummary } from "@/types";
+import { normalizeDate } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/server-auth";
+import { auditDataChange } from "@/lib/audit-middleware";
 
-const collectionName = "dailyFinancialSummaries";
-const foodCostEntriesCollectionName = "foodCostEntries";
-const beverageCostEntriesCollectionName = "beverageCostEntries";
-
-export async function recalculateAndSaveFinancialSummary(inputDate: Date): Promise<void> {
-  const normalizedDate = new Date(Date.UTC(inputDate.getFullYear(), inputDate.getMonth(), inputDate.getDate()));
-  const summaryId = format(normalizedDate, "yyyy-MM-dd");
-  const dateTimestampForQuery = Timestamp.fromDate(normalizedDate);
-
-  console.log(`[recalculateAndSaveFS] Recalculating for summary ID: ${summaryId} using timestamp: ${dateTimestampForQuery.toDate().toISOString()}`);
-
-  const summaryDocRef = doc(db!, collectionName, summaryId);
-  const summarySnap = await getDoc(summaryDocRef);
-
-  let summaryData: DailyFinancialSummary;
-  if (!summarySnap.exists()) {
-    console.log(`[recalculateAndSaveFS] No DailyFinancialSummary found for ${summaryId}. Creating new summary with defaults.`);
-    summaryData = {
-      id: summaryId,
-      date: dateTimestampForQuery,
-      outlet_id: "", 
-      actual_food_revenue: 0,
-      actual_beverage_revenue: 0,
-      budget_food_revenue: 0,
-      budget_beverage_revenue: 0,
-      budget_food_cost: 0,
-      budget_beverage_cost: 0,
-      gross_food_cost: 0,
-      gross_beverage_cost: 0,
-      net_food_cost: 0,
-      net_beverage_cost: 0,
-      total_adjusted_food_cost: 0,
-      total_adjusted_beverage_cost: 0,
-      total_covers: 0,
-      average_check: 0,
-
-      budget_food_cost_pct: 0, 
-      budget_beverage_cost_pct: 0, 
-
-      ent_food: 0,
-      oc_food: 0,
-      other_food_adjustment: 0,
-
-      entertainment_beverage_cost: 0,
-      officer_check_comp_beverage: 0,
-      other_beverage_adjustments: 0,
-
-      actual_food_cost: null, 
-      actual_food_cost_pct: null,
-      food_variance_pct: null,
-      actual_beverage_cost: null, 
-      actual_beverage_cost_pct: null,
-      beverage_variance_pct: null,
-      notes: "",
-      createdAt: serverTimestamp() as Timestamp,
-      updatedAt: serverTimestamp() as Timestamp,
-    };
-    await setDoc(summaryDocRef, summaryData, { merge: true });
-  } else {
-    summaryData = summarySnap.data() as DailyFinancialSummary;
-    console.log(`[recalculateAndSaveFS] DailyFinancialSummary found for ${summaryId}. Proceeding with recalculation.`);
-  }
-
-  const foodCostEntriesQuery = query(
-    collection(db!, foodCostEntriesCollectionName),
-    where("date", "==", dateTimestampForQuery)
-  );
-  const foodCostEntriesSnap = await getDocs(foodCostEntriesQuery);
-  let grossFoodCost = 0;
-  foodCostEntriesSnap.forEach(doc => {
-    const entry = doc.data() as FoodCostEntry;
-    grossFoodCost += entry.total_food_cost || 0;
-  });
-
-  const entFood = summaryData.ent_food || 0;
-  const ocFood = summaryData.oc_food || 0;
-  const otherFoodAdjustment = summaryData.other_food_adjustment || 0; 
-  const actual_food_cost = grossFoodCost - entFood - ocFood + otherFoodAdjustment;
-  let actual_food_cost_pct: number | null = null;
-  if (summaryData.actual_food_revenue != null && summaryData.actual_food_revenue > 0) {
-    actual_food_cost_pct = (actual_food_cost / summaryData.actual_food_revenue) * 100;
-  } else if (summaryData.actual_food_revenue === 0 && actual_food_cost > 0) {
-    actual_food_cost_pct = null; 
-  } else {
-    actual_food_cost_pct = 0; 
-  }
-  let food_variance_pct: number | null = null;
-  if (actual_food_cost_pct !== null && summaryData.budget_food_cost_pct != null) {
-    food_variance_pct = actual_food_cost_pct - summaryData.budget_food_cost_pct;
-  }
-
-  const beverageCostEntriesQuery = query(
-    collection(db!, beverageCostEntriesCollectionName),
-    where("date", "==", dateTimestampForQuery)
-  );
-  const beverageCostEntriesSnap = await getDocs(beverageCostEntriesQuery);
-  let grossBeverageCost = 0;
-  beverageCostEntriesSnap.forEach(doc => {
-    const entry = doc.data() as BeverageCostEntry;
-    grossBeverageCost += entry.total_beverage_cost || 0;
-  });
-  
-  const entBeverage = summaryData.entertainment_beverage_cost || 0;
-  const ocBeverage = summaryData.officer_check_comp_beverage || 0;
-  const otherBeverageAdjustment = summaryData.other_beverage_adjustments || 0;
-  const actual_beverage_cost = grossBeverageCost - entBeverage - ocBeverage + otherBeverageAdjustment;
-  let actual_beverage_cost_pct: number | null = null;
-  if (summaryData.actual_beverage_revenue != null && summaryData.actual_beverage_revenue > 0) {
-    actual_beverage_cost_pct = (actual_beverage_cost / summaryData.actual_beverage_revenue) * 100;
-  } else if (summaryData.actual_beverage_revenue === 0 && actual_beverage_cost > 0) {
-     actual_beverage_cost_pct = null;
-  } else {
-    actual_beverage_cost_pct = 0;
-  }
-  let beverage_variance_pct: number | null = null;
-  if (actual_beverage_cost_pct !== null && summaryData.budget_beverage_cost_pct != null) {
-    beverage_variance_pct = actual_beverage_cost_pct - summaryData.budget_beverage_cost_pct;
-  }
-
-  const updatePayload: Partial<DailyFinancialSummary> = {
-    actual_food_cost,
-    actual_food_cost_pct,
-    food_variance_pct,
-    actual_beverage_cost,
-    actual_beverage_cost_pct,
-    beverage_variance_pct,
-    ent_food: summaryData.ent_food,
-    oc_food: summaryData.oc_food,
-    other_food_adjustment: summaryData.other_food_adjustment,
-    entertainment_beverage_cost: summaryData.entertainment_beverage_cost,
-    officer_check_comp_beverage: summaryData.officer_check_comp_beverage,
-    other_beverage_adjustments: summaryData.other_beverage_adjustments,
-    updatedAt: serverTimestamp() as Timestamp,
-  };
-
-  await setDoc(summaryDocRef, updatePayload, { merge: true });
-  console.log(`[recalculateAndSaveFS] DailyFinancialSummary ${summaryId} updated with calculated costs.`);
-  revalidatePath("/dashboard/financial-summary");
-  revalidatePath("/dashboard");
-}
-
-
-export async function saveDailyFinancialSummaryAction(
-  summaryData: Partial<Omit<DailyFinancialSummary, 'id' | 'createdAt' | 'updatedAt'>> & { date: Date },
-  originalIdIfEditing?: string 
-): Promise<void> {
-  const newNormalizedDate = new Date(Date.UTC(summaryData.date.getFullYear(), summaryData.date.getMonth(), summaryData.date.getDate()));
-  const newEntryId = format(newNormalizedDate, "yyyy-MM-dd");
-  
-  if (!newEntryId) { 
-    throw new Error("Date is required to create or update an entry ID.");
-  }
-
+export async function getAllDailyFinancialSummariesAction() {
   try {
-    const dataToSave: Partial<DailyFinancialSummary> & { date: Timestamp; updatedAt: Timestamp; createdAt?: Timestamp } = {
-      ...summaryData, 
-      date: Timestamp.fromDate(newNormalizedDate),
-      updatedAt: serverTimestamp() as Timestamp,
-    };
-    // These fields are already optional in the interface, no need to delete.
-    // delete (dataToSave as any).actual_food_cost;
-    // delete (dataToSave as any).actual_food_cost_pct;
-    // delete (dataToSave as any).food_variance_pct;
-    // delete (dataToSave as any).actual_beverage_cost;
-    // delete (dataToSave as any).actual_beverage_cost_pct;
-    // delete (dataToSave as any).beverage_variance_pct;
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
 
-    const defaultsForNewEntry: Partial<DailyFinancialSummary> = {
-        actual_food_revenue: 0,
-        actual_beverage_revenue: 0,
-        budget_food_revenue: 0,
-        budget_beverage_revenue: 0,
-        budget_food_cost: 0,
-        budget_beverage_cost: 0,
-        budget_food_cost_pct: 0, 
-        ent_food: 0,
-        oc_food: 0,
-        other_food_adjustment: 0,
-        budget_beverage_cost_pct: 0, 
-        entertainment_beverage_cost: 0, 
-        officer_check_comp_beverage: 0, 
-        other_beverage_adjustments: 0,
-        total_covers: 0,
-        average_check: 0,
-        notes: '',
-        actual_food_cost: null, 
-        actual_food_cost_pct: null, 
-        food_variance_pct: null,
-        actual_beverage_cost: null, 
-        actual_beverage_cost_pct: null, 
-        beverage_variance_pct: null,
-        gross_food_cost: 0, 
-        gross_beverage_cost: 0, 
-        net_food_cost: 0, 
-        net_beverage_cost: 0, 
-        total_adjusted_food_cost: 0, 
-        total_adjusted_beverage_cost: 0, 
-        outlet_id: "", 
-    };
+    let whereClause = {};
     
-    if (originalIdIfEditing && originalIdIfEditing !== newEntryId) {
-      const oldDocRef = doc(db!, collectionName, originalIdIfEditing);
-      await deleteDoc(oldDocRef);
-      console.log(`[saveDFSAction] Deleted old summary ${originalIdIfEditing} as date changed to ${newEntryId}.`);
-
-      dataToSave.createdAt = serverTimestamp() as Timestamp; 
-      await setDoc(doc(db!, collectionName, newEntryId), { ...defaultsForNewEntry, ...dataToSave });
-      console.log(`[saveDFSAction] Created new summary ${newEntryId} after date change.`);
+    // Super admins can see all summaries
+    if (user.role !== "super_admin") {
+      // Property-specific users can only see their properties' data
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
       
-      const [year, month, day] = originalIdIfEditing.split('-').map(Number);
-      const oldDateForRecalc = new Date(Date.UTC(year, month - 1, day));
-      await recalculateAndSaveFinancialSummary(oldDateForRecalc); 
-      await recalculateAndSaveFinancialSummary(newNormalizedDate); 
-
-    } else {
-      const entryDocRef = doc(db!, collectionName, newEntryId);
-      const existingDocSnap = await getDoc(entryDocRef);
-
-      if (existingDocSnap.exists()) {
-        await setDoc(entryDocRef, dataToSave, { merge: true });
-        console.log(`[saveDFSAction] Updated/merged summary for ${newEntryId}.`);
-      } else {
-        dataToSave.createdAt = serverTimestamp() as Timestamp;
-        await setDoc(entryDocRef, { ...defaultsForNewEntry, ...dataToSave });
-        console.log(`[saveDFSAction] Created new summary for ${newEntryId}.`);
+      if (userPropertyIds.length === 0) {
+        return []; // No access to any properties
       }
-      await recalculateAndSaveFinancialSummary(newNormalizedDate);
+      
+      whereClause = {
+        propertyId: {
+          in: userPropertyIds
+        }
+      };
     }
 
+    const summaries = await prisma.dailyFinancialSummary.findMany({
+      where: whereClause,
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        }
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+    return summaries;
   } catch (error) {
-    console.error("Error saving daily financial summary: ", error);
-    throw new Error(`Failed to save daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error fetching daily financial summaries:", error);
+    throw new Error("Failed to fetch daily financial summaries");
   }
 }
 
-export async function getDailyFinancialSummaryAction(id: string): Promise<DailyFinancialSummary | null> {
-  if (!id) {
-    throw new Error("Entry ID (YYYY-MM-DD) is required to fetch data.");
-  }
+export async function getDailyFinancialSummaryByIdAction(id: number) {
   try {
-    const entryDocRef = doc(db!, collectionName, id);
-    const docSnap = await getDoc(entryDocRef);
-
-    if (docSnap.exists()) {
-      const data = docSnap.data() as Omit<DailyFinancialSummary, 'id'>;
-      return { 
-        id: docSnap.id, 
-        ...data,
-        date: data.date instanceof Timestamp ? data.date.toDate() : new Date(data.date as any),
-        createdAt: data.createdAt && data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt as any) : undefined),
-        updatedAt: data.updatedAt && data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt as any) : undefined),
-      } as DailyFinancialSummary;
-    } else {
-      return null; 
-    }
+    const summary = await prisma.dailyFinancialSummary.findUnique({
+      where: { id: Number(id) },
+    });
+    return summary;
   } catch (error) {
-    console.error("Error fetching daily financial summary: ", error);
-    throw new Error(`Failed to fetch daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error fetching daily financial summary:", error);
+    throw new Error("Failed to fetch daily financial summary");
   }
 }
 
-export async function deleteDailyFinancialSummaryAction(id: string): Promise<void> {
-  if (!id) {
-    throw new Error("Entry ID (YYYY-MM-DD) is required for deletion.");
-  }
-
+export async function createDailyFinancialSummaryAction(summaryData: {
+  date: Date;
+  actualFoodRevenue: number;
+  budgetFoodRevenue: number;
+  budgetFoodCost: number;
+  budgetFoodCostPct: number;
+  entFood: number;
+  coFood: number;
+  otherFoodAdjustment: number;
+  actualBeverageRevenue: number;
+  budgetBeverageRevenue: number;
+  budgetBeverageCost: number;
+  budgetBeverageCostPct: number;
+  entBeverage: number;
+  coBeverage: number;
+  otherBeverageAdjustment: number;
+  note?: string;
+  propertyId?: number;
+}) {
   try {
-    const entryRef = doc(db!, collectionName, id);
+    // Normalize date to YYYY-MM-DD format (date only, no time)
+    const normalizedDate = normalizeDate(summaryData.date);
+
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Handle property selection based on user role
+    let propertyId = summaryData.propertyId;
     
-    // Delete the main daily financial summary document
-    const batch = writeBatch(db!);
-    batch.delete(entryRef);
+    if (user.role === "super_admin") {
+      // Super admins must provide a propertyId
+      if (!propertyId) {
+        throw new Error("Property selection is required for super admin users");
+      }
+    } else {
+      // Property-specific users can only create for their accessible properties
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (userPropertyIds.length === 0) {
+        throw new Error("No property access found for user");
+      }
+      
+      if (propertyId && !userPropertyIds.includes(propertyId)) {
+        throw new Error("Access denied to selected property");
+      }
+      
+      // If no propertyId provided, use user's first accessible property
+      if (!propertyId) {
+        propertyId = userPropertyIds[0];
+      }
+    }
 
-    // Also delete related food cost details
-    const detailsQuery = query(collection(db!, foodCostEntriesCollectionName), where("food_cost_entry_id", "==", id));
-    const detailsSnapshot = await getDocs(detailsQuery);
-    detailsSnapshot.forEach(detailDoc => batch.delete(detailDoc.ref));
+    // Verify property exists and is active
+    const property = await prisma.property.findFirst({
+      where: { 
+        id: propertyId,
+        isActive: true 
+      }
+    });
+    
+    if (!property) {
+      throw new Error("Invalid or inactive property selected");
+    }
 
-    await batch.commit();
+    // Use upsert to handle duplicate dates gracefully (now including propertyId)
+    const summary = await prisma.dailyFinancialSummary.upsert({
+      where: {
+        date_propertyId: {
+          date: normalizedDate,
+          propertyId: propertyId,
+        }
+      },
+      update: {
+        actualFoodRevenue: summaryData.actualFoodRevenue,
+        budgetFoodRevenue: summaryData.budgetFoodRevenue,
+        budgetFoodCost: summaryData.budgetFoodCost,
+        budgetFoodCostPct: summaryData.budgetFoodCostPct,
+        entFood: summaryData.entFood,
+        coFood: summaryData.coFood,
+        otherFoodAdjustment: summaryData.otherFoodAdjustment,
+        actualBeverageRevenue: summaryData.actualBeverageRevenue,
+        budgetBeverageRevenue: summaryData.budgetBeverageRevenue,
+        budgetBeverageCost: summaryData.budgetBeverageCost,
+        budgetBeverageCostPct: summaryData.budgetBeverageCostPct,
+        entBeverage: summaryData.entBeverage,
+        coBeverage: summaryData.coBeverage,
+        otherBeverageAdjustment: summaryData.otherBeverageAdjustment,
+        note: summaryData.note,
+      },
+      create: {
+        ...summaryData,
+        date: normalizedDate,
+        propertyId: propertyId,
+      },
+    });
 
-    // Note: We intentionally do NOT call recalculateAndSaveFinancialSummary here
-    // because that would recreate the document we just deleted with zero values.
-    // The document should remain deleted.
+    // Trigger automatic cost calculation after creating/updating
+    await calculateAndUpdateDailyFinancialSummary(normalizedDate, propertyId || undefined);
 
     revalidatePath("/dashboard/financial-summary");
-    revalidatePath("/dashboard");
-
+    return summary;
   } catch (error) {
-    console.error("Error deleting daily financial summary: ", error);
-    throw new Error(`Failed to delete daily financial summary: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error creating daily financial summary:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Failed to create daily financial summary");
+  }
+}
+
+export async function updateDailyFinancialSummaryAction(
+  id: number,
+  summaryData: {
+    date?: Date;
+    actualFoodRevenue?: number;
+    budgetFoodRevenue?: number;
+    budgetFoodCost?: number;
+    budgetFoodCostPct?: number;
+    entFood?: number;
+    coFood?: number;
+    otherFoodAdjustment?: number;
+    actualBeverageRevenue?: number;
+    budgetBeverageRevenue?: number;
+    budgetBeverageCost?: number;
+    budgetBeverageCostPct?: number;
+    entBeverage?: number;
+    coBeverage?: number;
+    otherBeverageAdjustment?: number;
+    note?: string;
+    propertyId?: number;
+  }
+) {
+  try {
+    // Get current entry to know the date for recalculation
+    const currentSummary = await prisma.dailyFinancialSummary.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!currentSummary) {
+      throw new Error("Daily financial summary not found");
+    }
+
+    // Normalize the date if provided
+    const processedData = { ...summaryData };
+    if (processedData.date) {
+      processedData.date = normalizeDate(processedData.date);
+    }
+
+    const summary = await prisma.dailyFinancialSummary.update({
+      where: { id: Number(id) },
+      data: processedData,
+    });
+
+    // Trigger recalculation for both old and new dates
+    await calculateAndUpdateDailyFinancialSummary(currentSummary.date, currentSummary.propertyId);
+    if (processedData.date && processedData.date !== currentSummary.date) {
+      await calculateAndUpdateDailyFinancialSummary(processedData.date, currentSummary.propertyId);
+    }
+
+    revalidatePath("/dashboard/financial-summary");
+    return summary;
+  } catch (error) {
+    console.error("Error updating daily financial summary:", error);
+    throw new Error("Failed to update daily financial summary");
+  }
+}
+
+export async function deleteDailyFinancialSummaryAction(id: number) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Get the summary for audit logging
+    const summaryToDelete = await prisma.dailyFinancialSummary.findUnique({
+      where: { id: Number(id) }
+    });
+
+    if (!summaryToDelete) {
+      throw new Error("Daily financial summary not found");
+    }
+
+    await prisma.dailyFinancialSummary.delete({
+      where: { id: Number(id) },
+    });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "DELETE",
+      "daily_financial_summary",
+      id.toString(),
+      summaryToDelete,
+      undefined,
+      summaryToDelete.propertyId || undefined
+    );
+
+    revalidatePath("/dashboard/financial-summary");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting daily financial summary:", error);
+    throw new Error("Failed to delete daily financial summary");
+  }
+}
+
+export async function getDailyFinancialSummariesByDateRangeAction(
+  startDate: Date,
+  endDate: Date,
+  outletId?: string,
+  propertyId?: string
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    let whereClause: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+    
+    // Handle property-specific filtering
+    if (propertyId && propertyId !== "all") {
+      whereClause.propertyId = parseInt(propertyId);
+    } else if (user.role !== "super_admin") {
+      // Property-specific users can only see their properties' data
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (userPropertyIds.length === 0) {
+        return [];
+      }
+      
+      whereClause.propertyId = {
+        in: userPropertyIds
+      };
+    }
+
+    // Handle outlet-specific filtering
+    if (outletId && outletId !== "all") {
+      // For outlet filtering, we need to get all summaries for the property that contains this outlet
+      // and then filter by outlet on the frontend since daily summaries are property-level, not outlet-level
+      // This parameter is mainly for consistency with other actions
+    }
+
+    const summaries = await prisma.dailyFinancialSummary.findMany({
+      where: whereClause,
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        }
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+
+    return summaries;
+  } catch (error) {
+    console.error("Error fetching daily financial summaries by date range:", error);
+    throw new Error("Failed to fetch daily financial summaries");
   }
 }
 
 export async function getPaginatedDailyFinancialSummariesAction(
-  limitValue?: number, 
-  lastVisibleDocId?: string,
-  fetchAll: boolean = false 
-): Promise<{ summaries: DailyFinancialSummary[]; lastVisibleDocId: string | null; totalCount: number; hasMore: boolean }> {
+  limitValue?: number,
+  lastVisibleDocId?: number,
+  fetchAll: boolean = false
+) {
   try {
-    if (!db) {
-      throw new Error("Firestore 'db' instance is not available.");
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
     }
 
-    let q = query(collection(db!, collectionName), orderBy("date", "desc"));
-    let totalCount = 0;
-
-    if (fetchAll) {
-      const allDocsSnap = await getDocs(q);
-      totalCount = allDocsSnap.size;
-    } else {
-      const countQuery = query(collection(db!, collectionName));
-      const countSnapshot = await getDocs(countQuery);
-      totalCount = countSnapshot.size;
-    }
-
-    if (limitValue && !fetchAll) {
-      q = query(q, firestoreLimit(limitValue));
-    }
-
-    if (lastVisibleDocId && !fetchAll) {
-      const lastDocSnap = await getDoc(doc(db!, collectionName, lastVisibleDocId));
-      if (lastDocSnap.exists()) {
-        q = query(q, startAfter(lastDocSnap));
+    let whereClause = {};
+    
+    // Super admins can see all summaries
+    if (user.role !== "super_admin") {
+      // Property-specific users can only see their properties' data
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (userPropertyIds.length === 0) {
+        return {
+          summaries: [],
+          lastVisibleDocId: null,
+          hasMore: false,
+          totalCount: 0
+        };
       }
+      
+      whereClause = {
+        propertyId: {
+          in: userPropertyIds
+        }
+      };
     }
 
-    const querySnapshot = await getDocs(q);
-    const summaries: DailyFinancialSummary[] = querySnapshot.docs.map(docSnap => {
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...data,
-        date: data.date instanceof Timestamp ? data.date.toDate() : data.date,
-        createdAt: data.createdAt && data.createdAt instanceof Timestamp ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt as any) : undefined),
-        updatedAt: data.updatedAt && data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : (data.updatedAt ? new Date(data.updatedAt as any) : undefined),
-      } as DailyFinancialSummary;
-    });
+    const totalCount = await prisma.dailyFinancialSummary.count({ where: whereClause });
+    
+    let summaries;
+    
+    if (fetchAll || !limitValue) {
+      summaries = await prisma.dailyFinancialSummary.findMany({
+        where: whereClause,
+        include: {
+          property: {
+            select: {
+              id: true,
+              name: true,
+              propertyCode: true
+            }
+          }
+        },
+        orderBy: {
+          date: "desc",
+        },
+      });
+    } else {
+      const skip = lastVisibleDocId ? 1 : 0;
+      summaries = await prisma.dailyFinancialSummary.findMany({
+        where: whereClause,
+        take: limitValue,
+        skip,
+        ...(lastVisibleDocId && {
+          cursor: {
+            id: lastVisibleDocId,
+          },
+        }),
+        include: {
+          property: {
+            select: {
+              id: true,
+              name: true,
+              propertyCode: true
+            }
+          }
+        },
+        orderBy: {
+          date: "desc",
+        },
+      });
+    }
 
-    const hasMore = !fetchAll && (summaries.length === limitValue);
-    const newLastVisibleDocId = summaries.length > 0 && !fetchAll ? summaries[summaries.length - 1].id : null;
+    const hasMore = !fetchAll && limitValue ? summaries.length === limitValue : false;
+    const lastVisibleDocIdResult = summaries.length > 0 ? summaries[summaries.length - 1].id : null;
 
-    return { summaries, lastVisibleDocId: newLastVisibleDocId, totalCount, hasMore };
-  } catch (error: any) {
-    console.error("Error fetching paginated daily financial summaries:", error);
-    throw new Error(`Could not load daily financial summaries. Details: ${error.message}`);
+    return {
+      summaries,
+      lastVisibleDocId: lastVisibleDocIdResult,
+      hasMore,
+      totalCount
+    };
+  } catch (error) {
+    console.error("Error getting paginated daily financial summaries:", error);
+    throw new Error("Failed to get daily financial summaries");
   }
 }
+
+// Function to calculate actual costs and percentages based on food/beverage cost entries
+export async function calculateAndUpdateDailyFinancialSummary(date: Date, propertyId?: number): Promise<void> {
+  const normalizedDate = normalizeDate(date);
+
+  try {
+    // Get existing summary - if propertyId provided, find specific one, otherwise find first
+    let summary;
+    if (propertyId) {
+      summary = await prisma.dailyFinancialSummary.findUnique({
+        where: { 
+          date_propertyId: {
+            date: normalizedDate,
+            propertyId: propertyId,
+          }
+        },
+      });
+    } else {
+      summary = await prisma.dailyFinancialSummary.findFirst({
+        where: { date: normalizedDate },
+      });
+    }
+
+    if (!summary) {
+      console.log(`No DailyFinancialSummary found for ${format(normalizedDate, "yyyy-MM-dd")}`);
+      return;
+    }
+
+    // Calculate totals from food cost entries (property-aware)
+    // Handle both exact propertyId match and null propertyId for backward compatibility
+    const foodCostEntries = await prisma.foodCostEntry.findMany({
+      where: {
+        date: {
+          gte: normalizedDate,
+          lt: new Date(normalizedDate.getTime() + 24 * 60 * 60 * 1000), // Next day
+        },
+        OR: [
+          { propertyId: summary.propertyId },
+          // Fallback for entries without propertyId (legacy data)
+          ...(summary.propertyId ? [{ propertyId: null }] : [])
+        ],
+      },
+    });
+
+    const totalFoodCost = foodCostEntries.reduce((sum, entry) => sum + entry.totalFoodCost, 0);
+
+    // Calculate totals from beverage cost entries (property-aware)
+    const beverageCostEntries = await prisma.beverageCostEntry.findMany({
+      where: {
+        date: {
+          gte: normalizedDate,
+          lt: new Date(normalizedDate.getTime() + 24 * 60 * 60 * 1000), // Next day
+        },
+        OR: [
+          { propertyId: summary.propertyId },
+          // Fallback for entries without propertyId (legacy data)
+          ...(summary.propertyId ? [{ propertyId: null }] : [])
+        ],
+      },
+    });
+
+    const totalBeverageCost = beverageCostEntries.reduce((sum, entry) => sum + entry.totalBeverageCost, 0);
+
+    // Debug logging
+    console.log(`Calculation for ${format(normalizedDate, "yyyy-MM-dd")} (Property ID: ${summary.propertyId}):`);
+    console.log(`  Found ${foodCostEntries.length} food cost entries, total: $${totalFoodCost}`);
+    console.log(`  Found ${beverageCostEntries.length} beverage cost entries, total: $${totalBeverageCost}`);
+    console.log(`  Adjustments - Food: ent(-${summary.entFood}) + co(-${summary.coFood}) + other(+${summary.otherFoodAdjustment})`);
+    console.log(`  Adjustments - Beverage: ent(-${summary.entBeverage}) + co(-${summary.coBeverage}) + other(+${summary.otherBeverageAdjustment})`);
+
+    // Calculate actual costs with proper adjustment logic
+    // entFood and coFood are always subtracted (entertainment and complimentary costs reduce actual cost)
+    // otherAdjustment: if positive = add to cost, if negative = subtract from cost
+    const actualFoodCost = totalFoodCost - summary.entFood - summary.coFood + summary.otherFoodAdjustment;
+    const actualBeverageCost = totalBeverageCost - summary.entBeverage - summary.coBeverage + summary.otherBeverageAdjustment;
+
+    // Calculate percentages
+    const actualFoodCostPct = summary.actualFoodRevenue > 0 ? (actualFoodCost / summary.actualFoodRevenue) * 100 : 0;
+    const actualBeverageCostPct = summary.actualBeverageRevenue > 0 ? (actualBeverageCost / summary.actualBeverageRevenue) * 100 : 0;
+
+    // Calculate variances
+    const foodVariancePct = actualFoodCostPct - summary.budgetFoodCostPct;
+    const beverageVariancePct = actualBeverageCostPct - summary.budgetBeverageCostPct;
+
+    // Update the summary with calculated values
+    await prisma.dailyFinancialSummary.update({
+      where: { 
+        date_propertyId: {
+          date: normalizedDate,
+          propertyId: summary.propertyId,
+        }
+      },
+      data: {
+        actualFoodCost,
+        actualFoodCostPct,
+        foodVariancePct,
+        actualBeverageCost,
+        actualBeverageCostPct,
+        beverageVariancePct,
+      },
+    });
+
+    console.log(`Updated calculated fields for ${format(normalizedDate, "yyyy-MM-dd")}`);
+
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard");
+  } catch (error) {
+    console.error("Error calculating financial summary:", error);
+    throw new Error("Failed to calculate financial summary");
+  }
+}
+
+// Alias for backward compatibility  
+export const saveDailyFinancialSummaryAction = createDailyFinancialSummaryAction;

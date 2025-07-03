@@ -1,1007 +1,1097 @@
 "use server";
 
-import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction, orderBy, getFirestore } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import type { FoodCostEntry, FoodCostDetail, Category, Outlet, DailyFinancialSummary, DetailedFoodCostReport, DetailedFoodCostReportResponse, CostAnalysisByCategoryReport } from "@/types";
-import { format as formatDateFn, isValid } from "date-fns";
-// Import the recalculate function from dailyFinancialSummaryActions
-import { recalculateAndSaveFinancialSummary } from "./dailyFinancialSummaryActions";
-
-
-const FOOD_COST_ENTRIES_COLLECTION = "foodCostEntries";
-const FOOD_COST_DETAILS_COLLECTION = "foodCostDetails";
-const CATEGORIES_COLLECTION = "categories";
-const DAILY_FINANCIAL_SUMMARIES_COLLECTION = "dailyFinancialSummaries";
+import { format as formatDateFn } from "date-fns";
+import type { FoodCostEntry, FoodCostDetail } from "@/types";
+import { calculateAndUpdateDailyFinancialSummary } from "./dailyFinancialSummaryActions";
+import { getCurrentUser } from "@/lib/server-auth";
+import { normalizeDate } from "@/lib/utils";
+import { auditDataChange } from "@/lib/audit-middleware";
 
 interface FoodCostItemInput {
-  id?: string; 
-  categoryId: string;
+  id?: number; 
+  categoryId: number;
+  categoryName?: string;
   cost: number;
   description?: string;
 }
 
-export async function saveFoodCostEntryAction(
-  date: Date,
-  outletId: string,
-  items: FoodCostItemInput[],
-  existingEntryId?: string | null 
-): Promise<{ foodCostEntryId: string }> {
-  if (!date || !outletId || items.length === 0) {
-    throw new Error("Date, Outlet ID, and at least one item are required.");
-  }
-  if (!isValid(date)) {
-      throw new Error("Invalid date provided for food cost entry.");
-  }
-
-  const totalFoodCost = items.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-  const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const entryDateTimestamp = Timestamp.fromDate(normalizedDate);
-
-
+export async function getAllFoodCostEntriesAction() {
   try {
-    let foodCostEntryId = existingEntryId;
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
 
-    await runTransaction(db!, async (transaction) => {
-      if (existingEntryId) {
-        const entryRef = doc(db!, FOOD_COST_ENTRIES_COLLECTION, existingEntryId);
-        transaction.update(entryRef, {
-          total_food_cost: totalFoodCost,
-          outlet_id: outletId, // Ensure outlet_id is also updatable if changed for an existing date/entry ID
-          date: entryDateTimestamp, // Ensure date is also updatable
-          updatedAt: serverTimestamp(),
-        });
-
-        const detailsQuery = query(collection(db!, FOOD_COST_DETAILS_COLLECTION), where("food_cost_entry_id", "==", existingEntryId));
-        const oldDetailsSnapshot = await getDocs(detailsQuery); 
-        oldDetailsSnapshot.forEach(detailDoc => transaction.delete(detailDoc.ref));
-
-      } else {
-        const newEntryRef = doc(collection(db!, FOOD_COST_ENTRIES_COLLECTION));
-        transaction.set(newEntryRef, {
-          date: entryDateTimestamp,
-          outlet_id: outletId,
-          total_food_cost: totalFoodCost,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        foodCostEntryId = newEntryRef.id;
+    let whereClause = {};
+    
+    // Super admins can see all entries
+    if (user.role !== "super_admin") {
+      // Property-specific users can only see their properties' data
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (userPropertyIds.length === 0) {
+        return []; // No access to any properties
       }
+      
+      whereClause = {
+        propertyId: {
+          in: userPropertyIds
+        }
+      };
+    }
 
-      if (!foodCostEntryId) {
-        throw new Error("Failed to obtain foodCostEntryId during transaction.");
-      }
+    const entries = await prisma.foodCostEntry.findMany({
+      where: whereClause,
+      include: {
+        outlet: true,
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        },
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+    return entries;
+  } catch (error) {
+    console.error("Error fetching food cost entries:", error);
+    throw new Error("Failed to fetch food cost entries");
+  }
+}
 
-      for (const item of items) {
-        const detailRef = doc(collection(db!, FOOD_COST_DETAILS_COLLECTION));
-        transaction.set(detailRef, {
-          food_cost_entry_id: foodCostEntryId,
-          category_id: item.categoryId,
-          cost: Number(item.cost) || 0,
-          description: item.description || "",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
+export async function getFoodCostEntryByIdAction(id: number) {
+  try {
+    console.log("Fetching food cost entry with ID:", id);
+    
+    const entry = await prisma.foodCostEntry.findUnique({
+      where: { id: Number(id) },
+      include: {
+        outlet: true,
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        },
+        details: {
+          include: {
+            category: true,
+          },
+        },
+        createdByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        updatedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+      },
     });
     
-    if (!foodCostEntryId) {
-        throw new Error("Transaction completed but foodCostEntryId is still not set.");
+    if (!entry) {
+      console.log("Food cost entry not found with ID:", id);
+      throw new Error("Food cost entry not found");
     }
-
-    // After food cost entry is saved, trigger recalculation of the associated DailyFinancialSummary
-    await recalculateAndSaveFinancialSummary(normalizedDate);
-
-
-    revalidatePath("/dashboard/food-cost-input");
-    revalidatePath("/dashboard/financial-summary"); 
-    revalidatePath("/dashboard");
-
-    return { foodCostEntryId };
-
+    
+    console.log("Successfully fetched food cost entry:", entry.id);
+    return entry;
   } catch (error) {
-    console.error("Error saving food cost entry:", error);
-    throw new Error(`Failed to save food cost entry: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error fetching food cost entry:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Failed to fetch food cost entry");
   }
 }
 
-
-export async function getFoodCostEntryWithDetailsAction(
-  date: Date,
-  outletId: string
-): Promise<(FoodCostEntry & { details: FoodCostDetail[] }) | null> {
-  const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const entryDateTimestamp = Timestamp.fromDate(normalizedDate);
-
-  const q = query(
-    collection(db!, FOOD_COST_ENTRIES_COLLECTION),
-    where("outlet_id", "==", outletId),
-    where("date", "==", entryDateTimestamp) // Query for exact match on normalized date
-  );
-
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) {
-    return null;
-  }
-
-  const entryDoc = snapshot.docs[0]; // Assuming only one entry per outlet per day
-  const entryData = entryDoc.data() as Omit<FoodCostEntry, "id">;
-  const foodCostEntryId = entryDoc.id;
-
-  const detailsQuery = query(collection(db!, FOOD_COST_DETAILS_COLLECTION), where("food_cost_entry_id", "==", foodCostEntryId));
-  const detailsSnapshot = await getDocs(detailsQuery);
-  
-  const categoriesSnapshot = await getDocs(collection(db!, CATEGORIES_COLLECTION));
-  const categoriesMap = new Map<string, string>();
-  categoriesSnapshot.forEach(doc => categoriesMap.set(doc.id, doc.data().name));
-
-  const details: FoodCostDetail[] = detailsSnapshot.docs.map(doc => {
-    const detailData = doc.data() as Omit<FoodCostDetail, "id" | "categoryName">;
-    return {
-      id: doc.id,
-      ...detailData,
-      categoryName: categoriesMap.get(detailData.category_id) || detailData.category_id, 
-      createdAt: detailData.createdAt instanceof Timestamp ? detailData.createdAt.toDate() : new Date(detailData.createdAt as any),
-      updatedAt: detailData.updatedAt instanceof Timestamp ? detailData.updatedAt.toDate() : new Date(detailData.updatedAt as any),
-    } as FoodCostDetail;
-  });
-
-  return {
-    id: foodCostEntryId,
-    ...entryData,
-    date: entryData.date instanceof Timestamp ? entryData.date.toDate() : new Date(entryData.date as any),
-    createdAt: entryData.createdAt instanceof Timestamp ? entryData.createdAt.toDate() : new Date(entryData.createdAt as any),
-    updatedAt: entryData.updatedAt instanceof Timestamp ? entryData.updatedAt.toDate() : new Date(entryData.updatedAt as any),
-    details,
-  };
-}
-
-export async function deleteFoodCostEntryAction(foodCostEntryId: string): Promise<void> {
-  if (!foodCostEntryId) {
-    throw new Error("Food Cost Entry ID is required for deletion.");
-  }
-  let entryDate: Date | null = null;
-
+export async function createFoodCostEntryAction(entryData: {
+  date: Date;
+  outletId: number;
+  totalFoodCost: number;
+  details?: FoodCostItemInput[];
+  propertyId?: number;
+}) {
   try {
-    const entryRef = doc(db!, FOOD_COST_ENTRIES_COLLECTION, foodCostEntryId);
-    const entrySnap = await getDoc(entryRef);
-    if (entrySnap.exists()) {
-        const entryData = entrySnap.data();
-        if (entryData && entryData.date instanceof Timestamp) {
-            entryDate = entryData.date.toDate();
-        }
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
     }
 
-    const batch = writeBatch(db!);
-    batch.delete(entryRef);
-
-    const detailsQuery = query(collection(db!, FOOD_COST_DETAILS_COLLECTION), where("food_cost_entry_id", "==", foodCostEntryId));
-    const detailsSnapshot = await getDocs(detailsQuery);
-    detailsSnapshot.forEach(detailDoc => batch.delete(detailDoc.ref));
-
-    await batch.commit();
-
-    if (entryDate) {
-        // After food cost entry is deleted, trigger recalculation of the associated DailyFinancialSummary
-        // This will effectively use a grossFoodCost that is lower (or zero if it was the only entry).
-        await recalculateAndSaveFinancialSummary(entryDate);
+    // Get property ID from outlet if not provided
+    let propertyId = entryData.propertyId;
+    if (!propertyId) {
+      const outlet = await prisma.outlet.findUnique({
+        where: { id: entryData.outletId },
+        select: { propertyId: true }
+      });
+      propertyId = outlet?.propertyId;
     }
 
-    revalidatePath("/dashboard/food-cost-input");
-    revalidatePath("/dashboard/financial-summary"); 
-    revalidatePath("/dashboard");
-
-  } catch (error) {
-    console.error("Error deleting food cost entry: ", error);
-    throw new Error(`Failed to delete food cost entry: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-export async function getFoodCategoriesAction(): Promise<Category[]> {
-    try {
-        const q = query(collection(db!, CATEGORIES_COLLECTION), where("type", "==", "Food"), orderBy("name", "asc"));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(docSnap => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<Category, 'id' | 'createdAt' | 'updatedAt'>),
-            createdAt: docSnap.data().createdAt instanceof Timestamp ? docSnap.data().createdAt.toDate() : docSnap.data().createdAt,
-            updatedAt: docSnap.data().updatedAt instanceof Timestamp ? docSnap.data().updatedAt.toDate() : docSnap.data().updatedAt,
-        } as Category));
-    } catch (error) {
-        console.error("Error fetching food categories:", error);
-        throw new Error("Could not load food categories.");
+    // Validate property access for non-super admin users
+    if (user.role !== "super_admin" && propertyId) {
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (!userPropertyIds.includes(propertyId)) {
+        throw new Error("Access denied to selected property");
+      }
     }
-}
 
-export async function getOutletsAction(): Promise<Outlet[]> {
-    try {
-        if (!db) {
-            console.error("Firestore 'db' instance is not available in getOutletsAction.");
-            throw new Error("Database connection is not available. Could not load outlets.");
-        }
-        const outletsCollectionRef = collection(db!, "outlets");
-        const q = query(outletsCollectionRef, orderBy("name", "asc"));
-        const snapshot = await getDocs(q);
-        
-        const outletsData = snapshot.docs.map(docSnap => {
-            const data = docSnap.data();
-            return {
-                id: docSnap.id,
-                name: data.name, 
-                createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-                updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-                isActive: data.isActive ?? true, 
-                address: data.address ?? '',
-                phoneNumber: data.phoneNumber ?? '',
-                email: data.email ?? '',
-                type: data.type ?? 'Restaurant', 
-                currency: data.currency ?? 'USD', 
-                timezone: data.timezone ?? 'UTC', 
-                defaultBudgetFoodCostPct: data.defaultBudgetFoodCostPct ?? 0,
-                defaultBudgetBeverageCostPct: data.defaultBudgetBeverageCostPct ?? 0,
-                targetOccupancy: data.targetOccupancy ?? 0,
-            } as Outlet;
-        });
-        return outletsData;
-    } catch (error: any) {
-        console.error("Detailed error in getOutletsAction:", error);
-        throw new Error(`Could not load outlets. Details: ${error.message}`);
+    // Verify outlet belongs to accessible property
+    const outletWithProperty = await prisma.outlet.findUnique({
+      where: { id: entryData.outletId },
+      include: { property: true }
+    });
+    
+    if (!outletWithProperty) {
+      throw new Error("Invalid outlet selected");
     }
-}
+    
+    if (user.role !== "super_admin") {
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (!userPropertyIds.includes(outletWithProperty.propertyId)) {
+        throw new Error("Access denied to outlet's property");
+      }
+    }
 
-// New action to get all food cost entries and their details for a specific date
-export async function getFoodCostEntriesForDateAction(
-  targetDate: Date
-): Promise<(FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[]> {
-  if (!isValid(targetDate)) {
-    throw new Error("Invalid date provided.");
-  }
-  const normalizedDate = new Date(Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()));
-  const dateTimestampForQuery = Timestamp.fromDate(normalizedDate);
+    const entry = await prisma.foodCostEntry.create({
+      data: {
+        date: entryData.date,
+        outletId: entryData.outletId,
+        totalFoodCost: entryData.totalFoodCost,
+        propertyId: propertyId,
+        createdBy: user.id,
+        updatedBy: user.id,
+        details: entryData.details ? {
+          create: entryData.details.map(detail => ({
+            categoryId: detail.categoryId,
+            categoryName: detail.categoryName,
+            cost: detail.cost,
+            description: detail.description,
+            createdBy: user.id,
+            updatedBy: user.id,
+          })),
+        } : undefined,
+      },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+    });
 
-  const entriesWithDetails: (FoodCostEntry & { details: FoodCostDetail[]; outletName?: string })[] = [];
+    // Trigger recalculation of daily financial summary
+    await calculateAndUpdateDailyFinancialSummary(entryData.date, propertyId || undefined);
 
-  try {
-    // Fetch all outlets to map outlet_id to name
-    const outlets = await getOutletsAction();
-    const outletMap = new Map(outlets.map(o => [o.id, o.name]));
-
-    // Fetch all food cost entries for the given date
-    const entriesQuery = query(
-      collection(db!, FOOD_COST_ENTRIES_COLLECTION),
-      where("date", "==", dateTimestampForQuery)
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "CREATE",
+      "food_cost_entry",
+      entry.id,
+      undefined,
+      entry,
+      propertyId || undefined
     );
-    const entriesSnapshot = await getDocs(entriesQuery);
 
-    if (entriesSnapshot.empty) {
-      return [];
-    }
-
-    // Fetch all categories once for mapping category_id to name
-    const categories = await getFoodCategoriesAction();
-    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
-
-    for (const entryDoc of entriesSnapshot.docs) {
-      const entryData = entryDoc.data() as Omit<FoodCostEntry, "id">;
-      const foodCostEntryId = entryDoc.id;
-
-      // Fetch details for this specific entry
-      const detailsQuery = query(
-        collection(db!, FOOD_COST_DETAILS_COLLECTION),
-        where("food_cost_entry_id", "==", foodCostEntryId)
-      );
-      const detailsSnapshot = await getDocs(detailsQuery);
-      const details: FoodCostDetail[] = detailsSnapshot.docs.map(doc => {
-        const detailData = doc.data() as Omit<FoodCostDetail, "id" | "categoryName">;
-        return {
-          id: doc.id,
-          ...detailData,
-          categoryName: categoryMap.get(detailData.category_id) || detailData.category_id,
-          createdAt: detailData.createdAt instanceof Timestamp ? detailData.createdAt.toDate() : new Date(detailData.createdAt as any),
-          updatedAt: detailData.updatedAt instanceof Timestamp ? detailData.updatedAt.toDate() : new Date(detailData.updatedAt as any),
-        } as FoodCostDetail;
-      });
-
-      entriesWithDetails.push({
-        id: foodCostEntryId,
-        ...entryData,
-        date: entryData.date instanceof Timestamp ? entryData.date.toDate() : new Date(entryData.date as any),
-        createdAt: entryData.createdAt instanceof Timestamp ? entryData.createdAt.toDate() : new Date(entryData.createdAt as any),
-        updatedAt: entryData.updatedAt instanceof Timestamp ? entryData.updatedAt.toDate() : new Date(entryData.updatedAt as any),
-        outletName: outletMap.get(entryData.outlet_id) || entryData.outlet_id,
-        details,
-      });
-    }
-    return entriesWithDetails;
+    revalidatePath("/dashboard/food-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return entry;
   } catch (error) {
-    console.error("Error fetching food cost entries for date:", error);
-    throw new Error(`Failed to fetch food cost entries and details: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error creating food cost entry:", error);
+    throw new Error("Failed to create food cost entry");
   }
 }
 
-export async function getFlashFoodCostReportAction(
+export async function updateFoodCostEntryAction(
+  id: number,
+  entryData: {
+    date?: Date;
+    outletId?: number;
+    totalFoodCost?: number;
+    details?: FoodCostItemInput[];
+    propertyId?: number;
+  }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Get current entry to know the date for recalculation
+    const currentEntry = await prisma.foodCostEntry.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!currentEntry) {
+      throw new Error("Food cost entry not found");
+    }
+
+    // If details are provided, update them
+    if (entryData.details) {
+      // Delete existing details
+      await prisma.foodCostDetail.deleteMany({
+        where: { foodCostEntryId: Number(id) },
+      });
+
+      // Create new details
+      if (entryData.details.length > 0) {
+        await prisma.foodCostDetail.createMany({
+          data: entryData.details.map(detail => ({
+            foodCostEntryId: Number(id),
+            categoryId: detail.categoryId,
+            categoryName: detail.categoryName,
+            cost: detail.cost,
+            description: detail.description,
+            createdBy: user.id,
+            updatedBy: user.id,
+          })),
+        });
+      }
+    }
+
+    // Update the main entry
+    const entry = await prisma.foodCostEntry.update({
+      where: { id: Number(id) },
+      data: {
+        date: entryData.date,
+        outletId: entryData.outletId,
+        totalFoodCost: entryData.totalFoodCost,
+        propertyId: entryData.propertyId,
+        updatedBy: user.id,
+      },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+    });
+
+    // Trigger recalculation for both old and new dates
+    await calculateAndUpdateDailyFinancialSummary(currentEntry.date);
+    if (entryData.date && entryData.date !== currentEntry.date) {
+      await calculateAndUpdateDailyFinancialSummary(entryData.date);
+    }
+
+    revalidatePath("/dashboard/food-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return entry;
+  } catch (error) {
+    console.error("Error updating food cost entry:", error);
+    throw new Error("Failed to update food cost entry");
+  }
+}
+
+export async function deleteFoodCostEntryAction(id: number) {
+  try {
+    console.log("Delete action called with ID:", id, "Type:", typeof id);
+    
+    // Get entry date for recalculation
+    const entry = await prisma.foodCostEntry.findUnique({
+      where: { id: Number(id) },
+    });
+
+    console.log("Found entry for deletion:", entry);
+
+    if (!entry) {
+      throw new Error(`Food cost entry with ID ${id} not found`);
+    }
+
+    // Store the date for recalculation
+    const entryDate = entry.date;
+    console.log("Entry date for recalculation:", entryDate);
+
+    // Delete associated details first (explicit deletion since cascade might not be configured)
+    console.log("Deleting associated food cost details...");
+    const deleteDetailsResult = await prisma.foodCostDetail.deleteMany({
+      where: { foodCostEntryId: Number(id) },
+    });
+    console.log("Deleted food cost details:", deleteDetailsResult);
+
+    // Delete the main entry
+    console.log("Deleting food cost entry with ID:", id);
+    await prisma.foodCostEntry.delete({
+      where: { id: Number(id) },
+    });
+
+    console.log("Food cost entry deleted successfully, triggering recalculation...");
+    
+    // Trigger recalculation (but don't fail the deletion if recalculation fails)
+    try {
+      await calculateAndUpdateDailyFinancialSummary(entryDate);
+      console.log("Recalculation completed successfully");
+    } catch (recalcError) {
+      console.error("Error during recalculation (non-fatal):", recalcError);
+      // Continue - deletion was successful even if recalculation failed
+    }
+
+    console.log("Revalidating paths...");
+    revalidatePath("/dashboard/food-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    
+    console.log("Delete operation completed successfully");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting food cost entry:", error);
+    // Re-throw the original error instead of a generic message
+    if (error instanceof Error) {
+      throw new Error(`Failed to delete food cost entry: ${error.message}`);
+    }
+    throw new Error("Failed to delete food cost entry: Unknown error");
+  }
+}
+
+export async function getFoodCostEntriesByDateRangeAction(
   startDate: Date,
   endDate: Date,
-  outletId: string
-): Promise<DailyFinancialSummary[]> {
+  outletId?: number,
+  propertyId?: string
+) {
   try {
-    if (!db) {
-      throw new Error("Firestore 'db' instance is not available.");
+    const whereClause: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (outletId) {
+      whereClause.outletId = outletId;
     }
 
-    const startTimestamp = Timestamp.fromDate(startDate);
-    const endTimestamp = Timestamp.fromDate(endDate);
-
-    let q = query(
-      collection(db, "dailyFinancialSummaries"),
-      where("date", ">=", startTimestamp),
-      where("date", "<=", endTimestamp),
-      orderBy("date", "asc")
-    );
-
-    if (outletId && outletId !== "all") {
-      q = query(q, where("outlet_id", "==", outletId));
+    if (propertyId && propertyId !== "all") {
+      whereClause.propertyId = parseInt(propertyId);
     }
 
-    const querySnapshot = await getDocs(q);
-    const summaries: DailyFinancialSummary[] = [];
-
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      summaries.push({
-        id: doc.id,
-        date: data.date instanceof Timestamp ? data.date.toDate() : data.date,
-        outlet_id: data.outlet_id,
-        actual_food_revenue: data.actual_food_revenue || 0,
-        actual_beverage_revenue: data.actual_beverage_revenue || 0,
-        budget_food_revenue: data.budget_food_revenue || 0,
-        budget_beverage_revenue: data.budget_beverage_revenue || 0,
-        budget_food_cost: data.budget_food_cost || 0,
-        budget_beverage_cost: data.budget_beverage_cost || 0,
-        gross_food_cost: data.gross_food_cost || 0,
-        gross_beverage_cost: data.gross_beverage_cost || 0,
-        net_food_cost: data.net_food_cost || 0,
-        net_beverage_cost: data.net_beverage_cost || 0,
-        total_adjusted_food_cost: data.total_adjusted_food_cost || 0,
-        total_adjusted_beverage_cost: data.total_adjusted_beverage_cost || 0,
-        total_covers: data.total_covers || 0,
-        average_check: data.average_check || 0,
-        budget_food_cost_pct: data.budget_food_cost_pct || 0,
-        budget_beverage_cost_pct: data.budget_beverage_cost_pct || 0,
-        ent_food: data.ent_food || 0,
-        oc_food: data.oc_food || 0,
-        other_food_adjustment: data.other_food_adjustment || 0,
-        entertainment_beverage_cost: data.entertainment_beverage_cost || 0,
-        officer_check_comp_beverage: data.officer_check_comp_beverage || 0,
-        other_beverage_adjustments: data.other_beverage_adjustments || 0,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-      });
+    const entries = await prisma.foodCostEntry.findMany({
+      where: whereClause,
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        date: "desc",
+      },
     });
-    return summaries;
-  } catch (error: any) {
-    console.error("Error fetching flash food cost report:", error);
-    throw new Error(`Could not load flash food cost report. Details: ${error.message}`);
+
+    return entries;
+  } catch (error) {
+    console.error("Error fetching food cost entries by date range:", error);
+    throw new Error("Failed to fetch food cost entries");
   }
 }
 
+export async function getFoodCostEntriesForDateAction(date: Date, outletId?: number, propertyId?: number) {
+  try {
+    const normalizedDate = normalizeDate(date);
+    
+    const whereClause: any = {
+      date: {
+        gte: normalizedDate,
+        lt: new Date(normalizedDate.getTime() + 24 * 60 * 60 * 1000),
+      },
+    };
+
+    if (outletId) {
+      whereClause.outletId = outletId;
+    }
+
+    if (propertyId) {
+      whereClause.propertyId = propertyId;
+    }
+
+    const entries = await prisma.foodCostEntry.findMany({
+      where: whereClause,
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return entries;
+  } catch (error) {
+    console.error("Error fetching food cost entries for date:", error);
+    throw new Error("Failed to fetch food cost entries");
+  }
+}
+
+export async function getFoodCostEntriesByOutletAction(outletId: number) {
+  try {
+    const entries = await prisma.foodCostEntry.findMany({
+      where: { outletId: Number(outletId) },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+    return entries;
+  } catch (error) {
+    console.error("Error fetching food cost entries by outlet:", error);
+    throw new Error("Failed to fetch food cost entries");
+  }
+}
+
+// Food Cost Detail Actions
+export async function createFoodCostDetailAction(detailData: {
+  foodCostEntryId: number;
+  categoryId: number;
+  categoryName?: string;
+  cost: number;
+  description?: string;
+}) {
+  try {
+    const detail = await prisma.foodCostDetail.create({
+      data: detailData,
+      include: {
+        category: true,
+        foodCostEntry: {
+          include: {
+            outlet: true,
+          },
+        },
+      },
+    });
+
+    // Update total cost of the parent entry
+    const totalCost = await prisma.foodCostDetail.aggregate({
+      where: { foodCostEntryId: detailData.foodCostEntryId },
+      _sum: { cost: true },
+    });
+
+    await prisma.foodCostEntry.update({
+      where: { id: detailData.foodCostEntryId },
+      data: { totalFoodCost: totalCost._sum.cost || 0 },
+    });
+
+    // Trigger recalculation
+    if (detail.foodCostEntry) {
+      await calculateAndUpdateDailyFinancialSummary(detail.foodCostEntry.date);
+    }
+
+    revalidatePath("/dashboard/food-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return detail;
+  } catch (error) {
+    console.error("Error creating food cost detail:", error);
+    throw new Error("Failed to create food cost detail");
+  }
+}
+
+export async function updateFoodCostDetailAction(
+  id: number,
+  detailData: {
+    categoryId?: number;
+    categoryName?: string;
+    cost?: number;
+    description?: string;
+  }
+) {
+  try {
+    const detail = await prisma.foodCostDetail.update({
+      where: { id: Number(id) },
+      data: detailData,
+      include: {
+        category: true,
+        foodCostEntry: {
+          include: {
+            outlet: true,
+          },
+        },
+      },
+    });
+
+    // Update total cost of the parent entry
+    const totalCost = await prisma.foodCostDetail.aggregate({
+      where: { foodCostEntryId: detail.foodCostEntryId },
+      _sum: { cost: true },
+    });
+
+    await prisma.foodCostEntry.update({
+      where: { id: detail.foodCostEntryId },
+      data: { totalFoodCost: totalCost._sum.cost || 0 },
+    });
+
+    // Trigger recalculation
+    if (detail.foodCostEntry) {
+      await calculateAndUpdateDailyFinancialSummary(detail.foodCostEntry.date);
+    }
+
+    revalidatePath("/dashboard/food-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return detail;
+  } catch (error) {
+    console.error("Error updating food cost detail:", error);
+    throw new Error("Failed to update food cost detail");
+  }
+}
+
+export async function deleteFoodCostDetailAction(id: number) {
+  try {
+    // Get detail info before deletion
+    const detail = await prisma.foodCostDetail.findUnique({
+      where: { id: Number(id) },
+      include: {
+        foodCostEntry: true,
+      },
+    });
+
+    if (!detail) {
+      throw new Error("Food cost detail not found");
+    }
+
+    await prisma.foodCostDetail.delete({
+      where: { id: Number(id) },
+    });
+
+    // Update total cost of the parent entry
+    const totalCost = await prisma.foodCostDetail.aggregate({
+      where: { foodCostEntryId: detail.foodCostEntryId },
+      _sum: { cost: true },
+    });
+
+    await prisma.foodCostEntry.update({
+      where: { id: detail.foodCostEntryId },
+      data: { totalFoodCost: totalCost._sum.cost || 0 },
+    });
+
+    // Trigger recalculation
+    await calculateAndUpdateDailyFinancialSummary(detail.foodCostEntry.date);
+
+    revalidatePath("/dashboard/food-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting food cost detail:", error);
+    throw new Error("Failed to delete food cost detail");
+  }
+}
+
+// Legacy function aliases for compatibility
+export const saveFoodCostEntryAction = createFoodCostEntryAction;
+export const getFoodCostEntryWithDetailsAction = getFoodCostEntryByIdAction;
+
+// Category functions that redirect to the category actions
+export async function getFoodCategoriesAction() {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { type: "Food" },
+      orderBy: { name: "asc" },
+    });
+    return categories;
+  } catch (error) {
+    console.error("Error fetching food categories:", error);
+    throw new Error("Failed to fetch food categories");
+  }
+}
+
+// Outlet function that redirects to outlet actions
+export async function getOutletsAction() {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    let whereClause = {};
+    
+    // Super admins can see all outlets
+    if (user.role !== "super_admin") {
+      // Property-specific users can only see outlets from their accessible properties
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (userPropertyIds.length === 0) {
+        return []; // No access to any properties
+      }
+      
+      whereClause = {
+        propertyId: {
+          in: userPropertyIds
+        }
+      };
+    }
+
+    const outlets = await prisma.outlet.findMany({
+      where: whereClause,
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        }
+      },
+      orderBy: { name: "asc" },
+    });
+    return outlets;
+  } catch (error) {
+    console.error("Error fetching outlets:", error);
+    throw new Error("Failed to fetch outlets");
+  }
+}
+
+// Report functions
 export async function getDetailedFoodCostReportAction(
   startDate: Date,
   endDate: Date,
-  outletId: string
-): Promise<DetailedFoodCostReportResponse> {
+  outletId?: number | string
+) {
   try {
-    if (!db) {
-      throw new Error("Firestore 'db' instance is not available.");
-    }
-
-    const normalizedStartDate = new Date(Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()));
-    const normalizedEndDate = new Date(Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999));
-
-    const startTimestamp = Timestamp.fromDate(normalizedStartDate);
-    const endTimestamp = Timestamp.fromDate(normalizedEndDate);
-
-    const generateSingleReport = async (currentOutletId: string, currentOutletName: string): Promise<DetailedFoodCostReport> => {
-      let foodCostEntriesQuery = query(
-        collection(db!, FOOD_COST_ENTRIES_COLLECTION),
-        where("date", ">=", startTimestamp),
-        where("date", "<=", endTimestamp),
-        where("outlet_id", "==", currentOutletId)
-      );
-      const foodCostEntriesSnapshot = await getDocs(foodCostEntriesQuery);
-      const foodCostEntryIds = foodCostEntriesSnapshot.docs.map(doc => doc.id);
-
-      const categoryCostsMap = new Map<string, number>();
-      const individualFoodCostDetails: { categoryName: string; description: string; cost: number }[] = [];
-      let totalCostFromTransfers = 0;
-
-      if (foodCostEntryIds.length > 0) {
-        const chunkSize = 10;
-        for (let i = 0; i < foodCostEntryIds.length; i += chunkSize) {
-          const chunk = foodCostEntryIds.slice(i, i + chunkSize);
-          const foodCostDetailsQuery = query(
-            collection(db!, FOOD_COST_DETAILS_COLLECTION),
-            where("food_cost_entry_id", "in", chunk)
-          );
-          const foodCostDetailsSnapshot = await getDocs(foodCostDetailsQuery);
+    // Handle "all" or string outletId by converting to undefined
+    const numericOutletId = typeof outletId === 'string' && outletId === 'all' 
+      ? undefined 
+      : typeof outletId === 'string' 
+      ? Number(outletId) 
+      : outletId;
+      
+    const entries = await getFoodCostEntriesByDateRangeAction(startDate, endDate, numericOutletId);
+    
+    // Get outlets for outlet names
+    const outlets = await prisma.outlet.findMany();
+    const outletMap = new Map(outlets.map(o => [o.id, o.name]));
+    
+    // Get financial summaries for revenue and budget data
+    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
+    
+    // Group entries by outlet
+    const outletEntries = new Map<number, typeof entries>();
+    entries.forEach(entry => {
+      if (!outletEntries.has(entry.outletId)) {
+        outletEntries.set(entry.outletId, []);
+      }
+      outletEntries.get(entry.outletId)!.push(entry);
+    });
+    
+    // Transform to expected format
+    const outletReports = Array.from(outletEntries.entries()).map(([outletId, outletData]) => {
+      // Calculate category costs
+      const categoryCosts = new Map<string, number>();
+      const foodCostDetailsByItem: { categoryName: string; description: string; cost: number; percentageOfTotalCost?: number }[] = [];
+      
+      let totalCostOfFood = 0;
+      
+      outletData.forEach(entry => {
+        totalCostOfFood += entry.totalFoodCost || 0;
+        
+        entry.details?.forEach(detail => {
+          const categoryName = detail.category?.name || detail.categoryName || 'Unknown';
+          const currentCost = categoryCosts.get(categoryName) || 0;
+          categoryCosts.set(categoryName, currentCost + detail.cost);
           
-          const categoriesSnapshot = await getDocs(collection(db!, CATEGORIES_COLLECTION));
-          const categoriesMap = new Map<string, string>();
-          categoriesSnapshot.forEach(doc => categoriesMap.set(doc.id, doc.data().name));
-
-          foodCostDetailsSnapshot.forEach(doc => {
-            const detail = doc.data() as FoodCostDetail;
-            const categoryName = categoriesMap.get(detail.category_id) || "Unknown Category";
-            const cost = detail.cost || 0;
-            categoryCostsMap.set(categoryName, (categoryCostsMap.get(categoryName) || 0) + cost);
-            totalCostFromTransfers += cost;
-            individualFoodCostDetails.push({
-              categoryName,
-              description: detail.description || '-',
-              cost,
-            });
+          foodCostDetailsByItem.push({
+            categoryName,
+            description: detail.description || '',
+            cost: detail.cost,
+            percentageOfTotalCost: 0 // Will be calculated below
           });
-        }
-      }
-
-      const categoryCosts = Array.from(categoryCostsMap.entries()).map(([categoryName, totalCost]) => ({
-        categoryName,
-        totalCost,
-        percentageOfTotalCost: totalCostFromTransfers > 0 ? (totalCost / totalCostFromTransfers) * 100 : 0,
-      }));
-
-      // PART 2: Summary total figures from Daily Financial Summary
-      let summaryQuery = query(
-        collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
-        where("date", ">=", startTimestamp),
-        where("date", "<=", endTimestamp),
-        // Removed where("outlet_id", "==", currentOutletId) as DailyFinancialSummary is a hotel-level summary
-        orderBy("date", "asc")
-      );
-      const summarySnapshot = await getDocs(summaryQuery);
-      if (summarySnapshot.empty) {
-        console.error(`[generateSingleReport - ${currentOutletName}] No DailyFinancialSummary documents found for date range ${startTimestamp.toDate().toISOString()} to ${endTimestamp.toDate().toISOString()}.`);
-      }
-
-      let totalFoodRevenue = 0;
-      let totalEntertainmentFoodCost = 0;
-      let totalOcFoodCost = 0;
-      let totalOtherFoodAdjustments = 0;
-      let totalBudgetFoodCostPct = 0;
-      let budgetFoodCostPctCount = 0;
-
-      summarySnapshot.forEach(doc => {
-        const data = doc.data() as DailyFinancialSummary;
-        totalFoodRevenue += data.actual_food_revenue || 0;
-        totalEntertainmentFoodCost += data.ent_food || 0;
-        totalOcFoodCost += data.oc_food || 0;
-        totalOtherFoodAdjustments += data.other_food_adjustment || 0;
-        if (data.budget_food_cost_pct != null) {
-          totalBudgetFoodCostPct += data.budget_food_cost_pct;
-          budgetFoodCostPctCount++;
-        }
+        });
       });
-
-      const budgetFoodCostPercentage = budgetFoodCostPctCount > 0 ? totalBudgetFoodCostPct / budgetFoodCostPctCount : 0;
-
-      const totalCostOfFood = totalCostFromTransfers - totalOcFoodCost - totalEntertainmentFoodCost + totalOtherFoodAdjustments;
-
-      const foodCostPercentage = totalFoodRevenue > 0 ? (totalCostOfFood / totalFoodRevenue) * 100 : 0;
-
-      const variancePercentage = foodCostPercentage - budgetFoodCostPercentage;
-
+      
+      // For individual outlet reports, we'll use placeholder values since financial summaries
+      // are not outlet-specific in the current schema. Real values will be calculated in overall summary.
+      const totalFoodRevenue = 0; // Will be calculated properly in overall summary
+      const budgetFoodCostPercentage = 0; // Will be calculated properly in overall summary
+      const foodCostPercentage = 0; // Will be calculated properly in overall summary
+      const variancePercentage = 0; // Will be calculated properly in overall summary
+      
+      // Calculate percentages
+      foodCostDetailsByItem.forEach(item => {
+        item.percentageOfTotalCost = totalCostOfFood > 0 ? (item.cost / totalCostOfFood) * 100 : 0;
+      });
+      
       return {
-        outletName: currentOutletName,
-        outletId: currentOutletId,
+        outletName: outletMap.get(outletId) || 'Unknown Outlet',
+        outletId: outletId.toString(),
         dateRange: { from: startDate, to: endDate },
-        categoryCosts,
-        totalCostFromTransfers,
-        otherAdjustmentsFood: totalOtherFoodAdjustments,
-        ocFoodTotal: totalOcFoodCost,
-        entFoodTotal: totalEntertainmentFoodCost,
+        categoryCosts: Array.from(categoryCosts.entries()).map(([categoryName, totalCost]) => ({
+          categoryName,
+          totalCost,
+          percentageOfTotalCost: totalCostOfFood > 0 ? (totalCost / totalCostOfFood) * 100 : 0
+        })),
+        totalCostFromTransfers: totalCostOfFood, // Use actual food cost as transfer cost
+        otherAdjustmentsFood: 0, // Will be calculated in overall summary
+        ocFoodTotal: 0, // Will be calculated in overall summary
+        entFoodTotal: 0, // Will be calculated in overall summary
         totalCostOfFood,
         totalFoodRevenue,
         foodCostPercentage,
         budgetFoodCostPercentage,
         variancePercentage,
-        foodCostDetailsByItem: individualFoodCostDetails,
+        foodCostDetailsByItem
       };
-    };
-
-    const outletReports: DetailedFoodCostReport[] = [];
-    let overallSummaryReport: DetailedFoodCostReport;
-
-    if (outletId === "all") {
-      const allOutlets = await getOutletsAction();
-      for (const outlet of allOutlets) {
-        const report = await generateSingleReport(outlet.id, outlet.name);
-        outletReports.push(report);
-      }
-
-      // For overall summary, fetch DailyFinancialSummary once for the entire date range (hotel level)
-      let overallSummaryQuery = query(
-        collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
-        where("date", ">=", startTimestamp),
-        where("date", "<=", endTimestamp),
-        orderBy("date", "asc")
-      );
-      const overallSummarySnapshot = await getDocs(overallSummaryQuery);
-
-      let totalOverallFoodRevenue = 0;
-      let totalOverallEntertainmentFoodCost = 0;
-      let totalOverallOcFoodCost = 0;
-      let totalOverallOtherFoodAdjustments = 0;
-      let totalOverallBudgetFoodCostPct = 0;
-      let overallBudgetFoodCostPctCount = 0;
-
-      overallSummarySnapshot.forEach(doc => {
-        const data = doc.data() as DailyFinancialSummary;
-        totalOverallFoodRevenue += data.actual_food_revenue || 0;
-        totalOverallEntertainmentFoodCost += data.ent_food || 0;
-        totalOverallOcFoodCost += data.oc_food || 0;
-        totalOverallOtherFoodAdjustments += data.other_food_adjustment || 0;
-        if (data.budget_food_cost_pct != null) {
-          totalOverallBudgetFoodCostPct += data.budget_food_cost_pct;
-          overallBudgetFoodCostPctCount++;
-        }
+    });
+    
+    // Create overall summary by aggregating all outlet reports and financial data
+    const overallCategoryCosts = new Map<string, number>();
+    const overallFoodCostDetailsByItem: { categoryName: string; description: string; cost: number; percentageOfTotalCost?: number }[] = [];
+    let overallTotalCostOfFood = 0;
+    let overallTotalFoodRevenue = 0;
+    let overallTotalEntFood = 0;
+    let overallTotalCoFood = 0;
+    let overallTotalOtherFoodAdjustment = 0;
+    let overallTotalBudgetFoodCost = 0;
+    let overallTotalBudgetFoodRevenue = 0;
+    
+    // Aggregate cost data from outlet reports (only cost-related data, not financial summary data)
+    outletReports.forEach(report => {
+      overallTotalCostOfFood += report.totalCostOfFood;
+      
+      report.categoryCosts.forEach(({ categoryName, totalCost }) => {
+        const currentCost = overallCategoryCosts.get(categoryName) || 0;
+        overallCategoryCosts.set(categoryName, currentCost + totalCost);
       });
-
-      // Total Cost from Transfers for overall summary should still be sum of outlet-specific transfers
-      let totalOverallCostFromTransfers = 0;
-      outletReports.forEach(report => {
-        totalOverallCostFromTransfers += report.totalCostFromTransfers;
-      });
-
-      // Create a map to aggregate category costs across all outlets for detailed items
-      const overallCategoryCostsMap = new Map<string, number>();
-      const overallFoodCostDetailsByItem: { categoryName: string; description: string; cost: number }[] = [];
-
-      outletReports.forEach(report => {
-        report.foodCostDetailsByItem.forEach(item => {
-          const existingCost = overallCategoryCostsMap.get(item.categoryName) || 0;
-          overallCategoryCostsMap.set(item.categoryName, existingCost + item.cost);
-          overallFoodCostDetailsByItem.push({
-            categoryName: item.categoryName,
-            description: item.description,
-            cost: item.cost
-          });
-        });
-      });
-
-      // Calculate average budget food cost percentage for overall summary
-      const overallBudgetFoodCostPercentage = overallBudgetFoodCostPctCount > 0 
-        ? totalOverallBudgetFoodCostPct / overallBudgetFoodCostPctCount 
-        : 0;
-
-      // Calculate Total Cost of Food for overall summary (using the newly fetched totals)
-      const overallTotalCostOfFood = totalOverallCostFromTransfers - 
-        totalOverallOcFoodCost - 
-        totalOverallEntertainmentFoodCost + 
-        totalOverallOtherFoodAdjustments;
-
-      // Calculate Food Cost Percentage for overall summary
-      const overallFoodCostPercentage = totalOverallFoodRevenue > 0 
-        ? (overallTotalCostOfFood / totalOverallFoodRevenue) * 100 
-        : 0;
-
-      // Calculate Variance Percentage for overall summary
-      const overallVariancePercentage = overallFoodCostPercentage - overallBudgetFoodCostPercentage;
-
-      // Convert the category costs map to an array
-      const overallCategoryCosts = Array.from(overallCategoryCostsMap.entries()).map(([categoryName, totalCost]) => ({
+      
+      overallFoodCostDetailsByItem.push(...report.foodCostDetailsByItem);
+    });
+    
+    // Get financial summary data separately (only once, not per outlet to avoid double counting)
+    overallTotalFoodRevenue = financialSummaries.reduce((sum, summary) => sum + (summary.actualFoodRevenue || 0), 0);
+    overallTotalBudgetFoodCost = financialSummaries.reduce((sum, summary) => sum + (summary.budgetFoodCost || 0), 0);
+    overallTotalBudgetFoodRevenue = financialSummaries.reduce((sum, summary) => sum + (summary.budgetFoodRevenue || 0), 0);
+    overallTotalEntFood = financialSummaries.reduce((sum, summary) => sum + (summary.entFood || 0), 0);
+    overallTotalCoFood = financialSummaries.reduce((sum, summary) => sum + (summary.coFood || 0), 0);
+    overallTotalOtherFoodAdjustment = financialSummaries.reduce((sum, summary) => sum + (summary.otherFoodAdjustment || 0), 0);
+    
+    // Calculate actual food cost using the same formula as financial summary module
+    // actualFoodCost = totalFoodCost - entFood - coFood + otherFoodAdjustment
+    const actualFoodCost = overallTotalCostOfFood - overallTotalEntFood - overallTotalCoFood + overallTotalOtherFoodAdjustment;
+    
+    // Calculate average budgeted food cost percentage from financial summaries
+    const validFoodBudgetPcts = financialSummaries.filter(summary => summary.budgetFoodCostPct != null && summary.budgetFoodCostPct > 0);
+    const overallBudgetFoodCostPercentage = validFoodBudgetPcts.length > 0 
+      ? validFoodBudgetPcts.reduce((sum, summary) => sum + (summary.budgetFoodCostPct || 0), 0) / validFoodBudgetPcts.length 
+      : 0;
+    const overallFoodCostPercentage = overallTotalFoodRevenue > 0 ? (actualFoodCost / overallTotalFoodRevenue) * 100 : 0;
+    const overallVariancePercentage = overallFoodCostPercentage - overallBudgetFoodCostPercentage;
+    
+    console.log('Food Cost Report Debug:', {
+      rawTotalCostOfFood: overallTotalCostOfFood,
+      actualFoodCost,
+      overallTotalFoodRevenue,
+      overallTotalEntFood,
+      overallTotalCoFood,
+      overallTotalOtherFoodAdjustment,
+      overallTotalBudgetFoodCost,
+      overallTotalBudgetFoodRevenue,
+      outletReportsCount: outletReports.length,
+      financialSummariesCount: financialSummaries.length
+    });
+    
+    // Recalculate percentages for overall summary
+    overallFoodCostDetailsByItem.forEach(item => {
+      item.percentageOfTotalCost = overallTotalCostOfFood > 0 ? (item.cost / overallTotalCostOfFood) * 100 : 0;
+    });
+    
+    const overallSummaryReport = {
+      outletName: 'All Outlets',
+      outletId: 'all',
+      dateRange: { from: startDate, to: endDate },
+      categoryCosts: Array.from(overallCategoryCosts.entries()).map(([categoryName, totalCost]) => ({
         categoryName,
         totalCost,
-      }));
-
-      overallSummaryReport = {
-        outletName: "All Outlets",
-        outletId: "all",
-        dateRange: { from: startDate, to: endDate },
-        categoryCosts: overallCategoryCosts,
-        totalCostFromTransfers: totalOverallCostFromTransfers,
-        otherAdjustmentsFood: totalOverallOtherFoodAdjustments,
-        ocFoodTotal: totalOverallOcFoodCost,
-        entFoodTotal: totalOverallEntertainmentFoodCost,
-        totalCostOfFood: overallTotalCostOfFood,
-        totalFoodRevenue: totalOverallFoodRevenue,
-        foodCostPercentage: overallFoodCostPercentage,
-        budgetFoodCostPercentage: overallBudgetFoodCostPercentage,
-        variancePercentage: overallVariancePercentage,
-        foodCostDetailsByItem: overallFoodCostDetailsByItem,
-      };
-
-    } else {
-      const outletDoc = await getDoc(doc(db!, "outlets", outletId));
-      if (outletDoc.exists()) {
-        const outletName = outletDoc.data().name;
-        const report = await generateSingleReport(outletId, outletName);
-        outletReports.push(report);
-        overallSummaryReport = report;
-      } else {
-        throw new Error("Selected outlet not found.");
-      }
-    }
-
-    return { outletReports, overallSummaryReport };
-
-  } catch (error: any) {
+        percentageOfTotalCost: overallTotalCostOfFood > 0 ? (totalCost / overallTotalCostOfFood) * 100 : 0
+      })),
+      totalCostFromTransfers: overallTotalCostOfFood, // This represents the base cost before adjustments
+      otherAdjustmentsFood: overallTotalOtherFoodAdjustment,
+      ocFoodTotal: overallTotalCoFood,
+      entFoodTotal: overallTotalEntFood,
+      totalCostOfFood: actualFoodCost,
+      totalFoodRevenue: overallTotalFoodRevenue,
+      foodCostPercentage: overallFoodCostPercentage,
+      budgetFoodCostPercentage: overallBudgetFoodCostPercentage,
+      variancePercentage: overallVariancePercentage,
+      foodCostDetailsByItem: overallFoodCostDetailsByItem
+    };
+    
+    return {
+      outletReports,
+      overallSummaryReport
+    };
+  } catch (error) {
     console.error("Error fetching detailed food cost report:", error);
-    throw new Error(`Could not load detailed food cost report. Details: ${error.message}`);
+    throw new Error("Failed to fetch detailed food cost report");
   }
 }
 
 export async function getCostAnalysisByCategoryReportAction(
-  fromDate: Date,
-  toDate: Date,
-  outletId?: string
-): Promise<CostAnalysisByCategoryReport> {
+  startDate: Date,
+  endDate: Date,
+  outletId?: number | string
+) {
   try {
-    console.log('=== Cost Analysis by Category Report Debug ===');
-    console.log('Date range:', fromDate, 'to', toDate);
-    console.log('Outlet ID:', outletId);
-    console.log('Function started successfully');
-    
-    const db = getFirestore();
-    console.log('Firestore instance obtained');
-    
-    // Get all outlets
-    const outletsSnapshot = await getDocs(collection(db, 'outlets'));
-    const outlets = outletsSnapshot.docs.map(doc => ({
-      id: doc.id,
-      name: doc.data().name
-    }));
-    console.log('Found outlets:', outlets.length);
+    // Handle "all" or string outletId by converting to undefined
+    const numericOutletId = typeof outletId === 'string' && outletId === 'all' 
+      ? undefined 
+      : typeof outletId === 'string' 
+      ? Number(outletId) 
+      : outletId;
 
-    // Filter outlets based on outletId parameter
-    const targetOutlets = outletId && outletId !== "all" 
-      ? outlets.filter(outlet => outlet.id === outletId)
-      : outlets;
-    console.log('Target outlets:', targetOutlets.length);
-
-    // Get all categories
-    const categoriesSnapshot = await getDocs(collection(db, 'categories'));
-    const categories = categoriesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      name: doc.data().name,
-      type: doc.data().type
-    }));
-    console.log('Found categories:', categories.length);
-
-    // Get food cost entries and details for the date range
-    const foodCostEntriesQuery = query(
-      collection(db, 'foodCostEntries'),
-      where('date', '>=', fromDate),
-      where('date', '<=', toDate)
-    );
-    const foodCostEntriesSnapshot = await getDocs(foodCostEntriesQuery);
-    console.log('Found food cost entries:', foodCostEntriesSnapshot.docs.length);
-    
-    // Get beverage cost entries and details for the date range
-    const beverageCostEntriesQuery = query(
-      collection(db, 'beverageCostEntries'),
-      where('date', '>=', fromDate),
-      where('date', '<=', toDate)
-    );
-    const beverageCostEntriesSnapshot = await getDocs(beverageCostEntriesQuery);
-    console.log('Found beverage cost entries:', beverageCostEntriesSnapshot.docs.length);
-
-    // Get food cost details for the found entries
-    const foodCostEntryIds = foodCostEntriesSnapshot.docs.map(doc => doc.id);
-    let foodCostDetailsSnapshot: { docs: any[] } = { docs: [] };
-    if (foodCostEntryIds.length > 0) {
-      // Use 'in' query for food cost details (Firestore allows up to 10 items in 'in' clause)
-      const chunkSize = 10;
-      for (let i = 0; i < foodCostEntryIds.length; i += chunkSize) {
-        const chunk = foodCostEntryIds.slice(i, i + chunkSize);
-        const foodCostDetailsQuery = query(
-          collection(db, 'foodCostDetails'),
-          where('food_cost_entry_id', 'in', chunk)
-        );
-        const chunkSnapshot = await getDocs(foodCostDetailsQuery);
-        foodCostDetailsSnapshot.docs.push(...chunkSnapshot.docs);
-      }
-    }
-    console.log('Found food cost details:', foodCostDetailsSnapshot.docs.length);
-
-    // Get beverage cost details for the found entries
-    const beverageCostEntryIds = beverageCostEntriesSnapshot.docs.map(doc => doc.id);
-    let beverageCostDetailsSnapshot: { docs: any[] } = { docs: [] };
-    if (beverageCostEntryIds.length > 0) {
-      // Use 'in' query for beverage cost details
-      const chunkSize = 10;
-      for (let i = 0; i < beverageCostEntryIds.length; i += chunkSize) {
-        const chunk = beverageCostEntryIds.slice(i, i + chunkSize);
-        const beverageCostDetailsQuery = query(
-          collection(db, 'beverageCostDetails'),
-          where('beverage_cost_entry_id', 'in', chunk)
-        );
-        const chunkSnapshot = await getDocs(beverageCostDetailsQuery);
-        beverageCostDetailsSnapshot.docs.push(...chunkSnapshot.docs);
-      }
-    }
-    console.log('Found beverage cost details:', beverageCostDetailsSnapshot.docs.length);
-
-    // Get daily financial summaries for revenue data
-    const dailySummariesQuery = query(
-      collection(db, 'dailyFinancialSummaries'),
-      where('date', '>=', fromDate),
-      where('date', '<=', toDate)
-    );
-    const dailySummariesSnapshot = await getDocs(dailySummariesQuery);
-    console.log('Found daily financial summaries:', dailySummariesSnapshot.docs.length);
-
-    // Calculate total revenue (filtered by outlet if specified)
-    let totalFoodRevenue = 0;
-    let totalBeverageRevenue = 0;
-    dailySummariesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      if (!outletId || outletId === "all" || data.outlet_id === outletId) {
-        totalFoodRevenue += data.actual_food_revenue || 0;
-        totalBeverageRevenue += data.actual_beverage_revenue || 0;
-      }
+    // Fetch food cost details
+    const foodDetails = await prisma.foodCostDetail.findMany({
+      where: {
+        foodCostEntry: {
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+          ...(numericOutletId && { outletId: numericOutletId }),
+        },
+      },
+      include: {
+        category: true,
+        foodCostEntry: {
+          include: {
+            outlet: true,
+          },
+        },
+      },
     });
+
+    // Fetch beverage cost details
+    const beverageDetails = await prisma.beverageCostDetail.findMany({
+      where: {
+        beverageCostEntry: {
+          date: {
+            gte: startDate,
+            lte: endDate,
+          },
+          ...(numericOutletId && { outletId: numericOutletId }),
+        },
+      },
+      include: {
+        category: true,
+        beverageCostEntry: {
+          include: {
+            outlet: true,
+          },
+        },
+      },
+    });
+
+    // Get daily financial summaries for revenue data and adjustments
+    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
+
+    // Calculate totals from financial summaries
+    const totalFoodRevenue = financialSummaries.reduce((sum, s) => sum + (s.actualFoodRevenue || 0), 0);
+    const totalBeverageRevenue = financialSummaries.reduce((sum, s) => sum + (s.actualBeverageRevenue || 0), 0);
     const totalRevenue = totalFoodRevenue + totalBeverageRevenue;
-    console.log('Total food revenue:', totalFoodRevenue);
-    console.log('Total beverage revenue:', totalBeverageRevenue);
-    console.log('Total revenue:', totalRevenue);
 
-    // Process food cost details by category (filtered by outlet if specified)
-    const foodCategoryData: { [categoryId: string]: { [outletId: string]: number } } = {};
-    const foodCategoryNames: { [categoryId: string]: string } = {};
-    
-    foodCostDetailsSnapshot.docs.forEach((doc: any) => {
-      const data = doc.data();
-      const categoryId = data.category_id;
-      const cost = data.cost || 0;
-      
-      // Get the outlet_id from the food cost entry
-      const foodCostEntryId = data.food_cost_entry_id;
-      const foodCostEntryDoc = foodCostEntriesSnapshot.docs.find(entryDoc => entryDoc.id === foodCostEntryId);
-      if (!foodCostEntryDoc) {
-        console.log('No food cost entry found for detail:', foodCostEntryId);
-        return;
-      }
-      
-      const entryData = foodCostEntryDoc.data();
-      const entryOutletId = entryData.outlet_id;
-      
-      // Filter by outlet if specified
-      if (outletId && outletId !== "all" && entryOutletId !== outletId) return;
-      
-      if (!foodCategoryData[categoryId]) {
-        foodCategoryData[categoryId] = {};
-        const category = categories.find(c => c.id === categoryId);
-        foodCategoryNames[categoryId] = category?.name || 'Unknown Category';
-      }
-      
-      if (!foodCategoryData[categoryId][entryOutletId]) {
-        foodCategoryData[categoryId][entryOutletId] = 0;
-      }
-      foodCategoryData[categoryId][entryOutletId] += cost;
-    });
-    console.log('Food category data:', Object.keys(foodCategoryData).length, 'categories');
+    // Calculate raw costs from cost details
+    const rawFoodCost = foodDetails.reduce((sum, detail) => sum + detail.cost, 0);
+    const rawBeverageCost = beverageDetails.reduce((sum, detail) => sum + detail.cost, 0);
 
-    // Process beverage cost details by category (filtered by outlet if specified)
-    const beverageCategoryData: { [categoryId: string]: { [outletId: string]: number } } = {};
-    const beverageCategoryNames: { [categoryId: string]: string } = {};
-    
-    beverageCostDetailsSnapshot.docs.forEach((doc: any) => {
-      const data = doc.data();
-      const categoryId = data.category_id;
-      const cost = data.cost || 0;
-      
-      // Get the outlet_id from the beverage cost entry
-      const beverageCostEntryId = data.beverage_cost_entry_id;
-      const beverageCostEntryDoc = beverageCostEntriesSnapshot.docs.find(entryDoc => entryDoc.id === beverageCostEntryId);
-      if (!beverageCostEntryDoc) {
-        console.log('No beverage cost entry found for detail:', beverageCostEntryId);
-        return;
-      }
-      
-      const entryData = beverageCostEntryDoc.data();
-      const entryOutletId = entryData.outlet_id;
-      
-      // Filter by outlet if specified
-      if (outletId && outletId !== "all" && entryOutletId !== outletId) return;
-      
-      if (!beverageCategoryData[categoryId]) {
-        beverageCategoryData[categoryId] = {};
-        const category = categories.find(c => c.id === categoryId);
-        beverageCategoryNames[categoryId] = category?.name || 'Unknown Category';
-      }
-      
-      if (!beverageCategoryData[categoryId][entryOutletId]) {
-        beverageCategoryData[categoryId][entryOutletId] = 0;
-      }
-      beverageCategoryData[categoryId][entryOutletId] += cost;
-    });
-    console.log('Beverage category data:', Object.keys(beverageCategoryData).length, 'categories');
+    // Calculate adjustments from financial summaries
+    const totalEntFood = financialSummaries.reduce((sum, s) => sum + (s.entFood || 0), 0);
+    const totalCoFood = financialSummaries.reduce((sum, s) => sum + (s.coFood || 0), 0);
+    const totalOtherFoodAdjustment = financialSummaries.reduce((sum, s) => sum + (s.otherFoodAdjustment || 0), 0);
+    const totalEntBeverage = financialSummaries.reduce((sum, s) => sum + (s.entBeverage || 0), 0);
+    const totalCoBeverage = financialSummaries.reduce((sum, s) => sum + (s.coBeverage || 0), 0);
+    const totalOtherBeverageAdjustment = financialSummaries.reduce((sum, s) => sum + (s.otherBeverageAdjustment || 0), 0);
 
-    // Calculate total costs
-    let totalFoodCost = 0;
-    let totalBeverageCost = 0;
+    // Calculate final costs after adjustments
+    const totalFoodCost = rawFoodCost - (totalEntFood + totalCoFood) + totalOtherFoodAdjustment;
+    const totalBeverageCost = rawBeverageCost - (totalEntBeverage + totalCoBeverage) + totalOtherBeverageAdjustment;
+    const totalCost = totalFoodCost + totalBeverageCost;
 
-    Object.values(foodCategoryData).forEach(outletCosts => {
-      Object.values(outletCosts).forEach(cost => {
-        totalFoodCost += cost;
-      });
+    // Process food categories
+    const foodCategoryMap = new Map();
+    foodDetails.forEach(detail => {
+      const categoryName = detail.category?.name || 'Unknown';
+      const outletName = detail.foodCostEntry.outlet?.name || 'Unknown';
+      
+      if (!foodCategoryMap.has(categoryName)) {
+        foodCategoryMap.set(categoryName, {
+          categoryId: detail.categoryId.toString(),
+          categoryName,
+          totalCost: 0,
+          outletBreakdown: new Map(),
+        });
+      }
+      
+      const category = foodCategoryMap.get(categoryName);
+      category.totalCost += detail.cost;
+      
+      if (!category.outletBreakdown.has(outletName)) {
+        category.outletBreakdown.set(outletName, 0);
+      }
+      category.outletBreakdown.set(outletName, category.outletBreakdown.get(outletName) + detail.cost);
     });
 
-    Object.values(beverageCategoryData).forEach(outletCosts => {
-      Object.values(outletCosts).forEach(cost => {
-        totalBeverageCost += cost;
-      });
-    });
-
-    // Get adjustment data from daily financial summaries to match dashboard calculations
-    let totalOcFood = 0;
-    let totalEntFood = 0;
-    let totalOtherAdjustmentsFood = 0;
-    let totalOcBeverage = 0;
-    let totalEntBeverage = 0;
-    let totalOtherAdjustmentsBeverage = 0;
-    
-    dailySummariesSnapshot.docs.forEach(doc => {
-      const data = doc.data();
-      if (!outletId || outletId === "all" || data.outlet_id === outletId) {
-        totalOcFood += data.oc_food || 0;
-        totalEntFood += data.ent_food || 0;
-        totalOtherAdjustmentsFood += data.other_food_adjustment || 0;
-        totalOcBeverage += data.officer_check_comp_beverage || 0;
-        totalEntBeverage += data.entertainment_beverage_cost || 0;
-        totalOtherAdjustmentsBeverage += data.other_beverage_adjustments || 0;
+    // Process beverage categories
+    const beverageCategoryMap = new Map();
+    beverageDetails.forEach(detail => {
+      const categoryName = detail.category?.name || 'Unknown';
+      const outletName = detail.beverageCostEntry.outlet?.name || 'Unknown';
+      
+      if (!beverageCategoryMap.has(categoryName)) {
+        beverageCategoryMap.set(categoryName, {
+          categoryId: detail.categoryId.toString(),
+          categoryName,
+          totalCost: 0,
+          outletBreakdown: new Map(),
+        });
       }
+      
+      const category = beverageCategoryMap.get(categoryName);
+      category.totalCost += detail.cost;
+      
+      if (!category.outletBreakdown.has(outletName)) {
+        category.outletBreakdown.set(outletName, 0);
+      }
+      category.outletBreakdown.set(outletName, category.outletBreakdown.get(outletName) + detail.cost);
     });
-    
-    // Calculate net costs (after adjustments) to match dashboard
-    // Formula: actual_cost = gross_cost - ent - oc + other_adjustment
-    const netFoodCost = totalFoodCost - totalOcFood - totalEntFood + totalOtherAdjustmentsFood;
-    const netBeverageCost = totalBeverageCost - totalOcBeverage - totalEntBeverage + totalOtherAdjustmentsBeverage;
-    const totalCost = netFoodCost + netBeverageCost;
-    
-    console.log('Raw food cost:', totalFoodCost);
-    console.log('Food adjustments - OC:', totalOcFood, 'ENT:', totalEntFood, 'Other:', totalOtherAdjustmentsFood);
-    console.log('Net food cost:', netFoodCost);
-    console.log('Raw beverage cost:', totalBeverageCost);
-    console.log('Beverage adjustments - OC:', totalOcBeverage, 'ENT:', totalEntBeverage, 'Other:', totalOtherAdjustmentsBeverage);
-    console.log('Net beverage cost:', netBeverageCost);
-    console.log('Total net cost:', totalCost);
 
-    // Calculate number of days in the range
-    const daysInRange = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    // Calculate number of days for averages
+    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    // Calculate adjustment ratios to apply proportionally
-    // Adjustment = (oc + ent - other_adjustment) / gross_cost
-    const foodAdjustmentRatio = totalFoodCost > 0 ? (totalOcFood + totalEntFood - totalOtherAdjustmentsFood) / totalFoodCost : 0;
-    const beverageAdjustmentRatio = totalBeverageCost > 0 ? (totalOcBeverage + totalEntBeverage - totalOtherAdjustmentsBeverage) / totalBeverageCost : 0;
-    
-    console.log('Food adjustment ratio:', foodAdjustmentRatio);
-    console.log('Beverage adjustment ratio:', beverageAdjustmentRatio);
-
-    // Build food categories analysis with proportional adjustments
-    const foodCategories = Object.entries(foodCategoryData).map(([categoryId, outletCosts]) => {
-      const categoryRawCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
-      const categoryAdjustment = categoryRawCost * foodAdjustmentRatio;
-      const categoryNetCost = categoryRawCost - categoryAdjustment;
-      
-      const outletBreakdown = Object.entries(outletCosts).map(([outletId, cost]) => {
-        const outlet = outlets.find(o => o.id === outletId);
-        const netCostForOutlet = cost - (cost * foodAdjustmentRatio);
-        return {
-          outletName: outlet?.name || 'Unknown Outlet',
-          outletId,
-          cost: netCostForOutlet,
-          rawCost: cost,
-          adjustment: cost * foodAdjustmentRatio,
-          percentageOfOutletFoodCost: netFoodCost > 0 ? (netCostForOutlet / netFoodCost) * 100 : 0
-        };
-      });
-
-      return {
-        categoryName: foodCategoryNames[categoryId],
-        categoryId,
-        totalCost: categoryNetCost,
-        rawCost: categoryRawCost,
-        adjustment: categoryAdjustment,
-        percentageOfTotalFoodCost: netFoodCost > 0 ? (categoryNetCost / netFoodCost) * 100 : 0,
-        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryNetCost / totalRevenue) * 100 : 0,
-        averageDailyCost: categoryNetCost / daysInRange,
-        outletBreakdown
-      };
-    }).sort((a, b) => b.totalCost - a.totalCost);
-
-    // Build beverage categories analysis with proportional adjustments
-    const beverageCategories = Object.entries(beverageCategoryData).map(([categoryId, outletCosts]) => {
-      const categoryRawCost = Object.values(outletCosts).reduce((sum, cost) => sum + cost, 0);
-      const categoryAdjustment = categoryRawCost * beverageAdjustmentRatio;
-      const categoryNetCost = categoryRawCost - categoryAdjustment;
-      
-      const outletBreakdown = Object.entries(outletCosts).map(([outletId, cost]) => {
-        const outlet = outlets.find(o => o.id === outletId);
-        const netCostForOutlet = cost - (cost * beverageAdjustmentRatio);
-        return {
-          outletName: outlet?.name || 'Unknown Outlet',
-          outletId,
-          cost: netCostForOutlet,
-          rawCost: cost,
-          adjustment: cost * beverageAdjustmentRatio,
-          percentageOfOutletBeverageCost: netBeverageCost > 0 ? (netCostForOutlet / netBeverageCost) * 100 : 0
-        };
-      });
-
-      return {
-        categoryName: beverageCategoryNames[categoryId],
-        categoryId,
-        totalCost: categoryNetCost,
-        rawCost: categoryRawCost,
-        adjustment: categoryAdjustment,
-        percentageOfTotalBeverageCost: netBeverageCost > 0 ? (categoryNetCost / netBeverageCost) * 100 : 0,
-        percentageOfTotalRevenue: totalRevenue > 0 ? (categoryNetCost / totalRevenue) * 100 : 0,
-        averageDailyCost: categoryNetCost / daysInRange,
-        outletBreakdown
-      };
-    }).sort((a, b) => b.totalCost - a.totalCost);
-
-    // Get top categories (top 5)
-    const topFoodCategories = foodCategories.slice(0, 5).map(cat => ({
+    // Convert food categories to final format
+    const foodCategories = Array.from(foodCategoryMap.values()).map(cat => ({
+      categoryId: cat.categoryId,
       categoryName: cat.categoryName,
       totalCost: cat.totalCost,
-      percentageOfTotalFoodCost: cat.percentageOfTotalFoodCost
+      percentageOfTotalFoodCost: rawFoodCost > 0 ? (cat.totalCost / rawFoodCost) * 100 : 0,
+      percentageOfTotalRevenue: totalRevenue > 0 ? (cat.totalCost / totalRevenue) * 100 : 0,
+      averageDailyCost: cat.totalCost / daysDiff,
+      outletBreakdown: Array.from(cat.outletBreakdown.entries()).map(([outletName, cost]) => ({
+        outletName,
+        cost,
+        percentageOfOutletFoodCost: cat.totalCost > 0 ? (cost / cat.totalCost) * 100 : 0,
+      })),
     }));
 
-    const topBeverageCategories = beverageCategories.slice(0, 5).map(cat => ({
+    // Convert beverage categories to final format
+    const beverageCategories = Array.from(beverageCategoryMap.values()).map(cat => ({
+      categoryId: cat.categoryId,
       categoryName: cat.categoryName,
       totalCost: cat.totalCost,
-      percentageOfTotalBeverageCost: cat.percentageOfTotalBeverageCost
+      percentageOfTotalBeverageCost: rawBeverageCost > 0 ? (cat.totalCost / rawBeverageCost) * 100 : 0,
+      percentageOfTotalRevenue: totalRevenue > 0 ? (cat.totalCost / totalRevenue) * 100 : 0,
+      averageDailyCost: cat.totalCost / daysDiff,
+      outletBreakdown: Array.from(cat.outletBreakdown.entries()).map(([outletName, cost]) => ({
+        outletName,
+        cost,
+        percentageOfOutletBeverageCost: cat.totalCost > 0 ? (cost / cat.totalCost) * 100 : 0,
+      })),
     }));
 
-    console.log('Final report structure:');
-    console.log('- Food categories:', foodCategories.length);
-    console.log('- Beverage categories:', beverageCategories.length);
-    console.log('- Top food categories:', topFoodCategories.length);
-    console.log('- Top beverage categories:', topBeverageCategories.length);
+    // Sort categories by cost (highest first) and get top categories
+    const sortedFoodCategories = [...foodCategories].sort((a, b) => b.totalCost - a.totalCost);
+    const sortedBeverageCategories = [...beverageCategories].sort((a, b) => b.totalCost - a.totalCost);
 
-    const result = {
-      dateRange: { from: fromDate, to: toDate },
+    const topFoodCategories = sortedFoodCategories.slice(0, 5).map(cat => ({
+      categoryName: cat.categoryName,
+      totalCost: cat.totalCost,
+      percentageOfTotalFoodCost: cat.percentageOfTotalFoodCost,
+    }));
+
+    const topBeverageCategories = sortedBeverageCategories.slice(0, 5).map(cat => ({
+      categoryName: cat.categoryName,
+      totalCost: cat.totalCost,
+      percentageOfTotalBeverageCost: cat.percentageOfTotalBeverageCost,
+    }));
+
+    // Calculate cost percentages
+    const overallFoodCostPercentage = totalFoodRevenue > 0 ? (totalFoodCost / totalFoodRevenue) * 100 : 0;
+    const overallBeverageCostPercentage = totalBeverageRevenue > 0 ? (totalBeverageCost / totalBeverageRevenue) * 100 : 0;
+    const overallCostPercentage = totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0;
+
+    return {
+      dateRange: {
+        from: startDate,
+        to: endDate,
+      },
       totalFoodRevenue,
       totalBeverageRevenue,
       totalRevenue,
-      foodCategories,
-      beverageCategories,
-      totalFoodCost: netFoodCost,
-      totalBeverageCost: netBeverageCost,
+      rawFoodCost,
+      rawBeverageCost,
+      totalFoodCost,
+      totalBeverageCost,
       totalCost,
-      rawFoodCost: totalFoodCost, // Keep raw costs for reference
-      rawBeverageCost: totalBeverageCost,
+      overallFoodCostPercentage,
+      overallBeverageCostPercentage,
+      overallCostPercentage,
       foodAdjustments: {
-        oc: totalOcFood,
+        oc: totalCoFood,
         entertainment: totalEntFood,
-        other: totalOtherAdjustmentsFood,
-        total: totalOcFood + totalEntFood - totalOtherAdjustmentsFood
+        other: totalOtherFoodAdjustment,
       },
       beverageAdjustments: {
-        oc: totalOcBeverage,
+        oc: totalCoBeverage,
         entertainment: totalEntBeverage,
-        other: totalOtherAdjustmentsBeverage,
-        total: totalOcBeverage + totalEntBeverage - totalOtherAdjustmentsBeverage
+        other: totalOtherBeverageAdjustment,
       },
-      overallFoodCostPercentage: totalFoodRevenue > 0 ? (netFoodCost / totalFoodRevenue) * 100 : 0,
-      overallBeverageCostPercentage: totalBeverageRevenue > 0 ? (netBeverageCost / totalBeverageRevenue) * 100 : 0,
-      overallCostPercentage: totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0,
+      foodCategories: sortedFoodCategories,
       topFoodCategories,
-      topBeverageCategories
+      beverageCategories: sortedBeverageCategories,
+      topBeverageCategories,
     };
-
-    console.log('Returning result with dateRange:', result.dateRange);
-    console.log('Function completed successfully');
-
-    return result;
-
   } catch (error) {
-    console.error('Error generating cost analysis by category report:', error);
-    throw new Error('Failed to generate cost analysis by category report');
+    console.error("Error fetching cost analysis by category report:", error);
+    throw new Error("Failed to fetch cost analysis by category report");
   }
 }
-    
-
-    

@@ -1,510 +1,840 @@
 "use server";
 
-import { collection, addDoc, doc, writeBatch, serverTimestamp, getDocs, query, where, Timestamp, deleteDoc, getDoc, runTransaction, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import type { BeverageCostEntry, BeverageCostDetail, Category, Outlet, DailyFinancialSummary, DetailedBeverageCostReport, DetailedBeverageCostReportResponse } from "@/types";
-import { isValid } from "date-fns";
-import { recalculateAndSaveFinancialSummary } from "./dailyFinancialSummaryActions";
-import { getOutletsAction } from "./foodCostActions"; // Re-use getOutletsAction
-
-const BEVERAGE_COST_ENTRIES_COLLECTION = "beverageCostEntries";
-const BEVERAGE_COST_DETAILS_COLLECTION = "beverageCostDetails";
-const CATEGORIES_COLLECTION = "categories"; 
-const DAILY_FINANCIAL_SUMMARIES_COLLECTION = "dailyFinancialSummaries";
+import { format as formatDateFn } from "date-fns";
+import type { BeverageCostEntry, BeverageCostDetail } from "@/types";
+import { calculateAndUpdateDailyFinancialSummary } from "./dailyFinancialSummaryActions";
+import { getCurrentUser } from "@/lib/server-auth";
+import { normalizeDate } from "@/lib/utils";
+import { auditDataChange } from "@/lib/audit-middleware";
 
 interface BeverageCostItemInput {
-  id?: string; 
-  categoryId: string;
+  id?: number; 
+  categoryId: number;
+  categoryName?: string;
   cost: number;
   description?: string;
 }
 
-export async function saveBeverageCostEntryAction(
-  date: Date,
-  outletId: string,
-  items: BeverageCostItemInput[],
-  existingEntryId?: string | null 
-): Promise<{ beverageCostEntryId: string }> {
-  if (!date || !outletId || items.length === 0) {
-    throw new Error("Date, Outlet ID, and at least one item are required.");
-  }
-  if (!isValid(date)) {
-      throw new Error("Invalid date provided for beverage cost entry.");
-  }
-
-  const totalBeverageCost = items.reduce((sum, item) => sum + (Number(item.cost) || 0), 0);
-  const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const entryDateTimestamp = Timestamp.fromDate(normalizedDate);
-
+export async function getAllBeverageCostEntriesAction() {
   try {
-    let beverageCostEntryId = existingEntryId;
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
 
-    await runTransaction(db!, async (transaction) => {
-      if (existingEntryId) {
-        const entryRef = doc(db!, BEVERAGE_COST_ENTRIES_COLLECTION, existingEntryId);
-        transaction.update(entryRef, {
-          total_beverage_cost: totalBeverageCost,
-          outlet_id: outletId,
-          date: entryDateTimestamp,
-          updatedAt: serverTimestamp(),
-        });
-
-        const detailsQuery = query(collection(db!, BEVERAGE_COST_DETAILS_COLLECTION), where("beverage_cost_entry_id", "==", existingEntryId));
-        const oldDetailsSnapshot = await getDocs(detailsQuery); 
-        oldDetailsSnapshot.forEach(detailDoc => transaction.delete(detailDoc.ref));
-
-      } else {
-        const newEntryRef = doc(collection(db!, BEVERAGE_COST_ENTRIES_COLLECTION));
-        transaction.set(newEntryRef, {
-          date: entryDateTimestamp,
-          outlet_id: outletId,
-          total_beverage_cost: totalBeverageCost,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        beverageCostEntryId = newEntryRef.id;
+    let whereClause = {};
+    
+    // Super admins can see all entries
+    if (user.role !== "super_admin") {
+      // Property-specific users can only see their properties' data
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (userPropertyIds.length === 0) {
+        return []; // No access to any properties
       }
+      
+      whereClause = {
+        propertyId: {
+          in: userPropertyIds
+        }
+      };
+    }
 
-      if (!beverageCostEntryId) {
-        throw new Error("Failed to obtain beverageCostEntryId during transaction.");
-      }
+    const entries = await prisma.beverageCostEntry.findMany({
+      where: whereClause,
+      include: {
+        outlet: true,
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        },
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+    return entries;
+  } catch (error) {
+    console.error("Error fetching beverage cost entries:", error);
+    throw new Error("Failed to fetch beverage cost entries");
+  }
+}
 
-      for (const item of items) {
-        const detailRef = doc(collection(db!, BEVERAGE_COST_DETAILS_COLLECTION));
-        transaction.set(detailRef, {
-          beverage_cost_entry_id: beverageCostEntryId,
-          category_id: item.categoryId,
-          cost: Number(item.cost) || 0,
-          description: item.description || "",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
+export async function getBeverageCostEntryByIdAction(id: number) {
+  try {
+    console.log("Fetching beverage cost entry with ID:", id);
+    
+    const entry = await prisma.beverageCostEntry.findUnique({
+      where: { id: Number(id) },
+      include: {
+        outlet: true,
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true
+          }
+        },
+        details: {
+          include: {
+            category: true,
+          },
+        },
+        createdByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        updatedByUser: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+      },
     });
     
-    if (!beverageCostEntryId) {
-        throw new Error("Transaction completed but beverageCostEntryId is still not set.");
+    if (!entry) {
+      console.log("Beverage cost entry not found with ID:", id);
+      throw new Error("Beverage cost entry not found");
+    }
+    
+    console.log("Successfully fetched beverage cost entry:", entry.id);
+    return entry;
+  } catch (error) {
+    console.error("Error fetching beverage cost entry:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error("Failed to fetch beverage cost entry");
+  }
+}
+
+export async function createBeverageCostEntryAction(entryData: {
+  date: Date;
+  outletId: number;
+  totalBeverageCost: number;
+  details?: BeverageCostItemInput[];
+  propertyId?: number;
+}) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
     }
 
-    await recalculateAndSaveFinancialSummary(normalizedDate);
+    // Get property ID from outlet if not provided
+    let propertyId = entryData.propertyId;
+    if (!propertyId) {
+      const outlet = await prisma.outlet.findUnique({
+        where: { id: entryData.outletId },
+        select: { propertyId: true }
+      });
+      propertyId = outlet?.propertyId;
+    }
+
+    // Validate property access for non-super admin users
+    if (user.role !== "super_admin" && propertyId) {
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (!userPropertyIds.includes(propertyId)) {
+        throw new Error("Access denied to selected property");
+      }
+    }
+
+    // Verify outlet belongs to accessible property
+    const outletWithProperty = await prisma.outlet.findUnique({
+      where: { id: entryData.outletId },
+      include: { property: true }
+    });
+    
+    if (!outletWithProperty) {
+      throw new Error("Invalid outlet selected");
+    }
+    
+    if (user.role !== "super_admin") {
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      
+      if (!userPropertyIds.includes(outletWithProperty.propertyId)) {
+        throw new Error("Access denied to outlet's property");
+      }
+    }
+
+    const entry = await prisma.beverageCostEntry.create({
+      data: {
+        date: entryData.date,
+        outletId: entryData.outletId,
+        totalBeverageCost: entryData.totalBeverageCost,
+        propertyId: propertyId,
+        createdBy: user.id,
+        updatedBy: user.id,
+        details: entryData.details ? {
+          create: entryData.details.map(detail => ({
+            categoryId: detail.categoryId,
+            categoryName: detail.categoryName,
+            cost: detail.cost,
+            description: detail.description,
+            createdBy: user.id,
+            updatedBy: user.id,
+          })),
+        } : undefined,
+      },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+    });
+
+    // Trigger recalculation of daily financial summary
+    await calculateAndUpdateDailyFinancialSummary(entryData.date, propertyId || undefined);
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "CREATE",
+      "beverage_cost_entry",
+      entry.id,
+      undefined,
+      entry,
+      propertyId || undefined
+    );
 
     revalidatePath("/dashboard/beverage-cost-input");
-    revalidatePath("/dashboard/financial-summary"); 
-    revalidatePath("/dashboard");
-
-    return { beverageCostEntryId };
-
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return entry;
   } catch (error) {
-    console.error("Error saving beverage cost entry:", error);
-    throw new Error(`Failed to save beverage cost entry: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error creating beverage cost entry:", error);
+    throw new Error("Failed to create beverage cost entry");
   }
 }
 
-
-export async function getBeverageCostEntryWithDetailsAction(
-  date: Date,
-  outletId: string
-): Promise<(BeverageCostEntry & { details: BeverageCostDetail[] }) | null> {
-  const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const entryDateTimestamp = Timestamp.fromDate(normalizedDate);
-
-  const q = query(
-    collection(db!, BEVERAGE_COST_ENTRIES_COLLECTION),
-    where("outlet_id", "==", outletId),
-    where("date", "==", entryDateTimestamp)
-  );
-
-  const snapshot = await getDocs(q);
-  if (snapshot.empty) {
-    return null;
+export async function updateBeverageCostEntryAction(
+  id: number,
+  entryData: {
+    date?: Date;
+    outletId?: number;
+    totalBeverageCost?: number;
+    details?: BeverageCostItemInput[];
+    propertyId?: number;
   }
-
-  const entryDoc = snapshot.docs[0];
-  const entryData = entryDoc.data() as Omit<BeverageCostEntry, "id">;
-  const beverageCostEntryId = entryDoc.id;
-
-  const detailsQuery = query(collection(db!, BEVERAGE_COST_DETAILS_COLLECTION), where("beverage_cost_entry_id", "==", beverageCostEntryId));
-  const detailsSnapshot = await getDocs(detailsQuery);
-  
-  const categoriesSnapshot = await getDocs(query(collection(db!, CATEGORIES_COLLECTION), where("type", "==", "Beverage")));
-  const categoriesMap = new Map<string, string>();
-  categoriesSnapshot.forEach(doc => categoriesMap.set(doc.id, doc.data().name));
-
-  const details: BeverageCostDetail[] = detailsSnapshot.docs.map(doc => {
-    const detailData = doc.data() as Omit<BeverageCostDetail, "id" | "categoryName">;
-    return {
-      id: doc.id,
-      ...detailData,
-      categoryName: categoriesMap.get(detailData.category_id) || detailData.category_id, 
-      createdAt: detailData.createdAt instanceof Timestamp ? detailData.createdAt.toDate() : new Date(detailData.createdAt as any),
-      updatedAt: detailData.updatedAt instanceof Timestamp ? detailData.updatedAt.toDate() : new Date(detailData.updatedAt as any),
-    } as BeverageCostDetail;
-  });
-
-  return {
-    id: beverageCostEntryId,
-    ...entryData,
-    date: entryData.date instanceof Timestamp ? entryData.date.toDate() : new Date(entryData.date as any),
-    createdAt: entryData.createdAt instanceof Timestamp ? entryData.createdAt.toDate() : new Date(entryData.createdAt as any),
-    updatedAt: entryData.updatedAt instanceof Timestamp ? entryData.updatedAt.toDate() : new Date(entryData.updatedAt as any),
-    details,
-  };
-}
-
-export async function deleteBeverageCostEntryAction(beverageCostEntryId: string): Promise<void> {
-  if (!beverageCostEntryId) {
-    throw new Error("Beverage Cost Entry ID is required for deletion.");
-  }
-  let entryDate: Date | null = null;
-
+) {
   try {
-    const entryRef = doc(db!, BEVERAGE_COST_ENTRIES_COLLECTION, beverageCostEntryId);
-    const entrySnap = await getDoc(entryRef);
-    if (entrySnap.exists()) {
-        const entryData = entrySnap.data();
-        if (entryData && entryData.date instanceof Timestamp) {
-            entryDate = entryData.date.toDate();
-        }
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
     }
 
-    const batch = writeBatch(db!);
-    batch.delete(entryRef);
+    // Get current entry to know the date for recalculation
+    const currentEntry = await prisma.beverageCostEntry.findUnique({
+      where: { id: Number(id) },
+    });
 
-    const detailsQuery = query(collection(db!, BEVERAGE_COST_DETAILS_COLLECTION), where("beverage_cost_entry_id", "==", beverageCostEntryId));
-    const detailsSnapshot = await getDocs(detailsQuery);
-    detailsSnapshot.forEach(detailDoc => batch.delete(detailDoc.ref));
+    if (!currentEntry) {
+      throw new Error("Beverage cost entry not found");
+    }
 
-    await batch.commit();
+    // If details are provided, update them
+    if (entryData.details) {
+      // Delete existing details
+      await prisma.beverageCostDetail.deleteMany({
+        where: { beverageCostEntryId: Number(id) },
+      });
 
-    if (entryDate) {
-        await recalculateAndSaveFinancialSummary(entryDate);
+      // Create new details
+      if (entryData.details.length > 0) {
+        await prisma.beverageCostDetail.createMany({
+          data: entryData.details.map(detail => ({
+            beverageCostEntryId: Number(id),
+            categoryId: detail.categoryId,
+            categoryName: detail.categoryName,
+            cost: detail.cost,
+            description: detail.description,
+            createdBy: user.id,
+            updatedBy: user.id,
+          })),
+        });
+      }
+    }
+
+    // Update the main entry
+    const entry = await prisma.beverageCostEntry.update({
+      where: { id: Number(id) },
+      data: {
+        date: entryData.date,
+        outletId: entryData.outletId,
+        totalBeverageCost: entryData.totalBeverageCost,
+        propertyId: entryData.propertyId,
+        updatedBy: user.id,
+      },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+    });
+
+    // Trigger recalculation for both old and new dates
+    await calculateAndUpdateDailyFinancialSummary(currentEntry.date);
+    if (entryData.date && entryData.date !== currentEntry.date) {
+      await calculateAndUpdateDailyFinancialSummary(entryData.date);
+    }
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "UPDATE",
+      "beverage_cost_entry",
+      entry.id,
+      currentEntry,
+      entry,
+      entry.propertyId || undefined
+    );
+
+    revalidatePath("/dashboard/beverage-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return entry;
+  } catch (error) {
+    console.error("Error updating beverage cost entry:", error);
+    throw new Error("Failed to update beverage cost entry");
+  }
+}
+
+export async function deleteBeverageCostEntryAction(id: number) {
+  try {
+    console.log("Delete beverage cost action called with ID:", id, "Type:", typeof id);
+    
+    // Get entry date for recalculation
+    const entry = await prisma.beverageCostEntry.findUnique({
+      where: { id: Number(id) },
+    });
+
+    console.log("Found beverage cost entry for deletion:", entry);
+
+    if (!entry) {
+      throw new Error(`Beverage cost entry with ID ${id} not found`);
+    }
+
+    // Store the date for recalculation
+    const entryDate = entry.date;
+    console.log("Entry date for recalculation:", entryDate);
+
+    // Delete associated details first (explicit deletion since cascade might not be configured)
+    console.log("Deleting associated beverage cost details...");
+    const deleteDetailsResult = await prisma.beverageCostDetail.deleteMany({
+      where: { beverageCostEntryId: Number(id) },
+    });
+    console.log("Deleted beverage cost details:", deleteDetailsResult);
+
+    // Get current user for audit logging
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Delete the main entry
+    console.log("Deleting beverage cost entry with ID:", id);
+    await prisma.beverageCostEntry.delete({
+      where: { id: Number(id) },
+    });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "DELETE",
+      "beverage_cost_entry",
+      id.toString(),
+      entry,
+      undefined,
+      entry.propertyId || undefined
+    );
+
+    console.log("Beverage cost entry deleted successfully, triggering recalculation...");
+    
+    // Trigger recalculation (but don't fail the deletion if recalculation fails)
+    try {
+      await calculateAndUpdateDailyFinancialSummary(entryDate);
+      console.log("Recalculation completed successfully");
+    } catch (recalcError) {
+      console.error("Error during recalculation (non-fatal):", recalcError);
+      // Continue - deletion was successful even if recalculation failed
+    }
+
+    console.log("Revalidating paths...");
+    revalidatePath("/dashboard/beverage-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    
+    console.log("Delete operation completed successfully");
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting beverage cost entry:", error);
+    // Re-throw the original error instead of a generic message
+    if (error instanceof Error) {
+      throw new Error(`Failed to delete beverage cost entry: ${error.message}`);
+    }
+    throw new Error("Failed to delete beverage cost entry: Unknown error");
+  }
+}
+
+export async function getBeverageCostEntriesByDateRangeAction(
+  startDate: Date,
+  endDate: Date,
+  outletId?: number,
+  propertyId?: string
+) {
+  try {
+    const whereClause: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+
+    if (outletId) {
+      whereClause.outletId = outletId;
+    }
+
+    if (propertyId && propertyId !== "all") {
+      whereClause.propertyId = parseInt(propertyId);
+    }
+
+    const entries = await prisma.beverageCostEntry.findMany({
+      where: whereClause,
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+
+    return entries;
+  } catch (error) {
+    console.error("Error fetching beverage cost entries by date range:", error);
+    throw new Error("Failed to fetch beverage cost entries");
+  }
+}
+
+export async function getBeverageCostEntriesForDateAction(date: Date, outletId?: number, propertyId?: number) {
+  try {
+    const normalizedDate = normalizeDate(date);
+    
+    const whereClause: any = {
+      date: {
+        gte: normalizedDate,
+        lt: new Date(normalizedDate.getTime() + 24 * 60 * 60 * 1000),
+      },
+    };
+
+    if (outletId) {
+      whereClause.outletId = outletId;
+    }
+
+    if (propertyId) {
+      whereClause.propertyId = propertyId;
+    }
+
+    const entries = await prisma.beverageCostEntry.findMany({
+      where: whereClause,
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return entries;
+  } catch (error) {
+    console.error("Error fetching beverage cost entries for date:", error);
+    throw new Error("Failed to fetch beverage cost entries");
+  }
+}
+
+export async function getBeverageCostEntriesByOutletAction(outletId: number) {
+  try {
+    const entries = await prisma.beverageCostEntry.findMany({
+      where: { outletId: Number(outletId) },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
+      orderBy: {
+        date: "desc",
+      },
+    });
+    return entries;
+  } catch (error) {
+    console.error("Error fetching beverage cost entries by outlet:", error);
+    throw new Error("Failed to fetch beverage cost entries");
+  }
+}
+
+// Beverage Cost Detail Actions
+export async function createBeverageCostDetailAction(detailData: {
+  beverageCostEntryId: number;
+  categoryId: number;
+  categoryName?: string;
+  cost: number;
+  description?: string;
+}) {
+  try {
+    const detail = await prisma.beverageCostDetail.create({
+      data: detailData,
+      include: {
+        category: true,
+        beverageCostEntry: {
+          include: {
+            outlet: true,
+          },
+        },
+      },
+    });
+
+    // Update total cost of the parent entry
+    const totalCost = await prisma.beverageCostDetail.aggregate({
+      where: { beverageCostEntryId: detailData.beverageCostEntryId },
+      _sum: { cost: true },
+    });
+
+    await prisma.beverageCostEntry.update({
+      where: { id: detailData.beverageCostEntryId },
+      data: { totalBeverageCost: totalCost._sum.cost || 0 },
+    });
+
+    // Trigger recalculation
+    if (detail.beverageCostEntry) {
+      await calculateAndUpdateDailyFinancialSummary(detail.beverageCostEntry.date);
     }
 
     revalidatePath("/dashboard/beverage-cost-input");
     revalidatePath("/dashboard/financial-summary");
-    revalidatePath("/dashboard");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return detail;
   } catch (error) {
-    console.error("Error deleting beverage cost entry: ", error);
-    throw new Error(`Failed to delete beverage cost entry: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("Error creating beverage cost detail:", error);
+    throw new Error("Failed to create beverage cost detail");
   }
 }
 
-export async function getBeverageCategoriesAction(): Promise<Category[]> {
+export async function updateBeverageCostDetailAction(
+  id: number,
+  detailData: {
+    categoryId?: number;
+    categoryName?: string;
+    cost?: number;
+    description?: string;
+  }
+) {
   try {
-    const categoriesSnapshot = await getDocs(query(collection(db!, CATEGORIES_COLLECTION), where("type", "==", "Beverage")));
-    return categoriesSnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt as any),
-      updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt as any),
-    })) as Category[];
+    const detail = await prisma.beverageCostDetail.update({
+      where: { id: Number(id) },
+      data: detailData,
+      include: {
+        category: true,
+        beverageCostEntry: {
+          include: {
+            outlet: true,
+          },
+        },
+      },
+    });
+
+    // Update total cost of the parent entry
+    const totalCost = await prisma.beverageCostDetail.aggregate({
+      where: { beverageCostEntryId: detail.beverageCostEntryId },
+      _sum: { cost: true },
+    });
+
+    await prisma.beverageCostEntry.update({
+      where: { id: detail.beverageCostEntryId },
+      data: { totalBeverageCost: totalCost._sum.cost || 0 },
+    });
+
+    // Trigger recalculation
+    if (detail.beverageCostEntry) {
+      await calculateAndUpdateDailyFinancialSummary(detail.beverageCostEntry.date);
+    }
+
+    revalidatePath("/dashboard/beverage-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return detail;
+  } catch (error) {
+    console.error("Error updating beverage cost detail:", error);
+    throw new Error("Failed to update beverage cost detail");
+  }
+}
+
+export async function deleteBeverageCostDetailAction(id: number) {
+  try {
+    // Get detail info before deletion
+    const detail = await prisma.beverageCostDetail.findUnique({
+      where: { id: Number(id) },
+      include: {
+        beverageCostEntry: true,
+      },
+    });
+
+    if (!detail) {
+      throw new Error("Beverage cost detail not found");
+    }
+
+    await prisma.beverageCostDetail.delete({
+      where: { id: Number(id) },
+    });
+
+    // Update total cost of the parent entry
+    const totalCost = await prisma.beverageCostDetail.aggregate({
+      where: { beverageCostEntryId: detail.beverageCostEntryId },
+      _sum: { cost: true },
+    });
+
+    await prisma.beverageCostEntry.update({
+      where: { id: detail.beverageCostEntryId },
+      data: { totalBeverageCost: totalCost._sum.cost || 0 },
+    });
+
+    // Trigger recalculation
+    await calculateAndUpdateDailyFinancialSummary(detail.beverageCostEntry.date);
+
+    revalidatePath("/dashboard/beverage-cost-input");
+    revalidatePath("/dashboard/financial-summary");
+    revalidatePath("/dashboard"); // Revalidate main dashboard
+    return { success: true };
+  } catch (error) {
+    console.error("Error deleting beverage cost detail:", error);
+    throw new Error("Failed to delete beverage cost detail");
+  }
+}
+
+// Legacy function aliases for compatibility
+export const saveBeverageCostEntryAction = createBeverageCostEntryAction;
+export const getBeverageCostEntryWithDetailsAction = getBeverageCostEntryByIdAction;
+
+// Category functions that redirect to the category actions
+export async function getBeverageCategoriesAction() {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { type: "Beverage" },
+      orderBy: { name: "asc" },
+    });
+    return categories;
   } catch (error) {
     console.error("Error fetching beverage categories:", error);
-    throw new Error(`Failed to fetch beverage categories: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error("Failed to fetch beverage categories");
   }
 }
 
-export async function getBeverageCostEntriesForDateAction(
-  targetDate: Date
-): Promise<(BeverageCostEntry & { details: BeverageCostDetail[]; outletName?: string })[]> {
-  if (!isValid(targetDate)) {
-    throw new Error("Invalid date provided.");
-  }
-  const normalizedDate = new Date(Date.UTC(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate()));
-  const dateTimestampForQuery = Timestamp.fromDate(normalizedDate);
-
-  const entriesWithDetails: (BeverageCostEntry & { details: BeverageCostDetail[]; outletName?: string })[] = [];
-
-  try {
-    const outlets = await getOutletsAction(); // Reusing from foodCostActions
-    const outletMap = new Map(outlets.map(o => [o.id, o.name]));
-
-    const entriesQuery = query(
-      collection(db!, BEVERAGE_COST_ENTRIES_COLLECTION),
-      where("date", "==", dateTimestampForQuery)
-    );
-    const entriesSnapshot = await getDocs(entriesQuery);
-
-    if (entriesSnapshot.empty) {
-      return [];
-    }
-
-    const categories = await getBeverageCategoriesAction();
-    const categoryMap = new Map(categories.map(c => [c.id, c.name]));
-
-    for (const entryDoc of entriesSnapshot.docs) {
-      const entryData = entryDoc.data() as Omit<BeverageCostEntry, "id">;
-      const beverageCostEntryId = entryDoc.id;
-
-      const detailsQuery = query(
-        collection(db!, BEVERAGE_COST_DETAILS_COLLECTION),
-        where("beverage_cost_entry_id", "==", beverageCostEntryId)
-      );
-      const detailsSnapshot = await getDocs(detailsQuery);
-      const details: BeverageCostDetail[] = detailsSnapshot.docs.map(doc => {
-        const detailData = doc.data() as Omit<BeverageCostDetail, "id" | "categoryName">;
-        return {
-          id: doc.id,
-          ...detailData,
-          categoryName: categoryMap.get(detailData.category_id) || detailData.category_id,
-          createdAt: detailData.createdAt instanceof Timestamp ? detailData.createdAt.toDate() : new Date(detailData.createdAt as any),
-          updatedAt: detailData.updatedAt instanceof Timestamp ? detailData.updatedAt.toDate() : new Date(detailData.updatedAt as any),
-        } as BeverageCostDetail;
-      });
-
-      entriesWithDetails.push({
-        id: beverageCostEntryId,
-        ...entryData,
-        date: entryData.date instanceof Timestamp ? entryData.date.toDate() : new Date(entryData.date as any),
-        createdAt: entryData.createdAt instanceof Timestamp ? entryData.createdAt.toDate() : new Date(entryData.createdAt as any),
-        updatedAt: entryData.updatedAt instanceof Timestamp ? entryData.updatedAt.toDate() : new Date(entryData.updatedAt as any),
-        outletName: outletMap.get(entryData.outlet_id) || entryData.outlet_id,
-        details,
-      });
-    }
-    return entriesWithDetails;
-  } catch (error) {
-    console.error("Error fetching beverage cost entries for date:", error);
-    throw new Error(`Failed to fetch beverage cost entries and details: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
+// Report functions
 export async function getDetailedBeverageCostReportAction(
   startDate: Date,
   endDate: Date,
-  outletId: string
-): Promise<DetailedBeverageCostReportResponse> {
+  outletId?: number | string
+) {
   try {
-    const startTimestamp = Timestamp.fromDate(new Date(Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())));
-    const endTimestamp = Timestamp.fromDate(new Date(Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate())));
-
-    const generateSingleReport = async (currentOutletId: string, currentOutletName: string): Promise<DetailedBeverageCostReport> => {
-      // PART 1: Get beverage cost entries and details for the outlet
-      const beverageCostEntriesQuery = query(
-        collection(db!, BEVERAGE_COST_ENTRIES_COLLECTION),
-        where("outlet_id", "==", currentOutletId),
-        where("date", ">=", startTimestamp),
-        where("date", "<=", endTimestamp),
-        orderBy("date", "asc")
-      );
-      const beverageCostEntriesSnapshot = await getDocs(beverageCostEntriesQuery);
-
-      const categoryCostsMap = new Map<string, number>();
-      let totalCostFromTransfers = 0;
-      const individualBeverageCostDetails: { categoryName: string; description: string; cost: number }[] = [];
-
-      // Pre-fetch beverage categories to avoid repeated queries
-      const categoriesSnapshot = await getDocs(query(collection(db!, CATEGORIES_COLLECTION), where("type", "==", "Beverage")));
-      const categoryMap = new Map<string, string>();
-      categoriesSnapshot.forEach(doc => categoryMap.set(doc.id, doc.data().name));
-
-      for (const entryDoc of beverageCostEntriesSnapshot.docs) {
-        const entryData = entryDoc.data() as BeverageCostEntry;
-        totalCostFromTransfers += entryData.total_beverage_cost || 0;
-
-        const detailsQuery = query(
-          collection(db!, BEVERAGE_COST_DETAILS_COLLECTION),
-          where("beverage_cost_entry_id", "==", entryDoc.id)
-        );
-        const detailsSnapshot = await getDocs(detailsQuery);
-
-        for (const detailDoc of detailsSnapshot.docs) {
-          const detail = detailDoc.data() as BeverageCostDetail;
-          const cost = detail.cost || 0;
-          
-          // Get category name from the pre-fetched categories
-          const categoryName = categoryMap.get(detail.category_id) || detail.category_id;
-
-          const existingCost = categoryCostsMap.get(categoryName) || 0;
-          categoryCostsMap.set(categoryName, existingCost + cost);
-          individualBeverageCostDetails.push({
-            categoryName,
-            description: detail.description || '-',
-            cost,
-          });
-        }
+    // Handle "all" or string outletId by converting to undefined
+    const numericOutletId = typeof outletId === 'string' && outletId === 'all' 
+      ? undefined 
+      : typeof outletId === 'string' 
+      ? Number(outletId) 
+      : outletId;
+      
+    const entries = await getBeverageCostEntriesByDateRangeAction(startDate, endDate, numericOutletId);
+    
+    // Get outlets for outlet names
+    const outlets = await prisma.outlet.findMany();
+    const outletMap = new Map(outlets.map(o => [o.id, o.name]));
+    
+    // Get financial summaries for revenue and budget data
+    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+    });
+    
+    // Group entries by outlet
+    const outletEntries = new Map<number, typeof entries>();
+    entries.forEach(entry => {
+      if (!outletEntries.has(entry.outletId)) {
+        outletEntries.set(entry.outletId, []);
       }
-
-      const categoryCosts = Array.from(categoryCostsMap.entries()).map(([categoryName, totalCost]) => ({
-        categoryName,
-        totalCost,
-      }));
-
-      // PART 2: Summary total figures from Daily Financial Summary
-      let summaryQuery = query(
-        collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
-        where("date", ">=", startTimestamp),
-        where("date", "<=", endTimestamp),
-        orderBy("date", "asc")
-      );
-      const summarySnapshot = await getDocs(summaryQuery);
-
-      let totalBeverageRevenue = 0;
-      let totalEntertainmentBeverageCost = 0;
-      let totalOcBeverageCost = 0;
-      let totalOtherBeverageAdjustments = 0;
-      let totalBudgetBeverageCostPct = 0;
-      let budgetBeverageCostPctCount = 0;
-
-      summarySnapshot.forEach(doc => {
-        const data = doc.data() as DailyFinancialSummary;
-        totalBeverageRevenue += data.actual_beverage_revenue || 0;
-        totalEntertainmentBeverageCost += data.entertainment_beverage_cost || 0;
-        totalOcBeverageCost += data.officer_check_comp_beverage || 0;
-        totalOtherBeverageAdjustments += data.other_beverage_adjustments || 0;
-        if (data.budget_beverage_cost_pct != null) {
-          totalBudgetBeverageCostPct += data.budget_beverage_cost_pct;
-          budgetBeverageCostPctCount++;
-        }
+      outletEntries.get(entry.outletId)!.push(entry);
+    });
+    
+    // Transform to expected format
+    const outletReports = Array.from(outletEntries.entries()).map(([outletId, outletData]) => {
+      // Calculate category costs
+      const categoryCosts = new Map<string, number>();
+      const beverageCostDetailsByItem: { categoryName: string; description: string; cost: number }[] = [];
+      
+      let totalCostOfBeverage = 0;
+      
+      outletData.forEach(entry => {
+        totalCostOfBeverage += entry.totalBeverageCost || 0;
+        
+        entry.details?.forEach(detail => {
+          const categoryName = detail.category?.name || detail.categoryName || 'Unknown';
+          const currentCost = categoryCosts.get(categoryName) || 0;
+          categoryCosts.set(categoryName, currentCost + detail.cost);
+          
+          beverageCostDetailsByItem.push({
+            categoryName,
+            description: detail.description || '',
+            cost: detail.cost
+          });
+        });
       });
-
-      const budgetBeverageCostPercentage = budgetBeverageCostPctCount > 0 ? totalBudgetBeverageCostPct / budgetBeverageCostPctCount : 0;
-
-      const totalCostOfBeverage = totalCostFromTransfers - totalOcBeverageCost - totalEntertainmentBeverageCost + totalOtherBeverageAdjustments;
-
-      const beverageCostPercentage = totalBeverageRevenue > 0 ? (totalCostOfBeverage / totalBeverageRevenue) * 100 : 0;
-
-      const variancePercentage = beverageCostPercentage - budgetBeverageCostPercentage;
-
+      
+      // For individual outlet reports, we'll use placeholder values since financial summaries
+      // are not outlet-specific in the current schema. Real values will be calculated in overall summary.
+      const totalBeverageRevenue = 0; // Will be calculated properly in overall summary
+      const budgetBeverageCostPercentage = 0; // Will be calculated properly in overall summary
+      const beverageCostPercentage = 0; // Will be calculated properly in overall summary
+      const variancePercentage = 0; // Will be calculated properly in overall summary
+      
       return {
-        outletName: currentOutletName,
-        outletId: currentOutletId,
+        outletName: outletMap.get(outletId) || 'Unknown Outlet',
+        outletId: outletId.toString(),
         dateRange: { from: startDate, to: endDate },
-        categoryCosts,
-        totalCostFromTransfers,
-        otherAdjustmentsBeverage: totalOtherBeverageAdjustments,
-        ocBeverageTotal: totalOcBeverageCost,
-        entBeverageTotal: totalEntertainmentBeverageCost,
+        categoryCosts: Array.from(categoryCosts.entries()).map(([categoryName, totalCost]) => ({
+          categoryName,
+          totalCost
+        })),
+        totalCostFromTransfers: totalCostOfBeverage, // Use actual beverage cost as transfer cost
+        otherAdjustmentsBeverage: 0, // Will be calculated in overall summary
+        ocBeverageTotal: 0, // Will be calculated in overall summary
+        entBeverageTotal: 0, // Will be calculated in overall summary
         totalCostOfBeverage,
         totalBeverageRevenue,
         beverageCostPercentage,
         budgetBeverageCostPercentage,
         variancePercentage,
-        beverageCostDetailsByItem: individualBeverageCostDetails || [],
+        beverageCostDetailsByItem
       };
-    };
-
-    const outletReports: DetailedBeverageCostReport[] = [];
-    let overallSummaryReport: DetailedBeverageCostReport;
-
-    if (outletId === "all") {
-      const allOutlets = await getOutletsAction();
-      for (const outlet of allOutlets) {
-        const report = await generateSingleReport(outlet.id, outlet.name);
-        outletReports.push(report);
-      }
-
-      // For overall summary, fetch DailyFinancialSummary once for the entire date range (hotel level)
-      let overallSummaryQuery = query(
-        collection(db!, DAILY_FINANCIAL_SUMMARIES_COLLECTION),
-        where("date", ">=", startTimestamp),
-        where("date", "<=", endTimestamp),
-        orderBy("date", "asc")
-      );
-      const overallSummarySnapshot = await getDocs(overallSummaryQuery);
-
-      let totalOverallBeverageRevenue = 0;
-      let totalOverallEntertainmentBeverageCost = 0;
-      let totalOverallOcBeverageCost = 0;
-      let totalOverallOtherBeverageAdjustments = 0;
-      let totalOverallBudgetBeverageCostPct = 0;
-      let overallBudgetBeverageCostPctCount = 0;
-
-      overallSummarySnapshot.forEach(doc => {
-        const data = doc.data() as DailyFinancialSummary;
-        totalOverallBeverageRevenue += data.actual_beverage_revenue || 0;
-        totalOverallEntertainmentBeverageCost += data.entertainment_beverage_cost || 0;
-        totalOverallOcBeverageCost += data.officer_check_comp_beverage || 0;
-        totalOverallOtherBeverageAdjustments += data.other_beverage_adjustments || 0;
-        if (data.budget_beverage_cost_pct != null) {
-          totalOverallBudgetBeverageCostPct += data.budget_beverage_cost_pct;
-          overallBudgetBeverageCostPctCount++;
-        }
+    });
+    
+    // Create overall summary by aggregating all outlet reports and financial data
+    const overallCategoryCosts = new Map<string, number>();
+    const overallBeverageCostDetailsByItem: { categoryName: string; description: string; cost: number }[] = [];
+    let overallTotalCostOfBeverage = 0;
+    let overallTotalBeverageRevenue = 0;
+    let overallTotalEntBeverage = 0;
+    let overallTotalCoBeverage = 0;
+    let overallTotalOtherBeverageAdjustment = 0;
+    let overallTotalBudgetBeverageCost = 0;
+    let overallTotalBudgetBeverageRevenue = 0;
+    
+    // Aggregate cost data from outlet reports (only cost-related data, not financial summary data)
+    outletReports.forEach(report => {
+      overallTotalCostOfBeverage += report.totalCostOfBeverage;
+      
+      report.categoryCosts.forEach(({ categoryName, totalCost }) => {
+        const currentCost = overallCategoryCosts.get(categoryName) || 0;
+        overallCategoryCosts.set(categoryName, currentCost + totalCost);
       });
-
-      // Total Cost from Transfers for overall summary should still be sum of outlet-specific transfers
-      let totalOverallCostFromTransfers = 0;
-      outletReports.forEach(report => {
-        totalOverallCostFromTransfers += report.totalCostFromTransfers;
-      });
-
-      // Create a map to aggregate category costs across all outlets for detailed items
-      const overallCategoryCostsMap = new Map<string, number>();
-      const overallBeverageCostDetailsByItem: { categoryName: string; description: string; cost: number }[] = [];
-
-      outletReports.forEach(report => {
-        if (report.beverageCostDetailsByItem && report.beverageCostDetailsByItem.length > 0) {
-          report.beverageCostDetailsByItem.forEach(item => {
-            const existingCost = overallCategoryCostsMap.get(item.categoryName) || 0;
-            overallCategoryCostsMap.set(item.categoryName, existingCost + item.cost);
-            overallBeverageCostDetailsByItem.push({
-              categoryName: item.categoryName,
-              description: item.description,
-              cost: item.cost
-            });
-          });
-        }
-      });
-
-      // Calculate average budget beverage cost percentage for overall summary
-      const overallBudgetBeverageCostPercentage = overallBudgetBeverageCostPctCount > 0 
-        ? totalOverallBudgetBeverageCostPct / overallBudgetBeverageCostPctCount 
-        : 0;
-
-      // Calculate Total Cost of Beverage for overall summary (using the newly fetched totals)
-      const overallTotalCostOfBeverage = totalOverallCostFromTransfers - 
-        totalOverallOcBeverageCost - 
-        totalOverallEntertainmentBeverageCost + 
-        totalOverallOtherBeverageAdjustments;
-
-      // Calculate Beverage Cost Percentage for overall summary
-      const overallBeverageCostPercentage = totalOverallBeverageRevenue > 0 
-        ? (overallTotalCostOfBeverage / totalOverallBeverageRevenue) * 100 
-        : 0;
-
-      // Calculate Variance Percentage for overall summary
-      const overallVariancePercentage = overallBeverageCostPercentage - overallBudgetBeverageCostPercentage;
-
-      // Convert the category costs map to an array
-      const overallCategoryCosts = Array.from(overallCategoryCostsMap.entries()).map(([categoryName, totalCost]) => ({
+      
+      overallBeverageCostDetailsByItem.push(...report.beverageCostDetailsByItem);
+    });
+    
+    // Get financial summary data separately (only once, not per outlet to avoid double counting)
+    overallTotalBeverageRevenue = financialSummaries.reduce((sum, summary) => sum + (summary.actualBeverageRevenue || 0), 0);
+    overallTotalBudgetBeverageCost = financialSummaries.reduce((sum, summary) => sum + (summary.budgetBeverageCost || 0), 0);
+    overallTotalBudgetBeverageRevenue = financialSummaries.reduce((sum, summary) => sum + (summary.budgetBeverageRevenue || 0), 0);
+    overallTotalEntBeverage = financialSummaries.reduce((sum, summary) => sum + (summary.entBeverage || 0), 0);
+    overallTotalCoBeverage = financialSummaries.reduce((sum, summary) => sum + (summary.coBeverage || 0), 0);
+    overallTotalOtherBeverageAdjustment = financialSummaries.reduce((sum, summary) => sum + (summary.otherBeverageAdjustment || 0), 0);
+    
+    // Calculate actual beverage cost using the same formula as financial summary module
+    // actualBeverageCost = totalBeverageCost - entBeverage - coBeverage + otherBeverageAdjustment
+    const actualBeverageCost = overallTotalCostOfBeverage - overallTotalEntBeverage - overallTotalCoBeverage + overallTotalOtherBeverageAdjustment;
+    
+    // Calculate average budgeted beverage cost percentage from financial summaries
+    const validBeverageBudgetPcts = financialSummaries.filter(summary => summary.budgetBeverageCostPct != null && summary.budgetBeverageCostPct > 0);
+    const overallBudgetBeverageCostPercentage = validBeverageBudgetPcts.length > 0 
+      ? validBeverageBudgetPcts.reduce((sum, summary) => sum + (summary.budgetBeverageCostPct || 0), 0) / validBeverageBudgetPcts.length 
+      : 0;
+    const overallBeverageCostPercentage = overallTotalBeverageRevenue > 0 ? (actualBeverageCost / overallTotalBeverageRevenue) * 100 : 0;
+    const overallVariancePercentage = overallBeverageCostPercentage - overallBudgetBeverageCostPercentage;
+    
+    console.log('Beverage Cost Report Debug:', {
+      rawTotalCostOfBeverage: overallTotalCostOfBeverage,
+      actualBeverageCost,
+      overallTotalBeverageRevenue,
+      overallTotalEntBeverage,
+      overallTotalCoBeverage,
+      overallTotalOtherBeverageAdjustment,
+      overallTotalBudgetBeverageCost,
+      overallTotalBudgetBeverageRevenue,
+      outletReportsCount: outletReports.length,
+      financialSummariesCount: financialSummaries.length
+    });
+    
+    const overallSummaryReport = {
+      outletName: 'All Outlets',
+      outletId: 'all',
+      dateRange: { from: startDate, to: endDate },
+      categoryCosts: Array.from(overallCategoryCosts.entries()).map(([categoryName, totalCost]) => ({
         categoryName,
-        totalCost,
-      }));
-
-      overallSummaryReport = {
-        outletName: "All Outlets",
-        outletId: "all",
-        dateRange: { from: startDate, to: endDate },
-        categoryCosts: overallCategoryCosts,
-        totalCostFromTransfers: totalOverallCostFromTransfers,
-        otherAdjustmentsBeverage: totalOverallOtherBeverageAdjustments,
-        ocBeverageTotal: totalOverallOcBeverageCost,
-        entBeverageTotal: totalOverallEntertainmentBeverageCost,
-        totalCostOfBeverage: overallTotalCostOfBeverage,
-        totalBeverageRevenue: totalOverallBeverageRevenue,
-        beverageCostPercentage: overallBeverageCostPercentage,
-        budgetBeverageCostPercentage: overallBudgetBeverageCostPercentage,
-        variancePercentage: overallVariancePercentage,
-        beverageCostDetailsByItem: overallBeverageCostDetailsByItem || [],
-      };
-
-    } else {
-      const outletDoc = await getDoc(doc(db!, "outlets", outletId));
-      if (outletDoc.exists()) {
-        const outletName = outletDoc.data().name;
-        const report = await generateSingleReport(outletId, outletName);
-        outletReports.push(report);
-        overallSummaryReport = report;
-      } else {
-        throw new Error("Selected outlet not found.");
-      }
-    }
-
-    return { outletReports, overallSummaryReport };
-
-  } catch (error: any) {
+        totalCost
+      })),
+      totalCostFromTransfers: overallTotalCostOfBeverage, // This represents the base cost before adjustments
+      otherAdjustmentsBeverage: overallTotalOtherBeverageAdjustment,
+      ocBeverageTotal: overallTotalCoBeverage,
+      entBeverageTotal: overallTotalEntBeverage,
+      totalCostOfBeverage: actualBeverageCost,
+      totalBeverageRevenue: overallTotalBeverageRevenue,
+      beverageCostPercentage: overallBeverageCostPercentage,
+      budgetBeverageCostPercentage: overallBudgetBeverageCostPercentage,
+      variancePercentage: overallVariancePercentage,
+      beverageCostDetailsByItem: overallBeverageCostDetailsByItem
+    };
+    
+    return {
+      outletReports,
+      overallSummaryReport
+    };
+  } catch (error) {
     console.error("Error fetching detailed beverage cost report:", error);
-    throw new Error(`Could not load detailed beverage cost report. Details: ${error.message}`);
+    throw new Error("Failed to fetch detailed beverage cost report");
   }
 }

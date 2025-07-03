@@ -1,11 +1,51 @@
 "use server";
 
-import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, getDoc, Timestamp, query, orderBy, limit, startAfter, getDocs, QueryConstraint, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import type { Category } from "@/types";
+import { getCurrentUser } from "@/lib/server-auth";
+import { auditDataChange } from "@/lib/audit-middleware";
 
-const categoriesCol = collection(db!, "categories");
+export async function getAllCategoriesAction() {
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: {
+        name: "asc",
+      },
+    });
+    return categories;
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+    throw new Error("Failed to fetch categories");
+  }
+}
+
+export async function getCategoriesByTypeAction(type: "Food" | "Beverage") {
+  try {
+    const categories = await prisma.category.findMany({
+      where: { type },
+      orderBy: {
+        name: "asc",
+      },
+    });
+    return categories;
+  } catch (error) {
+    console.error("Error fetching categories by type:", error);
+    throw new Error("Failed to fetch categories");
+  }
+}
+
+export async function getCategoryByIdAction(id: string) {
+  try {
+    const category = await prisma.category.findUnique({
+      where: { id },
+    });
+    return category;
+  } catch (error) {
+    console.error("Error fetching category:", error);
+    throw new Error("Failed to fetch category");
+  }
+}
 
 export async function addCategoryAction(
   name: string,
@@ -23,71 +63,139 @@ export async function addCategoryAction(
   }
 
   try {
-    const categoryData: Omit<Category, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: Timestamp, updatedAt: Timestamp } = {
-      name: trimmedName,
-      description: trimmedDescription,
-      type,
-      createdAt: serverTimestamp() as Timestamp,
-      updatedAt: serverTimestamp() as Timestamp,
-    };
-
-    const docRef = await addDoc(categoriesCol, categoryData);
-    revalidatePath("/dashboard/settings/categories"); // Keep old path for now, or update if component moves
-    revalidatePath("/dashboard/categories");
-
-
-    const newDocSnap = await getDoc(docRef);
-    if (!newDocSnap.exists()) {
-        throw new Error("Failed to create and retrieve category after saving.");
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
     }
-    const savedData = newDocSnap.data()!;
-    
-    return {
-        id: newDocSnap.id,
-        name: savedData.name,
-        description: savedData.description,
-        type: savedData.type,
-        createdAt: savedData.createdAt instanceof Timestamp ? savedData.createdAt.toDate() : savedData.createdAt,
-        updatedAt: savedData.updatedAt instanceof Timestamp ? savedData.updatedAt.toDate() : savedData.updatedAt,
-    };
 
+    const category = await prisma.category.create({
+      data: {
+        name: trimmedName,
+        description: trimmedDescription || null,
+        type,
+      },
+    });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "CREATE",
+      "category",
+      category.id,
+      undefined,
+      category
+    );
+
+    revalidatePath("/dashboard/settings/categories");
+    revalidatePath("/dashboard/categories");
+    return category as Category;
   } catch (error) {
-    console.error("Error adding category: ", error);
+    console.error("Error adding category:", error);
     throw new Error(`Failed to add category: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function createCategoryAction(categoryData: {
+  name: string;
+  description?: string;
+  type: "Food" | "Beverage";
+}) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    const category = await prisma.category.create({
+      data: categoryData,
+    });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "CREATE",
+      "category",
+      category.id,
+      undefined,
+      category
+    );
+
+    revalidatePath("/dashboard/categories");
+    return category;
+  } catch (error) {
+    console.error("Error creating category:", error);
+    throw new Error("Failed to create category");
   }
 }
 
 export async function updateCategoryAction(
   id: string,
-  name: string,
-  description: string | undefined,
-  type: 'Food' | 'Beverage'
+  name?: string,
+  description?: string,
+  type?: 'Food' | 'Beverage'
 ): Promise<void> {
   if (!id) {
     throw new Error("Category ID is required for update.");
   }
-  const trimmedName = name.trim();
-  const trimmedDescription = description?.trim();
 
-  if (!trimmedName) {
-    throw new Error("Category name cannot be empty.");
+  const updateData: any = {};
+  
+  if (name !== undefined) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error("Category name cannot be empty.");
+    }
+    updateData.name = trimmedName;
   }
-   if (!type) {
-    throw new Error("Category type must be selected.");
+  
+  if (description !== undefined) {
+    updateData.description = description?.trim() || null;
+  }
+  
+  if (type !== undefined) {
+    if (!type) {
+      throw new Error("Category type must be selected.");
+    }
+    updateData.type = type;
   }
 
   try {
-    const categoryDoc = doc(db!, "categories", id);
-    await updateDoc(categoryDoc, {
-      name: trimmedName,
-      description: trimmedDescription,
-      type,
-      updatedAt: serverTimestamp(),
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Get current category for audit logging
+    const currentCategory = await prisma.category.findUnique({
+      where: { id }
     });
-    revalidatePath("/dashboard/settings/categories"); // Keep old path for now
+
+    if (!currentCategory) {
+      throw new Error("Category not found");
+    }
+
+    const updatedCategory = await prisma.category.update({
+      where: { id },
+      data: {
+        ...updateData,
+        updatedAt: new Date(),
+      },
+    });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "UPDATE",
+      "category",
+      id,
+      currentCategory,
+      updatedCategory
+    );
+
+    revalidatePath("/dashboard/settings/categories");
     revalidatePath("/dashboard/categories");
   } catch (error) {
-    console.error("Error updating category: ", error);
+    console.error("Error updating category:", error);
     throw new Error(`Failed to update category: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -96,109 +204,93 @@ export async function deleteCategoryAction(id: string): Promise<void> {
   if (!id) {
     throw new Error("Category ID is required for deletion.");
   }
+  
   try {
-    const categoryDoc = doc(db!, "categories", id);
-    await deleteDoc(categoryDoc);
-    revalidatePath("/dashboard/settings/categories"); // Keep old path for now
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Get current category for audit logging
+    const categoryToDelete = await prisma.category.findUnique({
+      where: { id }
+    });
+
+    if (!categoryToDelete) {
+      throw new Error("Category not found");
+    }
+
+    await prisma.category.delete({
+      where: { id },
+    });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "DELETE",
+      "category",
+      id,
+      categoryToDelete,
+      undefined
+    );
+
+    revalidatePath("/dashboard/settings/categories");
     revalidatePath("/dashboard/categories");
   } catch (error) {
-    console.error("Error deleting category: ", error);
+    console.error("Error deleting category:", error);
     throw new Error(`Failed to delete category: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-export async function getCategoryByIdAction(id: string): Promise<Category | null> {
-  if (!id) {
-    throw new Error("Category ID is required.");
-  }
-  try {
-    const categoryDoc = doc(db!, "categories", id);
-    const categorySnap = await getDoc(categoryDoc);
-    
-    if (categorySnap.exists()) {
-      const data = categorySnap.data();
-      return {
-        id: categorySnap.id,
-        name: data.name,
-        description: data.description,
-        type: data.type,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : data.createdAt,
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : data.updatedAt,
-      } as Category;
-    } else {
-      return null;
-    }
-  } catch (error) {
-    console.error("Error getting category by ID: ", error);
-    throw new Error(`Failed to get category: ${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
 export async function getPaginatedCategoriesAction(
-  limitValue?: number, // Make limitValue optional
+  limitValue?: number,
   lastVisibleDocId?: string,
-  fetchAll: boolean = false // New parameter
+  fetchAll: boolean = false
 ): Promise<{ categories: Category[], lastVisibleDocId: string | null, hasMore: boolean, totalCount: number }> {
   try {
-    const queryConstraints: QueryConstraint[] = [orderBy("createdAt", "desc")];
-
-    if (!fetchAll && limitValue && limitValue > 0) {
-      queryConstraints.push(limit(limitValue));
-      if (lastVisibleDocId) {
-        const lastVisibleDoc = await getDoc(doc(db!, "categories", lastVisibleDocId));
-        if (lastVisibleDoc.exists()) {
-          queryConstraints.push(startAfter(lastVisibleDoc));
-        } else {
-          console.warn(`Last visible document with ID ${lastVisibleDocId} not found. Starting from the beginning.`);
-        }
-      }
-    }
-    // If fetchAll is true, no limit or startAfter is applied, fetching all documents.
-
-    const categoryQuery = query(categoriesCol, ...queryConstraints);
+    const totalCount = await prisma.category.count();
     
-    const totalCountQuery = query(categoriesCol);
-    const totalSnapshot = await getDocs(totalCountQuery);
-    const totalCount = totalSnapshot.size;
-
-    const querySnapshot = await getDocs(categoryQuery);
-    const categories: Category[] = querySnapshot.docs.map(doc => {
-      const data = doc.data() as Omit<Category, 'id'>;
-      return {
-        id: doc.id,
-        ...data,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt as any),
-        updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate() : new Date(data.updatedAt as any),
-      } as Category;
-    });
-
-    let lastVisibleDocIdResult: string | null = null;
-    let hasMoreResult = false;
-
-    if (querySnapshot.docs.length > 0) {
-      const lastVisibleDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
-      lastVisibleDocIdResult = lastVisibleDoc.id;
-      hasMoreResult = querySnapshot.docs.length === limitValue;
+    let categories;
+    
+    if (fetchAll || !limitValue) {
+      categories = await prisma.category.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+    } else {
+      const skip = lastVisibleDocId ? 1 : 0; // Skip the cursor if provided
+      categories = await prisma.category.findMany({
+        take: limitValue,
+        skip,
+        ...(lastVisibleDocId && {
+          cursor: {
+            id: lastVisibleDocId,
+          },
+        }),
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
     }
+
+    const hasMore = !fetchAll && limitValue ? categories.length === limitValue : false;
+    const lastVisibleDocIdResult = categories.length > 0 ? categories[categories.length - 1].id : null;
 
     return {
-      categories,
+      categories: categories as Category[],
       lastVisibleDocId: lastVisibleDocIdResult,
-      hasMore: hasMoreResult,
+      hasMore,
       totalCount
     };
   } catch (error) {
-    console.error("Error getting paginated categories: ", error);
+    console.error("Error getting paginated categories:", error);
     throw new Error(`Failed to get categories: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 export async function initializeDefaultCategoriesAction(): Promise<{ created: number, total: number }> {
   try {
-    if (!db) {
-      throw new Error("Firestore is not initialized");
-    }
-
     const foodCategories = [
       { name: "Meat & Poultry", description: "Beef, chicken, pork, lamb, etc.", type: "Food" as const },
       { name: "Seafood", description: "Fish, shrimp, shellfish, etc.", type: "Food" as const },
@@ -230,18 +322,16 @@ export async function initializeDefaultCategoriesAction(): Promise<{ created: nu
     for (const category of allCategories) {
       try {
         // Check if category already exists
-        const existingQuery = query(
-          categoriesCol,
-          where("name", "==", category.name),
-          where("type", "==", category.type)
-        );
-        const existingSnapshot = await getDocs(existingQuery);
+        const existing = await prisma.category.findFirst({
+          where: {
+            name: category.name,
+            type: category.type,
+          },
+        });
         
-        if (existingSnapshot.empty) {
-          await addDoc(categoriesCol, {
-            ...category,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
+        if (!existing) {
+          await prisma.category.create({
+            data: category,
           });
           createdCount++;
         }
@@ -251,8 +341,7 @@ export async function initializeDefaultCategoriesAction(): Promise<{ created: nu
     }
 
     // Get total count
-    const totalSnapshot = await getDocs(categoriesCol);
-    const totalCount = totalSnapshot.size;
+    const totalCount = await prisma.category.count();
 
     revalidatePath("/dashboard/categories");
     
