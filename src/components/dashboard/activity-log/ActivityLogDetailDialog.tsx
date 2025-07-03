@@ -13,8 +13,22 @@ import {
   Code,
   Building,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Plus,
+  Minus,
+  Edit,
+  List,
+  FileText
 } from "lucide-react";
+
+import { 
+  formatChanges, 
+  formatValue, 
+  formatFieldName as formatFieldNameUtil,
+  formatArrayChange,
+  formatObjectChange,
+  getChangeType
+} from "@/lib/audit-formatting";
 
 import type { AuditLog } from "@/types";
 import {
@@ -65,23 +79,92 @@ export function ActivityLogDetailDialog({
     }
   };
 
-  const formatFieldName = (fieldName: string) => {
-    // Convert camelCase/snake_case to readable format
-    return fieldName
-      .replace(/([A-Z])/g, ' $1')
-      .replace(/_/g, ' ')
-      .replace(/^./, str => str.toUpperCase())
-      .trim();
+  // Use the utility functions
+  const formatFieldName = formatFieldNameUtil;
+  const formatValueDisplay = (value: any, context?: string): string => formatValue(value, context);
+
+  const renderArrayChange = (from: any[], to: any[], fieldName: string) => {
+    const arrayChange = formatArrayChange(from, to, fieldName);
+    
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-blue-600 bg-blue-50 p-2 rounded">
+          <List className="h-4 w-4" />
+          {arrayChange.summary}
+        </div>
+        
+        {arrayChange.details.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-muted-foreground">Changes:</div>
+            {arrayChange.details.map((detail, index) => (
+              <div key={index} className="flex items-center gap-2 text-sm p-2 rounded border">
+                {detail.action === 'added' && <Plus className="h-3 w-3 text-green-600" />}
+                {detail.action === 'removed' && <Minus className="h-3 w-3 text-red-600" />}
+                {detail.action === 'modified' && <Edit className="h-3 w-3 text-blue-600" />}
+                <span className={
+                  detail.action === 'added' ? 'text-green-700' :
+                  detail.action === 'removed' ? 'text-red-700' :
+                  'text-blue-700'
+                }>
+                  {detail.action === 'added' ? 'Added:' : 
+                   detail.action === 'removed' ? 'Removed:' : 
+                   'Modified:'} {detail.item}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <div className="text-muted-foreground mb-1">From:</div>
+            <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700">
+              {arrayChange.fromDisplay}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground mb-1">To:</div>
+            <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">
+              {arrayChange.toDisplay}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  const formatValue = (value: any): string => {
-    if (value === null || value === undefined) return "None";
-    if (typeof value === "boolean") return value ? "Yes" : "No";
-    if (typeof value === "string") return value;
-    if (typeof value === "number") return value.toString();
-    if (value instanceof Date) return format(value, "PPpp");
-    if (typeof value === "object") return JSON.stringify(value, null, 2);
-    return String(value);
+  const renderObjectChange = (from: any, to: any, fieldName: string) => {
+    const objectChange = formatObjectChange(from, to);
+    
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-blue-600 bg-blue-50 p-2 rounded">
+          <FileText className="h-4 w-4" />
+          {objectChange.summary}
+        </div>
+        
+        {objectChange.changedFields.length > 0 && (
+          <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
+            <span className="font-medium">Modified fields:</span> {objectChange.changedFields.join(', ')}
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <div className="text-muted-foreground mb-1">From:</div>
+            <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700">
+              {objectChange.fromDisplay}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted-foreground mb-1">To:</div>
+            <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">
+              {objectChange.toDisplay}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderDataChanges = (details: any) => {
@@ -89,30 +172,50 @@ export function ActivityLogDetailDialog({
 
     // Handle different types of audit details
     if (details.changes && typeof details.changes === "object") {
+      const formattedChanges = formatChanges(details.changes);
+      
       return (
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-3">
             <Activity className="h-4 w-4" />
-            Field Changes
+            Field Changes ({formattedChanges.length})
           </div>
-          <div className="space-y-3">
-            {Object.entries(details.changes).map(([field, change]: [string, any]) => (
-              <div key={field} className="border rounded-lg p-3 bg-muted/30">
-                <div className="font-medium text-sm mb-2">{formatFieldName(field)}</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div className="text-muted-foreground mb-1">From:</div>
-                    <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700 font-mono">
-                      {formatValue(change.from)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground mb-1">To:</div>
-                    <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700 font-mono">
-                      {formatValue(change.to)}
-                    </div>
-                  </div>
+          <div className="space-y-4">
+            {formattedChanges.map((change) => (
+              <div key={change.field} className="border rounded-lg p-4 bg-muted/30">
+                <div className="flex items-center gap-2 font-medium text-sm mb-3">
+                  <span>{change.displayName}</span>
+                  {change.summary && (
+                    <Badge variant="outline" className="text-xs">
+                      {change.summary}
+                    </Badge>
+                  )}
                 </div>
+                
+                {change.type === 'array' && renderArrayChange(change.from, change.to, change.field)}
+                {change.type === 'object' && renderObjectChange(change.from, change.to, change.field)}
+                {change.type === 'simple' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <div className="text-muted-foreground mb-1">From:</div>
+                      <div className="p-2 bg-red-50 border border-red-200 rounded text-red-700">
+                        {formatValueDisplay(change.from, change.field)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-muted-foreground mb-1">To:</div>
+                      <div className="p-2 bg-green-50 border border-green-200 rounded text-green-700">
+                        {formatValueDisplay(change.to, change.field)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {change.details && (
+                  <div className="mt-2 text-xs text-muted-foreground bg-muted p-2 rounded">
+                    {change.details}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -136,7 +239,7 @@ export function ActivityLogDetailDialog({
                   {formatFieldName(key)}
                 </div>
                 <div className="text-sm p-2 bg-green-50 border border-green-200 rounded">
-                  {formatValue(value)}
+                  {formatValueDisplay(value, key)}
                 </div>
               </div>
             ))}
@@ -161,7 +264,7 @@ export function ActivityLogDetailDialog({
                   {formatFieldName(key)}
                 </div>
                 <div className="text-sm p-2 bg-red-50 border border-red-200 rounded">
-                  {formatValue(value)}
+                  {formatValueDisplay(value, key)}
                 </div>
               </div>
             ))}
@@ -217,7 +320,7 @@ export function ActivityLogDetailDialog({
                   {formatFieldName(key)}
                 </div>
                 <div className="text-sm p-2 bg-muted/50 border rounded">
-                  {formatValue(value)}
+                  {formatValueDisplay(value, key)}
                 </div>
               </div>
             ))}

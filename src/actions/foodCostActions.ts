@@ -242,9 +242,17 @@ export async function updateFoodCostEntryAction(
       throw new Error("Authentication required");
     }
 
-    // Get current entry to know the date for recalculation
+    // Get current entry to know the date for recalculation and for audit
     const currentEntry = await prisma.foodCostEntry.findUnique({
       where: { id: Number(id) },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
     });
 
     if (!currentEntry) {
@@ -294,6 +302,17 @@ export async function updateFoodCostEntryAction(
       },
     });
 
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "UPDATE",
+      "food_cost_entry",
+      entry.id,
+      currentEntry,
+      entry,
+      entry.propertyId || undefined
+    );
+
     // Trigger recalculation for both old and new dates
     await calculateAndUpdateDailyFinancialSummary(currentEntry.date);
     if (entryData.date && entryData.date !== currentEntry.date) {
@@ -312,11 +331,24 @@ export async function updateFoodCostEntryAction(
 
 export async function deleteFoodCostEntryAction(id: number) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     console.log("Delete action called with ID:", id, "Type:", typeof id);
     
-    // Get entry date for recalculation
+    // Get entry date for recalculation and audit
     const entry = await prisma.foodCostEntry.findUnique({
       where: { id: Number(id) },
+      include: {
+        outlet: true,
+        details: {
+          include: {
+            category: true,
+          },
+        },
+      },
     });
 
     console.log("Found entry for deletion:", entry);
@@ -341,6 +373,17 @@ export async function deleteFoodCostEntryAction(id: number) {
     await prisma.foodCostEntry.delete({
       where: { id: Number(id) },
     });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "DELETE",
+      "food_cost_entry",
+      id,
+      entry,
+      undefined,
+      entry.propertyId || undefined
+    );
 
     console.log("Food cost entry deleted successfully, triggering recalculation...");
     

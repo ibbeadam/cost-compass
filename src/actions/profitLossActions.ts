@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-fns";
 // @ts-ignore
 import type { BudgetVsActualsReport, DailyRevenueTrendsReport } from "@/types/index";
+import { getCurrentUser } from "@/lib/server-auth";
+import { auditReportExport } from "@/lib/audit-middleware";
 
 export async function getMonthlyProfitLossReportAction(
   year: number,
@@ -14,6 +16,10 @@ export async function getMonthlyProfitLossReportAction(
   const endDate = endOfMonth(new Date(year, month));
 
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
     // Get all financial summaries for the month
     const summaries = await prisma.dailyFinancialSummary.findMany({
       where: {
@@ -231,6 +237,14 @@ export async function getMonthlyProfitLossReportAction(
     const finalTaxRate = (taxRate ?? 25) / 100; // Convert percentage to decimal, default 25%
     const incomeTaxExpense = netIncomeBeforeTaxes * finalTaxRate;
     const netIncome = netIncomeBeforeTaxes - incomeTaxExpense;
+
+    // Create audit log for report access
+    await auditReportExport(
+      currentUser.id,
+      "monthly_profit_loss",
+      { year, month, taxRate, startDate, endDate },
+      currentUser.propertyAccess?.[0]?.propertyId
+    );
 
     return {
       monthYear: format(startDate, "MMMM yyyy"),

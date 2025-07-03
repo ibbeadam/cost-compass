@@ -104,14 +104,30 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
 
     // Search filter
     if (searchTerm) {
-      where.OR = [
-        ...(where.OR || []),
-        { action: { contains: searchTerm, mode: "insensitive" } },
-        { resource: { contains: searchTerm, mode: "insensitive" } },
-        { resourceId: { contains: searchTerm, mode: "insensitive" } },
-        { user: { name: { contains: searchTerm, mode: "insensitive" } } },
-        { user: { email: { contains: searchTerm, mode: "insensitive" } } },
+      const searchConditions = [
+        { action: { contains: searchTerm } },
+        { resource: { contains: searchTerm } },
+        { resourceId: { contains: searchTerm } },
+        { ipAddress: { contains: searchTerm } },
+        { user: { 
+          OR: [
+            { name: { contains: searchTerm } },
+            { email: { contains: searchTerm } }
+          ]
+        } },
       ];
+
+      if (where.OR) {
+        // If we already have OR conditions (property-based filtering), combine them properly
+        where.AND = [
+          { OR: where.OR },
+          { OR: searchConditions }
+        ];
+        delete where.OR;
+      } else {
+        // If no existing OR conditions, just add search conditions
+        where.OR = searchConditions;
+      }
     }
 
     // Calculate pagination

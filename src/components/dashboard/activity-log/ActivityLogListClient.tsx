@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { format } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { 
   Eye, 
   Download, 
-  Filter, 
   Search, 
   Calendar,
   User,
@@ -17,7 +17,9 @@ import {
   Shield,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X,
+  CalendarIcon
 } from "lucide-react";
 
 import type { AuditLog, AuditLogFilters } from "@/types";
@@ -30,17 +32,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import { showToast } from "@/lib/toast";
 import { 
   getAuditLogsAction, 
@@ -48,7 +53,6 @@ import {
   getAuditLogStatsAction 
 } from "@/actions/auditLogActions";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
-import { ActivityLogFilters } from "./ActivityLogFilters";
 import { ActivityLogDetailDialog } from "./ActivityLogDetailDialog";
 
 interface ActivityLogStats {
@@ -60,21 +64,38 @@ interface ActivityLogStats {
 }
 
 export default function ActivityLogListClient() {
+  // Initialize from localStorage if available
+  const getInitialPerPage = () => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('activityLogPerPage');
+      return stored ? parseInt(stored, 10) : 25;
+    }
+    return 25;
+  };
+
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [stats, setStats] = useState<ActivityLogStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = useState(getInitialPerPage());
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   
+  // Inline filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedAction, setSelectedAction] = useState("all");
+  const [selectedResource, setSelectedResource] = useState("all");
+  const [userId, setUserId] = useState("");
+  const [propertyId, setPropertyId] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  
   const [filters, setFilters] = useState<AuditLogFilters>({
     page: 1,
-    limit: 25,
+    limit: getInitialPerPage(),
   });
 
   const fetchLogs = useCallback(async () => {
@@ -113,15 +134,60 @@ export default function ActivityLogListClient() {
     fetchStats();
   }, [fetchStats]);
 
+  // Real-time filtering: Update filters when inline filter states change
+  useEffect(() => {
+    const newFilters: AuditLogFilters = {
+      page: 1,
+      limit: itemsPerPage,
+    };
+
+    if (searchTerm.trim()) newFilters.searchTerm = searchTerm.trim();
+    if (selectedAction && selectedAction !== "all") newFilters.action = selectedAction;
+    if (selectedResource && selectedResource !== "all") newFilters.resource = selectedResource;
+    if (userId.trim() && !isNaN(Number(userId.trim()))) {
+      newFilters.userId = Number(userId.trim());
+    }
+    if (propertyId.trim() && !isNaN(Number(propertyId.trim()))) {
+      newFilters.propertyId = Number(propertyId.trim());
+    }
+    if (dateRange?.from || dateRange?.to) {
+      newFilters.dateRange = {
+        from: dateRange.from,
+        to: dateRange.to,
+      };
+    }
+
+    setFilters(newFilters);
+    setCurrentPage(1);
+  }, [searchTerm, selectedAction, selectedResource, userId, propertyId, dateRange, itemsPerPage]);
+
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage);
     setCurrentPage(1);
+    setFilters((prev) => ({ ...prev, limit: newItemsPerPage }));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('activityLogPerPage', newItemsPerPage.toString());
+    }
   };
 
-  const handleFiltersChange = (newFilters: AuditLogFilters) => {
-    setFilters(newFilters);
-    setCurrentPage(1);
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setSelectedAction("all");
+    setSelectedResource("all");
+    setUserId("");
+    setPropertyId("");
+    setDateRange(undefined);
+    setDateRangeOpen(false);
   };
+
+  const hasActiveFilters = !!(
+    searchTerm ||
+    (selectedAction && selectedAction !== "all") ||
+    (selectedResource && selectedResource !== "all") ||
+    userId ||
+    propertyId ||
+    dateRange
+  );
 
   const handleViewDetails = (log: AuditLog) => {
     setSelectedLog(log);
@@ -329,15 +395,6 @@ export default function ActivityLogListClient() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setIsFiltersOpen(true)}
-                className="flex items-center gap-2"
-              >
-                <Filter className="h-4 w-4" />
-                Filters
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={handleExport}
                 disabled={isExporting}
                 className="flex items-center gap-2"
@@ -346,6 +403,185 @@ export default function ActivityLogListClient() {
                 {isExporting ? "Exporting..." : "Export"}
               </Button>
             </div>
+          </div>
+
+          {/* Inline Filter Bar */}
+          <div className="border-t bg-muted/30 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              {/* Search */}
+              <div className="space-y-2">
+                <Label htmlFor="search" className="text-xs font-medium text-muted-foreground">
+                  Search
+                </Label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="search"
+                    placeholder="Search activities..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-8"
+                  />
+                </div>
+              </div>
+
+              {/* Action Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="action" className="text-xs font-medium text-muted-foreground">
+                  Action
+                </Label>
+                <Select value={selectedAction} onValueChange={setSelectedAction}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All actions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All actions</SelectItem>
+                    <SelectItem value="CREATE">Create</SelectItem>
+                    <SelectItem value="UPDATE">Update</SelectItem>
+                    <SelectItem value="DELETE">Delete</SelectItem>
+                    <SelectItem value="LOGIN">Login</SelectItem>
+                    <SelectItem value="LOGOUT">Logout</SelectItem>
+                    <SelectItem value="ACTIVATE">Activate</SelectItem>
+                    <SelectItem value="DEACTIVATE">Deactivate</SelectItem>
+                    <SelectItem value="EXPORT">Export</SelectItem>
+                    <SelectItem value="IMPORT">Import</SelectItem>
+                    <SelectItem value="VIEW">View</SelectItem>
+                    <SelectItem value="DOWNLOAD">Download</SelectItem>
+                    <SelectItem value="RESET_PASSWORD">Reset Password</SelectItem>
+                    <SelectItem value="CHANGE_PASSWORD">Change Password</SelectItem>
+                    <SelectItem value="GRANT_ACCESS">Grant Access</SelectItem>
+                    <SelectItem value="REVOKE_ACCESS">Revoke Access</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Resource Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="resource" className="text-xs font-medium text-muted-foreground">
+                  Resource
+                </Label>
+                <Select value={selectedResource} onValueChange={setSelectedResource}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All resources" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All resources</SelectItem>
+                    <SelectItem value="user">User</SelectItem>
+                    <SelectItem value="property">Property</SelectItem>
+                    <SelectItem value="outlet">Outlet</SelectItem>
+                    <SelectItem value="category">Category</SelectItem>
+                    <SelectItem value="food_cost_entry">Food Cost Entry</SelectItem>
+                    <SelectItem value="beverage_cost_entry">Beverage Cost Entry</SelectItem>
+                    <SelectItem value="daily_financial_summary">Daily Financial Summary</SelectItem>
+                    <SelectItem value="property_access">Property Access</SelectItem>
+                    <SelectItem value="user_permission">User Permission</SelectItem>
+                    <SelectItem value="settings">Settings</SelectItem>
+                    <SelectItem value="report">Report</SelectItem>
+                    <SelectItem value="dashboard">Dashboard</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Date Range Filter */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Date Range
+                </Label>
+                <div className="relative">
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !dateRange && "text-muted-foreground"
+                    )}
+                    onClick={() => setDateRangeOpen(!dateRangeOpen)}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "MMM d")} - {format(dateRange.to, "MMM d")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "MMM d, yyyy")
+                      )
+                    ) : (
+                      <span>Pick dates</span>
+                    )}
+                  </Button>
+                  
+                  {dateRangeOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-[55]" 
+                        onClick={() => setDateRangeOpen(false)}
+                      />
+                      <div className="absolute top-full left-0 mt-1 z-[60] bg-background border rounded-md shadow-lg">
+                        <CalendarComponent
+                          mode="range"
+                          defaultMonth={dateRange?.from || new Date()}
+                          selected={dateRange}
+                          onSelect={(newDateRange) => {
+                            setDateRange(newDateRange);
+                            if (newDateRange?.from && newDateRange?.to) {
+                              setDateRangeOpen(false);
+                            }
+                          }}
+                          numberOfMonths={2}
+                          disabled={(date) =>
+                            date > new Date() || date < new Date("1900-01-01")
+                          }
+                          className="p-3"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* User ID Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="userId" className="text-xs font-medium text-muted-foreground">
+                  User ID
+                </Label>
+                <Input
+                  id="userId"
+                  type="number"
+                  placeholder="User ID"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                />
+              </div>
+
+              {/* Property ID Filter */}
+              <div className="space-y-2">
+                <Label htmlFor="propertyId" className="text-xs font-medium text-muted-foreground">
+                  Property ID
+                </Label>
+                <Input
+                  id="propertyId"
+                  type="number"
+                  placeholder="Property ID"
+                  value={propertyId}
+                  onChange={(e) => setPropertyId(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            {hasActiveFilters && (
+              <div className="flex justify-end mt-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                  Clear all filters
+                </Button>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -481,14 +717,6 @@ export default function ActivityLogListClient() {
           )}
         </CardContent>
       </Card>
-
-      {/* Filters Dialog */}
-      <ActivityLogFilters
-        open={isFiltersOpen}
-        onOpenChange={setIsFiltersOpen}
-        filters={filters}
-        onFiltersChange={handleFiltersChange}
-      />
 
       {/* Detail Dialog */}
       <ActivityLogDetailDialog

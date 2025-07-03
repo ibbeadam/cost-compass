@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/server-auth";
+import { auditDataChange } from "@/lib/audit-middleware";
 
 export async function getAllOutletsAction() {
   try {
@@ -228,6 +230,11 @@ export async function createOutletAction(outletData: {
   address?: string;
 }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
     console.log("Creating outlet with data:", outletData);
     
     // Validate required fields
@@ -277,6 +284,17 @@ export async function createOutletAction(outletData: {
       },
     });
 
+    // Create audit log
+    await auditDataChange(
+      currentUser.id,
+      "CREATE",
+      "outlet",
+      outlet.id,
+      undefined,
+      outlet,
+      outletData.propertyId
+    );
+
     console.log("Successfully created outlet:", outlet);
     revalidatePath("/dashboard/outlets");
     return outlet;
@@ -312,10 +330,53 @@ export async function updateOutletAction(
   }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Get the original outlet data for audit
+    const originalOutlet = await prisma.outlet.findUnique({
+      where: { id: Number(id) },
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true,
+          },
+        },
+      },
+    });
+
+    if (!originalOutlet) {
+      throw new Error("Outlet not found");
+    }
+
     const outlet = await prisma.outlet.update({
       where: { id: Number(id) },
       data: outletData,
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true,
+          },
+        },
+      },
     });
+
+    // Create audit log
+    await auditDataChange(
+      currentUser.id,
+      "UPDATE",
+      "outlet",
+      outlet.id,
+      originalOutlet,
+      outlet,
+      outlet.propertyId
+    );
 
     revalidatePath("/dashboard/outlets");
     return outlet;
@@ -327,9 +388,43 @@ export async function updateOutletAction(
 
 export async function deleteOutletAction(id: number) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Get the outlet data before deletion for audit
+    const outletToDelete = await prisma.outlet.findUnique({
+      where: { id: Number(id) },
+      include: {
+        property: {
+          select: {
+            id: true,
+            name: true,
+            propertyCode: true,
+          },
+        },
+      },
+    });
+
+    if (!outletToDelete) {
+      throw new Error("Outlet not found");
+    }
+
     await prisma.outlet.delete({
       where: { id: Number(id) },
     });
+
+    // Create audit log
+    await auditDataChange(
+      currentUser.id,
+      "DELETE",
+      "outlet",
+      id,
+      outletToDelete,
+      undefined,
+      outletToDelete.propertyId
+    );
 
     revalidatePath("/dashboard/outlets");
     return { success: true };

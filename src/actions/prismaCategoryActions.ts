@@ -2,6 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { getCurrentUser } from "@/lib/server-auth";
+import { auditDataChange } from "@/lib/audit-middleware";
 
 export async function getAllCategoriesAction() {
   try {
@@ -50,9 +52,25 @@ export async function createCategoryAction(categoryData: {
   type: "Food" | "Beverage";
 }) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
     const category = await prisma.category.create({
       data: categoryData,
     });
+
+    // Create audit log
+    await auditDataChange(
+      currentUser.id,
+      "CREATE",
+      "category",
+      category.id,
+      undefined,
+      category,
+      currentUser.propertyAccess?.[0]?.propertyId
+    );
 
     revalidatePath("/dashboard/categories");
     return category;
@@ -71,10 +89,35 @@ export async function updateCategoryAction(
   }
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Get the original category data for audit
+    const originalCategory = await prisma.category.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!originalCategory) {
+      throw new Error("Category not found");
+    }
+
     const category = await prisma.category.update({
       where: { id: Number(id) },
       data: categoryData,
     });
+
+    // Create audit log
+    await auditDataChange(
+      currentUser.id,
+      "UPDATE",
+      "category",
+      category.id,
+      originalCategory,
+      category,
+      currentUser.propertyAccess?.[0]?.propertyId
+    );
 
     revalidatePath("/dashboard/categories");
     return category;
@@ -86,9 +129,34 @@ export async function updateCategoryAction(
 
 export async function deleteCategoryAction(id: number) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Get the category data before deletion for audit
+    const categoryToDelete = await prisma.category.findUnique({
+      where: { id: Number(id) },
+    });
+
+    if (!categoryToDelete) {
+      throw new Error("Category not found");
+    }
+
     await prisma.category.delete({
       where: { id: Number(id) },
     });
+
+    // Create audit log
+    await auditDataChange(
+      currentUser.id,
+      "DELETE",
+      "category",
+      id,
+      categoryToDelete,
+      undefined,
+      currentUser.propertyAccess?.[0]?.propertyId
+    );
 
     revalidatePath("/dashboard/categories");
     return { success: true };

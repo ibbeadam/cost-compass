@@ -195,30 +195,86 @@ function getChangedFields(before: any, after: any): Record<string, { from: any; 
 
   if (!before || !after) return changes;
 
-  // Compare all fields in the after object
-  for (const key in after) {
-    if (after.hasOwnProperty(key) && before.hasOwnProperty(key)) {
-      const beforeValue = before[key];
-      const afterValue = after[key];
+  // Get all unique keys from both objects
+  const allKeys = new Set([...Object.keys(before), ...Object.keys(after)]);
 
-      // Skip comparison for certain fields
-      if (key === "updatedAt" || key === "updated_at") continue;
+  for (const key of allKeys) {
+    // Skip comparison for certain fields
+    if (key === "updatedAt" || key === "updated_at" || key === "id") continue;
 
-      // Handle different types of comparisons
-      if (beforeValue !== afterValue) {
-        // Handle Date objects
-        if (beforeValue instanceof Date && afterValue instanceof Date) {
-          if (beforeValue.getTime() !== afterValue.getTime()) {
-            changes[key] = { from: beforeValue, to: afterValue };
-          }
-        } else {
-          changes[key] = { from: beforeValue, to: afterValue };
-        }
-      }
+    const beforeValue = before[key];
+    const afterValue = after[key];
+
+    if (!deepEqual(beforeValue, afterValue)) {
+      changes[key] = { from: beforeValue, to: afterValue };
     }
   }
 
   return changes;
+}
+
+/**
+ * Deep equality check for complex objects and arrays
+ */
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  
+  // Handle null/undefined
+  if (a == null || b == null) return a === b;
+  
+  // Handle Date objects
+  if (a instanceof Date && b instanceof Date) {
+    return a.getTime() === b.getTime();
+  }
+  
+  // Handle arrays
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    
+    // For arrays with objects that have IDs, compare by ID and content
+    if (a.length > 0 && typeof a[0] === 'object' && a[0]?.id) {
+      const aIds = new Set(a.map(item => item.id));
+      const bIds = new Set(b.map(item => item.id));
+      
+      // Check if the same IDs exist
+      if (aIds.size !== bIds.size) return false;
+      for (const id of aIds) {
+        if (!bIds.has(id)) return false;
+      }
+      
+      // Check if content of items with same IDs are equal
+      for (let i = 0; i < a.length; i++) {
+        const aItem = a[i];
+        const bItem = b.find(item => item.id === aItem.id);
+        if (!bItem || !deepEqual(aItem, bItem)) return false;
+      }
+      
+      return true;
+    }
+    
+    // For simple arrays, compare each element
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  
+  // Handle objects
+  if (typeof a === 'object' && typeof b === 'object') {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+    
+    if (keysA.length !== keysB.length) return false;
+    
+    for (const key of keysA) {
+      if (!keysB.includes(key)) return false;
+      if (!deepEqual(a[key], b[key])) return false;
+    }
+    
+    return true;
+  }
+  
+  return false;
 }
 
 /**

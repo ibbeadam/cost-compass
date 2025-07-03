@@ -1,6 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/server-auth";
+import { auditDataChange, auditPropertyAccess } from "@/lib/audit-middleware";
 
 /**
  * Helper function to assign a user to a property
@@ -12,6 +14,11 @@ export async function assignUserToPropertyAction(
   accessLevel: "read_only" | "data_entry" | "management" | "full_control" | "owner" = "management"
 ) {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
     // Find the user
     const user = await prisma.user.findUnique({
       where: { email: userEmail },
@@ -45,8 +52,20 @@ export async function assignUserToPropertyAction(
         data: {
           accessLevel,
           grantedAt: new Date(),
+          grantedBy: currentUser.id,
         },
       });
+      
+      // Create audit log for update
+      await auditDataChange(
+        currentUser.id,
+        "UPDATE",
+        "property_access",
+        updatedAccess.id.toString(),
+        existingAccess,
+        updatedAccess,
+        propertyId
+      );
       
       console.log(`Updated property access for ${userEmail} to property ${property.name}`);
       return updatedAccess;
@@ -58,9 +77,23 @@ export async function assignUserToPropertyAction(
           propertyId: propertyId,
           accessLevel,
           grantedAt: new Date(),
-          grantedBy: user.id, // Self-assigned for now, in practice this would be the admin
+          grantedBy: currentUser.id,
         },
       });
+      
+      // Create audit log for new access
+      await auditPropertyAccess(
+        currentUser.id,
+        "GRANT_ACCESS",
+        propertyId,
+        user.id,
+        {
+          accessLevel,
+          targetUserEmail: userEmail,
+          targetUserName: user.name || userEmail,
+          propertyName: property.name,
+        }
+      );
       
       console.log(`Created property access for ${userEmail} to property ${property.name}`);
       return newAccess;

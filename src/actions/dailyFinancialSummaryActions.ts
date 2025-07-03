@@ -133,6 +133,16 @@ export async function createDailyFinancialSummaryAction(summaryData: {
       throw new Error("Invalid or inactive property selected");
     }
 
+    // Check if record exists for audit purposes
+    const existingSummary = await prisma.dailyFinancialSummary.findUnique({
+      where: {
+        date_propertyId: {
+          date: normalizedDate,
+          propertyId: propertyId,
+        }
+      },
+    });
+
     // Use upsert to handle duplicate dates gracefully (now including propertyId)
     const summary = await prisma.dailyFinancialSummary.upsert({
       where: {
@@ -164,6 +174,18 @@ export async function createDailyFinancialSummaryAction(summaryData: {
         propertyId: propertyId,
       },
     });
+
+    // Create audit log - distinguish between create and update
+    const isUpdate = existingSummary !== null;
+    await auditDataChange(
+      user.id,
+      isUpdate ? "UPDATE" : "CREATE",
+      "daily_financial_summary",
+      summary.id.toString(),
+      isUpdate ? existingSummary : undefined,
+      summary,
+      propertyId || undefined
+    );
 
     // Trigger automatic cost calculation after creating/updating
     await calculateAndUpdateDailyFinancialSummary(normalizedDate, propertyId || undefined);
@@ -202,7 +224,12 @@ export async function updateDailyFinancialSummaryAction(
   }
 ) {
   try {
-    // Get current entry to know the date for recalculation
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Get current entry to know the date for recalculation and for audit
     const currentSummary = await prisma.dailyFinancialSummary.findUnique({
       where: { id: Number(id) },
     });
@@ -221,6 +248,17 @@ export async function updateDailyFinancialSummaryAction(
       where: { id: Number(id) },
       data: processedData,
     });
+
+    // Create audit log
+    await auditDataChange(
+      user.id,
+      "UPDATE",
+      "daily_financial_summary",
+      summary.id.toString(),
+      currentSummary,
+      summary,
+      summary.propertyId || undefined
+    );
 
     // Trigger recalculation for both old and new dates
     await calculateAndUpdateDailyFinancialSummary(currentSummary.date, currentSummary.propertyId);

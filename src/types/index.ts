@@ -686,7 +686,7 @@ export interface AuditLogFilters {
   propertyId?: number;
   resource?: string;
   action?: string;
-  dateRange?: { from: Date; to: Date };
+  dateRange?: { from?: Date; to?: Date };
   searchTerm?: string;
   page?: number;
   limit?: number;
