@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, CalendarIcon } from "lucide-react";
 import type { DateRange } from "react-day-picker";
 import { format } from "date-fns";
@@ -41,6 +41,21 @@ export function ActivityLogFilters({
 }: ActivityLogFiltersProps) {
   const [localFilters, setLocalFilters] = useState<AuditLogFilters>(filters);
   const [dateRangeOpen, setDateRangeOpen] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState<'bottom' | 'top'>('bottom');
+  const [isMobile, setIsMobile] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Check screen size on mount and resize
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+    
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
   
   // Convert the filter dateRange to DateRange format for the date range picker
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
@@ -66,6 +81,28 @@ export function ActivityLogFilters({
     }
   }, [filters]);
 
+  // Calculate optimal position for dropdown
+  const calculateDropdownPosition = () => {
+    if (!buttonRef.current) return;
+    
+    const button = buttonRef.current;
+    const buttonRect = button.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    
+    // Approximate calendar height (2 months + padding)
+    const calendarHeight = 400;
+    
+    // Check if there's enough space below
+    const spaceBelow = viewportHeight - buttonRect.bottom;
+    
+    // If not enough space below, position above
+    if (spaceBelow < calendarHeight && buttonRect.top > calendarHeight) {
+      setDropdownPosition('top');
+    } else {
+      setDropdownPosition('bottom');
+    }
+  };
+
   // Handle date range changes
   const handleDateRangeChange = (newDateRange: DateRange | undefined) => {
     setDateRange(newDateRange);
@@ -76,6 +113,14 @@ export function ActivityLogFilters({
         to: newDateRange.to,
       } : undefined,
     });
+  };
+
+  // Handle dropdown toggle with position calculation
+  const handleDropdownToggle = () => {
+    if (!dateRangeOpen) {
+      calculateDropdownPosition();
+    }
+    setDateRangeOpen(!dateRangeOpen);
   };
 
   const handleApplyFilters = () => {
@@ -238,13 +283,14 @@ export function ActivityLogFilters({
             <Label>Date Range</Label>
             <div className="relative">
               <Button
+                ref={buttonRef}
                 type="button"
                 variant="outline"
                 className={cn(
                   "w-full justify-start text-left font-normal",
                   !dateRange && "text-muted-foreground"
                 )}
-                onClick={() => setDateRangeOpen(!dateRangeOpen)}
+                onClick={handleDropdownToggle}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {dateRange?.from ? (
@@ -270,7 +316,18 @@ export function ActivityLogFilters({
                   />
                   
                   {/* Calendar dropdown */}
-                  <div className="absolute top-full left-0 mt-1 z-[60] bg-background border rounded-md shadow-lg min-w-max">
+                  <div className={cn(
+                    "absolute z-[60] bg-background border rounded-md shadow-lg",
+                    // Responsive positioning
+                    isMobile 
+                      ? "left-1/2 transform -translate-x-1/2 w-[320px]" // Center on mobile with fixed width
+                      : "left-0 min-w-max", // Left align on desktop
+                    dropdownPosition === 'bottom' 
+                      ? "top-full mt-1" 
+                      : "bottom-full mb-1",
+                    // On small screens, add max height with scroll
+                    "max-h-[70vh] overflow-auto"
+                  )}>
                     <Calendar
                       mode="range"
                       defaultMonth={dateRange?.from || new Date()}
@@ -282,10 +339,11 @@ export function ActivityLogFilters({
                           setDateRangeOpen(false);
                         }
                       }}
-                      numberOfMonths={2}
+                      numberOfMonths={isMobile ? 1 : 2} // 1 month on mobile, 2 on desktop
                       disabled={(date) =>
                         date > new Date() || date < new Date("1900-01-01")
                       }
+                      className="p-3"
                     />
                   </div>
                 </>
