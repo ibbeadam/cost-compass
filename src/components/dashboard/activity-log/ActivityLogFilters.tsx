@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CalendarIcon, X } from "lucide-react";
-import { format } from "date-fns";
+import { X } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 
 import type { AuditLogFilters } from "@/types";
 import {
@@ -22,13 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { cn } from "@/lib/utils";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 
 interface ActivityLogFiltersProps {
   open: boolean;
@@ -44,12 +38,42 @@ export function ActivityLogFilters({
   onFiltersChange,
 }: ActivityLogFiltersProps) {
   const [localFilters, setLocalFilters] = useState<AuditLogFilters>(filters);
-  const [dateFromOpen, setDateFromOpen] = useState(false);
-  const [dateToOpen, setDateToOpen] = useState(false);
+  
+  // Convert the filter dateRange to DateRange format for the date range picker
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    if (filters.dateRange?.from || filters.dateRange?.to) {
+      return {
+        from: filters.dateRange.from,
+        to: filters.dateRange.to,
+      };
+    }
+    return undefined;
+  });
 
   useEffect(() => {
     setLocalFilters(filters);
+    // Update dateRange state when filters change
+    if (filters.dateRange?.from || filters.dateRange?.to) {
+      setDateRange({
+        from: filters.dateRange.from,
+        to: filters.dateRange.to,
+      });
+    } else {
+      setDateRange(undefined);
+    }
   }, [filters]);
+
+  // Handle date range changes
+  const handleDateRangeChange = (newDateRange: DateRange | undefined) => {
+    setDateRange(newDateRange);
+    setLocalFilters({
+      ...localFilters,
+      dateRange: newDateRange ? {
+        from: newDateRange.from,
+        to: newDateRange.to,
+      } : undefined,
+    });
+  };
 
   const handleApplyFilters = () => {
     onFiltersChange(localFilters);
@@ -62,6 +86,7 @@ export function ActivityLogFilters({
       limit: filters.limit || 25,
     };
     setLocalFilters(clearedFilters);
+    setDateRange(undefined);
     onFiltersChange(clearedFilters);
     onOpenChange(false);
   };
@@ -72,7 +97,7 @@ export function ActivityLogFilters({
     localFilters.resource ||
     localFilters.userId ||
     localFilters.propertyId ||
-    localFilters.dateRange
+    dateRange
   );
 
   return (
@@ -175,13 +200,14 @@ export function ActivityLogFilters({
               id="userId"
               type="number"
               placeholder="Enter user ID"
-              value={localFilters.userId || ""}
-              onChange={(e) =>
+              value={localFilters.userId?.toString() || ""}
+              onChange={(e) => {
+                const value = e.target.value.trim();
                 setLocalFilters({
                   ...localFilters,
-                  userId: e.target.value ? Number(e.target.value) : undefined,
-                })
-              }
+                  userId: value && !isNaN(Number(value)) ? Number(value) : undefined,
+                });
+              }}
             />
           </div>
 
@@ -192,119 +218,41 @@ export function ActivityLogFilters({
               id="propertyId"
               type="number"
               placeholder="Enter property ID"
-              value={localFilters.propertyId || ""}
-              onChange={(e) =>
+              value={localFilters.propertyId?.toString() || ""}
+              onChange={(e) => {
+                const value = e.target.value.trim();
                 setLocalFilters({
                   ...localFilters,
-                  propertyId: e.target.value ? Number(e.target.value) : undefined,
-                })
-              }
+                  propertyId: value && !isNaN(Number(value)) ? Number(value) : undefined,
+                });
+              }}
             />
           </div>
 
-          {/* Date Range From */}
-          <div className="space-y-2">
-            <Label>Date From</Label>
-            <Popover open={dateFromOpen} onOpenChange={setDateFromOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !localFilters.dateRange?.from && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {localFilters.dateRange?.from ? (
-                    format(localFilters.dateRange.from, "PPP")
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={localFilters.dateRange?.from}
-                  onSelect={(date) => {
-                    setLocalFilters({
-                      ...localFilters,
-                      dateRange: {
-                        ...localFilters.dateRange,
-                        from: date!,
-                        to: localFilters.dateRange?.to || date!,
-                      },
-                    });
-                    setDateFromOpen(false);
-                  }}
-                  disabled={(date) =>
-                    date > new Date() || date < new Date("1900-01-01")
-                  }
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-          </div>
-
-          {/* Date Range To */}
-          <div className="space-y-2">
-            <Label>Date To</Label>
-            <Popover open={dateToOpen} onOpenChange={setDateToOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !localFilters.dateRange?.to && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {localFilters.dateRange?.to ? (
-                    format(localFilters.dateRange.to, "PPP")
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={localFilters.dateRange?.to}
-                  onSelect={(date) => {
-                    setLocalFilters({
-                      ...localFilters,
-                      dateRange: {
-                        ...localFilters.dateRange,
-                        from: localFilters.dateRange?.from || date!,
-                        to: date!,
-                      },
-                    });
-                    setDateToOpen(false);
-                  }}
-                  disabled={(date) =>
-                    date > new Date() ||
-                    date < new Date("1900-01-01") ||
-                    (localFilters.dateRange?.from && date < localFilters.dateRange.from)
-                  }
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+          {/* Date Range */}
+          <div className="space-y-2 md:col-span-2">
+            <Label>Date Range</Label>
+            <DateRangePicker
+              date={dateRange}
+              setDate={handleDateRangeChange}
+              className="w-full"
+            />
           </div>
         </div>
 
         {/* Clear Date Range Button */}
-        {localFilters.dateRange && (
+        {dateRange && (
           <div className="flex justify-start">
             <Button
               variant="ghost"
               size="sm"
-              onClick={() =>
+              onClick={() => {
+                setDateRange(undefined);
                 setLocalFilters({
                   ...localFilters,
                   dateRange: undefined,
-                })
-              }
+                });
+              }}
               className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4" />
