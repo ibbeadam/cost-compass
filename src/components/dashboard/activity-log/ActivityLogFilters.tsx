@@ -23,11 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 
@@ -239,52 +234,63 @@ export function ActivityLogFilters({
           </div>
 
           {/* Date Range */}
-          <div className="space-y-2 md:col-span-2">
+          <div className="space-y-2 md:col-span-2 relative">
             <Label>Date Range</Label>
-            <Popover open={dateRangeOpen} onOpenChange={setDateRangeOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !dateRange && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      <>
-                        {format(dateRange.from, "LLL dd, y")} -{" "}
-                        {format(dateRange.to, "LLL dd, y")}
-                      </>
-                    ) : (
-                      format(dateRange.from, "LLL dd, y")
-                    )
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !dateRange && "text-muted-foreground"
+                )}
+                onClick={() => setDateRangeOpen(!dateRangeOpen)}
+              >
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateRange?.from ? (
+                  dateRange.to ? (
+                    <>
+                      {format(dateRange.from, "LLL dd, y")} -{" "}
+                      {format(dateRange.to, "LLL dd, y")}
+                    </>
                   ) : (
-                    <span>Pick a date range</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={dateRange?.from || new Date()}
-                  selected={dateRange}
-                  onSelect={(newDateRange) => {
-                    handleDateRangeChange(newDateRange);
-                    // Close the popover when both dates are selected or same date is clicked twice
-                    if (newDateRange?.from && newDateRange?.to) {
-                      setDateRangeOpen(false);
-                    }
-                  }}
-                  numberOfMonths={2}
-                  disabled={(date) =>
-                    date > new Date() || date < new Date("1900-01-01")
-                  }
-                />
-              </PopoverContent>
-            </Popover>
+                    format(dateRange.from, "LLL dd, y")
+                  )
+                ) : (
+                  <span>Pick a date range</span>
+                )}
+              </Button>
+              
+              {dateRangeOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div 
+                    className="fixed inset-0 z-[55]" 
+                    onClick={() => setDateRangeOpen(false)}
+                  />
+                  
+                  {/* Calendar dropdown */}
+                  <div className="absolute top-full left-0 mt-1 z-[60] bg-background border rounded-md shadow-lg min-w-max">
+                    <Calendar
+                      mode="range"
+                      defaultMonth={dateRange?.from || new Date()}
+                      selected={dateRange}
+                      onSelect={(newDateRange) => {
+                        handleDateRangeChange(newDateRange);
+                        // Close the dropdown when both dates are selected
+                        if (newDateRange?.from && newDateRange?.to) {
+                          setDateRangeOpen(false);
+                        }
+                      }}
+                      numberOfMonths={2}
+                      disabled={(date) =>
+                        date > new Date() || date < new Date("1900-01-01")
+                      }
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
