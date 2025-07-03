@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/server-auth";
 import { revalidatePath } from "next/cache";
 import type { AuditLog, CreateAuditLogData, AuditLogFilters, AuditLogResponse } from "@/types";
+import { formatChanges, formatValue, formatFieldName } from "@/lib/audit-formatting";
+import { format } from "date-fns";
 
 /**
  * Create a new audit log entry
@@ -86,11 +88,18 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
     if (action) where.action = action;
 
     // Date range filter
-    if (dateRange) {
-      where.timestamp = {
-        gte: dateRange.from,
-        lte: dateRange.to,
-      };
+    if (dateRange && (dateRange.from || dateRange.to)) {
+      const timestampFilter: any = {};
+      if (dateRange.from) {
+        timestampFilter.gte = dateRange.from;
+      }
+      if (dateRange.to) {
+        // Set to end of day for inclusive filtering
+        const endOfDay = new Date(dateRange.to);
+        endOfDay.setHours(23, 59, 59, 999);
+        timestampFilter.lte = endOfDay;
+      }
+      where.timestamp = timestampFilter;
     }
 
     // Search filter
@@ -305,6 +314,95 @@ export async function getAuditLogStatsAction(): Promise<{
 }
 
 /**
+ * Format audit log details for human-readable export
+ */
+function formatDetailsForExport(details: any): string {
+  if (!details || typeof details !== "object") {
+    return details ? String(details) : "";
+  }
+
+  const sections: string[] = [];
+
+  // Handle different types of audit details
+  if (details.changes && typeof details.changes === "object") {
+    const formattedChanges = formatChanges(details.changes);
+    sections.push(`Changes (${formattedChanges.length}):`);
+    
+    formattedChanges.forEach(change => {
+      if (change.type === 'simple') {
+        const fromVal = formatValue(change.from, change.field);
+        const toVal = formatValue(change.to, change.field);
+        sections.push(`  • ${change.displayName}: ${fromVal} → ${toVal}`);
+      } else if (change.type === 'array') {
+        sections.push(`  • ${change.displayName}: ${change.summary}`);
+        if (change.details) {
+          sections.push(`    ${change.details}`);
+        }
+      } else if (change.type === 'object') {
+        sections.push(`  • ${change.displayName}: ${change.summary}`);
+        if (change.details) {
+          sections.push(`    ${change.details}`);
+        }
+      }
+    });
+  }
+
+  // Handle create operations
+  if (details.created || (details.after && !details.before)) {
+    const data = details.created || details.after;
+    sections.push("Created Data:");
+    Object.entries(data).forEach(([key, value]: [string, any]) => {
+      sections.push(`  • ${formatFieldName(key)}: ${formatValue(value, key)}`);
+    });
+  }
+
+  // Handle delete operations
+  if (details.deleted || (details.before && !details.after)) {
+    const data = details.deleted || details.before;
+    sections.push("Deleted Data:");
+    Object.entries(data).forEach(([key, value]: [string, any]) => {
+      sections.push(`  • ${formatFieldName(key)}: ${formatValue(value, key)}`);
+    });
+  }
+
+  // Handle bulk operations
+  if (details.bulkOperation) {
+    sections.push("Bulk Operation:");
+    sections.push(`  • Total Items: ${details.totalItems || 0}`);
+    sections.push(`  • Successful: ${details.successCount || 0}`);
+    sections.push(`  • Failed: ${details.failureCount || 0}`);
+    if (details.totalItems) {
+      const successRate = Math.round((details.successCount / details.totalItems) * 100);
+      sections.push(`  • Success Rate: ${successRate}%`);
+    }
+  }
+
+  // Handle report exports
+  if (details.reportType) {
+    sections.push("Report Export:");
+    sections.push(`  • Type: ${details.reportType}`);
+    if (details.filters) {
+      sections.push(`  • Filters Applied: Yes`);
+    }
+    if (details.exportedAt) {
+      sections.push(`  • Exported At: ${formatValue(details.exportedAt)}`);
+    }
+  }
+
+  // Handle other structured data
+  if (sections.length === 0 && typeof details === "object") {
+    sections.push("Additional Information:");
+    Object.entries(details).forEach(([key, value]: [string, any]) => {
+      if (!['changes', 'created', 'deleted', 'before', 'after', 'bulkOperation'].includes(key)) {
+        sections.push(`  • ${formatFieldName(key)}: ${formatValue(value, key)}`);
+      }
+    });
+  }
+
+  return sections.length > 0 ? sections.join('\n') : "No additional details";
+}
+
+/**
  * Export audit logs as CSV
  */
 export async function exportAuditLogsAction(filters: AuditLogFilters = {}): Promise<string> {
@@ -338,7 +436,7 @@ export async function exportAuditLogsAction(filters: AuditLogFilters = {}): Prom
 
     // Create CSV rows
     const csvRows = logs.map(log => [
-      log.timestamp.toISOString(),
+      format(log.timestamp, "yyyy-MM-dd HH:mm:ss"),
       log.user?.name || "System",
       log.user?.email || "",
       log.action,
@@ -347,7 +445,7 @@ export async function exportAuditLogsAction(filters: AuditLogFilters = {}): Prom
       log.propertyId || "",
       log.ipAddress || "",
       log.userAgent || "",
-      JSON.stringify(log.details || {}),
+      formatDetailsForExport(log.details),
     ].map(field => `"${field.toString().replace(/"/g, '""')}"`).join(","));
 
     // Create audit log for this export
