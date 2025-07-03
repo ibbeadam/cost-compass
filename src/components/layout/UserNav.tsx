@@ -93,12 +93,14 @@ export function UserNav() {
               <span>Profile</span>
             </Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent">
-            <Link href="/dashboard/settings" className="flex items-center">
-              <Settings className="mr-2 h-4 w-4" />
-              <span>Settings</span>
-            </Link>
-          </DropdownMenuItem>
+          {userProfile?.role === "super_admin" && (
+            <DropdownMenuItem asChild className="cursor-pointer hover:bg-accent">
+              <Link href="/dashboard/settings" className="flex items-center">
+                <Settings className="mr-2 h-4 w-4" />
+                <span>Settings</span>
+              </Link>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuItem
