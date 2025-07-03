@@ -55,6 +55,7 @@ model User {
   phoneNumber                    String?                 @map("phone_number")
   role                           UserRole                @default(user)
   password                       String?
+  profileImage                   String?                 @map("profile_image")
   isActive                       Boolean                 @default(true) @map("is_active")
   passwordChangedAt              DateTime?               @map("password_changed_at")
   lastLoginAt                    DateTime?               @map("last_login_at")

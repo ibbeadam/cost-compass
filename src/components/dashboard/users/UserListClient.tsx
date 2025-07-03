@@ -13,9 +13,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle, ShieldAlert, Edit, Trash2, UserX, UserCheck, Users } from "lucide-react";
+import { AlertTriangle, ShieldAlert, Edit, Trash2, UserX, UserCheck, Users, Key } from "lucide-react";
 import type { User } from "@/types";
 import { getAllUsersAction, updateUserAction, deleteUserAction } from "@/actions/prismaUserActions";
+import { PasswordResetDialog } from "./PasswordResetDialog";
 import { showToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
@@ -26,6 +27,8 @@ export default function UserListClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
+  const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -64,6 +67,27 @@ export default function UserListClient() {
 
   const handleEditUser = (userId: string) => {
     showToast.info("User editing dialog will be implemented.");
+  };
+
+  const handleResetPassword = (user: User) => {
+    setSelectedUserForReset(user);
+    setIsPasswordResetOpen(true);
+  };
+
+  const handlePasswordResetComplete = () => {
+    // Refresh the user list to get updated data
+    const fetchUsers = async () => {
+      try {
+        setIsLoading(true);
+        const fetchedUsers = await getAllUsersAction();
+        setUsers(fetchedUsers);
+      } catch (error) {
+        showToast.error("Failed to refresh users");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchUsers();
   };
 
   const handleToggleDisableUser = async (userId: string, isActive: boolean) => {
@@ -172,14 +196,25 @@ export default function UserListClient() {
                       size="icon"
                       onClick={() => handleEditUser(user.id)}
                       className="h-8 w-8"
+                      title="Edit User"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
+                      onClick={() => handleResetPassword(user)}
+                      className="h-8 w-8"
+                      title="Reset User Password"
+                    >
+                      <Key className="h-5 w-5 text-blue-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleToggleDisableUser(user.id, !user.isActive)}
                       className="h-8 w-8"
+                      title={user.isActive ? "Deactivate User" : "Activate User"}
                     >
                       {user.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
                     </Button>
@@ -188,6 +223,7 @@ export default function UserListClient() {
                       size="icon"
                       onClick={() => handleDeleteUser(user.id)}
                       className="h-8 w-8 text-destructive hover:text-destructive"
+                      title="Delete User"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -232,6 +268,14 @@ export default function UserListClient() {
           </div>
         )}
       </div>
+
+      {/* Password Reset Dialog */}
+      <PasswordResetDialog
+        user={selectedUserForReset}
+        open={isPasswordResetOpen}
+        onOpenChange={setIsPasswordResetOpen}
+        onPasswordReset={handlePasswordResetComplete}
+      />
     </div>
   );
 }

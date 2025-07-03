@@ -95,7 +95,7 @@ export function ThemeToggleButton() {
 
   return (
     <Button
-      variant="outline"
+      variant="ghost"
       size="icon"
       onClick={handleToggle}
       title={`Current theme: ${theme}`}

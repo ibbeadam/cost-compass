@@ -1,0 +1,10 @@
+# Ignore uploaded profile images
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.gif
+
+# Keep the .gitkeep file
+!.gitkeep
+!.gitignore

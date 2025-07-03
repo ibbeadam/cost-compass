@@ -20,6 +20,7 @@ export interface User {
   role: UserRole;
   password?: string | null;
   isActive: boolean; // Maps to is_active in DB
+  profileImage?: string | null; // Profile image URL or path
   
   // Enhanced Security Fields
   passwordChangedAt?: Date | null;
@@ -227,6 +228,7 @@ export interface UpdateUserData {
   isActive?: boolean;
   department?: string;
   phoneNumber?: string;
+  profileImage?: string | null;
   permissions?: string[];
   propertyAccess?: {
     propertyId: number;

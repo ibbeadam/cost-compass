@@ -60,6 +60,10 @@ export async function getAllUsersAction(filters?: {
         isActive: true,
         createdAt: true,
         updatedAt: true,
+        // Include lock/security fields
+        loginAttempts: true,
+        lockedUntil: true,
+        passwordChangedAt: true,
         // Include property relations
         ownedProperties: {
           select: { id: true, name: true, propertyCode: true }
@@ -300,6 +304,7 @@ export async function updateUserAction(
       isActive: userData.isActive,
       department: userData.department,
       phoneNumber: userData.phoneNumber,
+      profileImage: userData.profileImage,
       updatedAt: new Date(),
     };
 
@@ -325,6 +330,7 @@ export async function updateUserAction(
         role: true,
         department: true,
         phoneNumber: true,
+        profileImage: true,
         isActive: true,
         createdAt: true,
         updatedAt: true,
@@ -527,21 +533,48 @@ export async function toggleUserLockAction(
   toggledBy: number | string
 ): Promise<void> {
   try {
-    // TODO: Implement when schema is updated
-    /*
+    const { getCurrentUser } = await import("@/lib/server-auth");
+    const currentUser = await getCurrentUser();
+    
+    if (!currentUser || currentUser.role !== "super_admin") {
+      throw new Error("Only super administrators can lock/unlock user accounts");
+    }
+
+    // Get user data before update for audit log
+    const userToUpdate = await prisma.user.findUnique({
+      where: { id: Number(id) },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        loginAttempts: true,
+        lockedUntil: true,
+        isActive: true,
+      },
+    });
+
+    if (!userToUpdate) {
+      throw new Error("User not found");
+    }
+
+    // Prevent locking super admins
+    const targetUser = await prisma.user.findUnique({
+      where: { id: Number(id) },
+      select: { role: true },
+    });
+
+    if (targetUser?.role === "super_admin" && locked) {
+      throw new Error("Cannot lock super administrator accounts");
+    }
+
+    // Update user lock status
     await prisma.user.update({
       where: { id: Number(id) },
       data: {
         lockedUntil: locked ? new Date(Date.now() + 24 * 60 * 60 * 1000) : null, // Lock for 24 hours
-        loginAttempts: locked ? 999 : 0 // Set high number for locked accounts
+        loginAttempts: locked ? 999 : 0, // Set high number for locked accounts, reset for unlocked
+        updatedAt: new Date(),
       }
-    });
-    */
-
-    // For now, just toggle isActive status
-    await prisma.user.update({
-      where: { id: Number(id) },
-      data: { isActive: !locked }
     });
 
     // Create audit log
@@ -550,14 +583,113 @@ export async function toggleUserLockAction(
       locked ? "DEACTIVATE" : "ACTIVATE",
       "user",
       id.toString(),
-      { targetUserId: Number(id), action: locked ? "locked" : "unlocked" }
+      { 
+        targetUserId: Number(id), 
+        action: locked ? "locked" : "unlocked",
+        targetUserEmail: userToUpdate.email,
+        lockDuration: locked ? "24 hours" : null,
+        previousLoginAttempts: userToUpdate.loginAttempts,
+        previousLockedUntil: userToUpdate.lockedUntil,
+      }
     );
 
-    console.log(`User ${id} ${locked ? 'locked' : 'unlocked'} by user ${toggledBy}`);
+    console.log(`User ${id} (${userToUpdate.email}) ${locked ? 'locked' : 'unlocked'} by user ${toggledBy}`);
     revalidatePath("/dashboard/users");
   } catch (error) {
     console.error("Error toggling user lock:", error);
-    throw new Error("Failed to toggle user lock status");
+    throw new Error(error instanceof Error ? error.message : "Failed to toggle user lock status");
+  }
+}
+
+/**
+ * Check if user is currently locked
+ */
+export async function isUserLockedAction(id: number | string): Promise<boolean> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: Number(id) },
+      select: {
+        lockedUntil: true,
+        loginAttempts: true,
+      },
+    });
+
+    if (!user) {
+      return false;
+    }
+
+    // Check if user is locked until a future date
+    if (user.lockedUntil && user.lockedUntil > new Date()) {
+      return true;
+    }
+
+    // Check if user has too many login attempts (fallback)
+    if (user.loginAttempts && user.loginAttempts >= 5) {
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("Error checking user lock status:", error);
+    return false;
+  }
+}
+
+/**
+ * Get user lock information
+ */
+export async function getUserLockInfoAction(id: number | string): Promise<{
+  isLocked: boolean;
+  lockedUntil: Date | null;
+  loginAttempts: number;
+  lockReason: string | null;
+}> {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: Number(id) },
+      select: {
+        lockedUntil: true,
+        loginAttempts: true,
+      },
+    });
+
+    if (!user) {
+      return {
+        isLocked: false,
+        lockedUntil: null,
+        loginAttempts: 0,
+        lockReason: null,
+      };
+    }
+
+    const now = new Date();
+    const isLockedByTime = user.lockedUntil && user.lockedUntil > now;
+    const isLockedByAttempts = user.loginAttempts >= 5;
+    const isLocked = isLockedByTime || isLockedByAttempts;
+
+    let lockReason = null;
+    if (isLockedByTime && user.loginAttempts >= 999) {
+      lockReason = "Manually locked by administrator";
+    } else if (isLockedByTime) {
+      lockReason = "Locked due to failed login attempts";
+    } else if (isLockedByAttempts) {
+      lockReason = "Too many failed login attempts";
+    }
+
+    return {
+      isLocked,
+      lockedUntil: user.lockedUntil,
+      loginAttempts: user.loginAttempts,
+      lockReason,
+    };
+  } catch (error) {
+    console.error("Error getting user lock info:", error);
+    return {
+      isLocked: false,
+      lockedUntil: null,
+      loginAttempts: 0,
+      lockReason: "Error checking lock status",
+    };
   }
 }
 

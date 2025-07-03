@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { PlusCircle, Edit, Trash2, AlertTriangle, User as UserIcon, Shield, Eye, EyeOff, Mail, Phone, Building, MapPin, Plus, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { PlusCircle, Edit, Trash2, AlertTriangle, User as UserIcon, Shield, Eye, EyeOff, Mail, Phone, Building, MapPin, Plus, X, ChevronLeft, ChevronRight, Key, Lock, LockOpen, Timer } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -51,6 +51,7 @@ import {
   updateUserAction, 
   deleteUserAction 
 } from "@/actions/prismaUserActions";
+import { PasswordResetDialog } from "./PasswordResetDialog";
 import { getPropertiesAction } from "@/actions/propertyActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -68,6 +69,8 @@ export default function UserManagementClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
+  const [isPasswordResetOpen, setIsPasswordResetOpen] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     // Only fetch if user is super admin and not loading
@@ -110,6 +113,70 @@ export default function UserManagementClient() {
   const handleEdit = (user: User) => {
     setEditingUser(user);
     setIsFormOpen(true);
+  };
+
+  const handleResetPassword = (user: User) => {
+    setSelectedUserForReset(user);
+    setIsPasswordResetOpen(true);
+  };
+
+  const handlePasswordResetComplete = () => {
+    // Refresh the user list to get updated data
+    fetchUsers();
+  };
+
+  const isUserLocked = (user: User): boolean => {
+    // Check if user is locked until a future date
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+      return true;
+    }
+    // Check if user has too many login attempts
+    if (user.loginAttempts && user.loginAttempts >= 5) {
+      return true;
+    }
+    return false;
+  };
+
+  const getUserLockReason = (user: User): string | null => {
+    if (!isUserLocked(user)) return null;
+    
+    const now = new Date();
+    const isLockedByTime = user.lockedUntil && new Date(user.lockedUntil) > now;
+    
+    if (isLockedByTime && user.loginAttempts && user.loginAttempts >= 999) {
+      return "Manually locked by administrator";
+    } else if (isLockedByTime) {
+      return "Locked due to failed login attempts";
+    } else if (user.loginAttempts && user.loginAttempts >= 5) {
+      return "Too many failed login attempts";
+    }
+    return "Account locked";
+  };
+
+  const handleUnlockUser = async (user: User) => {
+    try {
+      const response = await fetch(`/api/users/${user.id}/lock`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          locked: false,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        showToast.success(`User ${user.name || user.email} has been unlocked successfully`);
+        fetchUsers(); // Refresh the user list
+      } else {
+        showToast.error(data.error || "Failed to unlock user");
+      }
+    } catch (error) {
+      console.error("Error unlocking user:", error);
+      showToast.error("Failed to unlock user");
+    }
   };
 
   const handleDelete = async (userId: number) => {
@@ -411,9 +478,25 @@ export default function UserManagementClient() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={user.isActive ? "default" : "secondary"}>
-                          {user.isActive ? "Active" : "Inactive"}
-                        </Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={user.isActive ? "default" : "secondary"}>
+                            {user.isActive ? "Active" : "Inactive"}
+                          </Badge>
+                          {isUserLocked(user) && (
+                            <div className="flex items-center gap-1">
+                              <Badge variant="destructive" className="text-xs flex items-center gap-1">
+                                <Lock className="h-3 w-3" />
+                                Locked
+                              </Badge>
+                              {user.lockedUntil && new Date(user.lockedUntil) > new Date() && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                  <Timer className="h-3 w-3" />
+                                  Until {format(new Date(user.lockedUntil), "MMM d, HH:mm")}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {user.createdAt instanceof Date ? format(user.createdAt, "MMM d, yyyy") : "Unknown"}
@@ -438,6 +521,26 @@ export default function UserManagementClient() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleResetPassword(user)}
+                            className="h-8 w-8 hover:text-blue-600"
+                            title="Reset User Password"
+                          >
+                            <Key className="h-5 w-5 text-blue-600" />
+                          </Button>
+                          {isUserLocked(user) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleUnlockUser(user)}
+                              className="h-8 w-8 hover:text-green-600"
+                              title={`Unlock User - ${getUserLockReason(user)}`}
+                            >
+                              <LockOpen className="h-5 w-5 text-amber-600" />
+                            </Button>
+                          )}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
                               <Button
@@ -524,6 +627,14 @@ export default function UserManagementClient() {
         user={editingUser}
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
+      />
+      
+      {/* Password Reset Dialog */}
+      <PasswordResetDialog
+        user={selectedUserForReset}
+        open={isPasswordResetOpen}
+        onOpenChange={setIsPasswordResetOpen}
+        onPasswordReset={handlePasswordResetComplete}
       />
     </div>
   );

@@ -406,7 +406,8 @@ export default function ActivityLogListClient() {
           </div>
 
           {/* Inline Filter Bar */}
-          <div className="border-t bg-muted/30 p-4">
+          <Card className="shadow-md bg-card p-4">
+          <div className="bg-muted/10 p-4 rounded-md">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
               {/* Search */}
               <div className="space-y-2">
@@ -583,8 +584,10 @@ export default function ActivityLogListClient() {
               </div>
             )}
           </div>
+          </Card>
         </CardHeader>
         <CardContent>
+          
           {logs.length === 0 && !isLoading ? (
             <div className="text-center py-10 text-muted-foreground">
               <Activity className="mx-auto h-12 w-12 mb-4 text-primary" />
@@ -593,9 +596,9 @@ export default function ActivityLogListClient() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
+              <div className="rounded-lg border overflow-hidden shadow-md bg-card">
+                <Table className="whitespace-nowrap">
+                  <TableHeader className="bg-muted/50">
                     <TableRow>
                       <TableHead>Time</TableHead>
                       <TableHead>User</TableHead>
@@ -666,7 +669,7 @@ export default function ActivityLogListClient() {
                             className="flex items-center gap-1"
                           >
                             <Eye className="h-4 w-4" />
-                            View
+                            
                           </Button>
                         </TableCell>
                       </TableRow>

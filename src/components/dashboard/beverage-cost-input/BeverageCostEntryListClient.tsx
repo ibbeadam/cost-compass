@@ -1185,7 +1185,7 @@ export default function BeverageCostEntryListClient() {
           </div>
 
           <div className="flex-shrink-0 p-6 border-t">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button 
                 variant="outline" 
                 onClick={() => setIsViewDialogOpen(false)}
@@ -1193,6 +1193,18 @@ export default function BeverageCostEntryListClient() {
               >
                 Close
               </Button>
+              {viewingEntry && (
+                <Button
+                  onClick={() => {
+                    setIsViewDialogOpen(false);
+                    handleEdit(viewingEntry);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit Entry
+                </Button>
+              )}
             </div>
           </div>
         </DialogContent>
