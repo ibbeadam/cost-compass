@@ -2,6 +2,10 @@ import UserManagementClient from "@/components/dashboard/users/UserManagementCli
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getUserByEmailAction } from "@/actions/prismaUserActions";
 
 export const metadata = {
   title: "User Management | Cost Compass",
@@ -35,7 +39,24 @@ function UserManagementSkeleton() {
   );
 }
 
-export default function UserManagementPage() {
+export default async function UserManagementPage() {
+  // Check authentication
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.email) {
+    redirect("/login");
+  }
+
+  // Check if user is super admin
+  try {
+    const user = await getUserByEmailAction(session.user.email);
+    if (!user || user.role !== "super_admin") {
+      redirect("/dashboard");
+    }
+  } catch (error) {
+    console.error("Error checking user permissions:", error);
+    redirect("/dashboard");
+  }
+
   return (
     <div className="flex flex-col flex-grow w-full">
       <Card className="shadow-lg bg-card w-full">

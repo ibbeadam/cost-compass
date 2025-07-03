@@ -1,0 +1,424 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            Int
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId], map: "accounts_userId_fkey")
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       Int
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "sessions_userId_fkey")
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verificationtokens")
+}
+
+model User {
+  id                             Int                     @id @default(autoincrement())
+  name                           String?
+  email                          String                  @unique
+  department                     String?
+  phoneNumber                    String?                 @map("phone_number")
+  role                           UserRole                @default(user)
+  password                       String?
+  isActive                       Boolean                 @default(true) @map("is_active")
+  passwordChangedAt              DateTime?               @map("password_changed_at")
+  lastLoginAt                    DateTime?               @map("last_login_at")
+  loginAttempts                  Int                     @default(0) @map("login_attempts")
+  lockedUntil                    DateTime?               @map("locked_until")
+  twoFactorEnabled               Boolean                 @default(false) @map("two_factor_enabled")
+  twoFactorSecret                String?                 @map("two_factor_secret")
+  createdAt                      DateTime                @default(now()) @map("created_at")
+  updatedAt                      DateTime                @updatedAt @map("updated_at")
+  accounts                       Account[]
+  auditLogs                      AuditLog[]
+  createdBeverageCostDetails     BeverageCostDetail[]    @relation("BeverageCostDetailCreatedBy")
+  updatedBeverageCostDetails     BeverageCostDetail[]    @relation("BeverageCostDetailUpdatedBy")
+  createdBeverageCostEntries     BeverageCostEntry[]     @relation("BeverageCostEntryCreatedBy")
+  updatedBeverageCostEntries     BeverageCostEntry[]     @relation("BeverageCostEntryUpdatedBy")
+  createdDailyFinancialSummaries DailyFinancialSummary[] @relation("DailyFinancialSummaryCreatedBy")
+  updatedDailyFinancialSummaries DailyFinancialSummary[] @relation("DailyFinancialSummaryUpdatedBy")
+  createdFoodCostDetails         FoodCostDetail[]        @relation("FoodCostDetailCreatedBy")
+  updatedFoodCostDetails         FoodCostDetail[]        @relation("FoodCostDetailUpdatedBy")
+  createdFoodCostEntries         FoodCostEntry[]         @relation("FoodCostEntryCreatedBy")
+  updatedFoodCostEntries         FoodCostEntry[]         @relation("FoodCostEntryUpdatedBy")
+  managedProperties              Property[]              @relation("PropertyManager")
+  ownedProperties                Property[]              @relation("PropertyOwner")
+  grantedPropertyAccess          PropertyAccess[]        @relation("GrantedBy")
+  propertyAccess                 PropertyAccess[]
+  sessions                       Session[]
+  grantedPermissions             UserPermission[]        @relation("GrantedBy")
+  userPermissions                UserPermission[]
+
+  @@map("users")
+}
+
+model Property {
+  id                      Int                     @id @default(autoincrement())
+  name                    String
+  propertyCode            String                  @unique @map("property_code")
+  propertyType            PropertyType            @default(restaurant) @map("property_type")
+  address                 String?
+  city                    String?
+  state                   String?
+  country                 String?
+  timeZone                String?                 @map("time_zone")
+  currency                String                  @default("USD")
+  isActive                Boolean                 @default(true) @map("is_active")
+  ownerId                 Int?                    @map("owner_id")
+  managerId               Int?                    @map("manager_id")
+  createdAt               DateTime                @default(now()) @map("created_at")
+  updatedAt               DateTime                @updatedAt @map("updated_at")
+  beverageCostEntries     BeverageCostEntry[]
+  dailyFinancialSummaries DailyFinancialSummary[]
+  foodCostEntries         FoodCostEntry[]
+  outlets                 Outlet[]
+  manager                 User?                   @relation("PropertyManager", fields: [managerId], references: [id])
+  owner                   User?                   @relation("PropertyOwner", fields: [ownerId], references: [id])
+  propertyAccess          PropertyAccess[]
+
+  @@index([ownerId])
+  @@index([managerId])
+  @@index([propertyType])
+  @@index([isActive])
+  @@map("properties")
+}
+
+model Outlet {
+  id                  Int                 @id @default(autoincrement())
+  name                String
+  outletCode          String              @unique @map("outlet_code")
+  propertyId          Int                 @map("property_id")
+  address             String?
+  isActive            Boolean             @default(true) @map("is_active")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  beverageCostEntries BeverageCostEntry[]
+  foodCostEntries     FoodCostEntry[]
+  property            Property            @relation(fields: [propertyId], references: [id])
+
+  @@index([propertyId])
+  @@map("outlets")
+}
+
+model Permission {
+  id              Int                @id @default(autoincrement())
+  name            String             @unique
+  description     String?
+  category        PermissionCategory
+  resource        String
+  action          PermissionAction
+  createdAt       DateTime           @default(now()) @map("created_at")
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+
+  @@unique([resource, action])
+  @@index([category])
+  @@index([resource])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           Int        @id @default(autoincrement())
+  role         UserRole
+  permissionId Int        @map("permission_id")
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([role, permissionId])
+  @@index([permissionId], map: "role_permissions_permission_id_fkey")
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id            Int        @id @default(autoincrement())
+  userId        Int        @map("user_id")
+  permissionId  Int        @map("permission_id")
+  granted       Boolean    @default(true)
+  expiresAt     DateTime?  @map("expires_at")
+  grantedBy     Int?       @map("granted_by")
+  grantedByUser User?      @relation("GrantedBy", fields: [grantedBy], references: [id])
+  permission    Permission @relation(fields: [permissionId], references: [id])
+  user          User       @relation(fields: [userId], references: [id])
+
+  @@unique([userId, permissionId])
+  @@index([userId])
+  @@index([permissionId])
+  @@index([expiresAt])
+  @@index([grantedBy], map: "user_permissions_granted_by_fkey")
+  @@map("user_permissions")
+}
+
+model PropertyAccess {
+  id            Int                 @id @default(autoincrement())
+  userId        Int                 @map("user_id")
+  propertyId    Int                 @map("property_id")
+  accessLevel   PropertyAccessLevel @default(read_only)
+  grantedAt     DateTime            @default(now()) @map("granted_at")
+  grantedBy     Int                 @map("granted_by")
+  expiresAt     DateTime?           @map("expires_at")
+  grantedByUser User                @relation("GrantedBy", fields: [grantedBy], references: [id])
+  property      Property            @relation(fields: [propertyId], references: [id])
+  user          User                @relation(fields: [userId], references: [id])
+
+  @@unique([userId, propertyId])
+  @@index([propertyId])
+  @@index([grantedBy])
+  @@index([expiresAt])
+  @@map("property_access")
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int?     @map("user_id")
+  propertyId Int?     @map("property_id")
+  action     String
+  resource   String
+  resourceId String?  @map("resource_id")
+  details    Json?
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  timestamp  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, timestamp])
+  @@index([propertyId, timestamp])
+  @@index([resource, resourceId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+model Category {
+  id                  Int                  @id @default(autoincrement())
+  name                String
+  description         String?
+  type                String
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  beverageCostDetails BeverageCostDetail[]
+  foodCostDetails     FoodCostDetail[]
+
+  @@map("categories")
+}
+
+model FoodCostEntry {
+  id            Int              @id @default(autoincrement())
+  date          DateTime
+  propertyId    Int?             @map("property_id")
+  outletId      Int              @map("outlet_id")
+  totalFoodCost Float            @map("total_food_cost")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  createdBy     Int?             @map("created_by")
+  updatedBy     Int?             @map("updated_by")
+  details       FoodCostDetail[]
+  createdByUser User?            @relation("FoodCostEntryCreatedBy", fields: [createdBy], references: [id])
+  outlet        Outlet           @relation(fields: [outletId], references: [id])
+  property      Property?        @relation(fields: [propertyId], references: [id])
+  updatedByUser User?            @relation("FoodCostEntryUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([propertyId])
+  @@index([outletId])
+  @@index([date])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@map("food_cost_entries")
+}
+
+model FoodCostDetail {
+  id              Int           @id @default(autoincrement())
+  foodCostEntryId Int           @map("food_cost_entry_id")
+  categoryId      Int           @map("category_id")
+  categoryName    String?       @map("category_name")
+  cost            Float
+  description     String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  createdBy       Int?          @map("created_by")
+  updatedBy       Int?          @map("updated_by")
+  category        Category      @relation(fields: [categoryId], references: [id])
+  createdByUser   User?         @relation("FoodCostDetailCreatedBy", fields: [createdBy], references: [id])
+  foodCostEntry   FoodCostEntry @relation(fields: [foodCostEntryId], references: [id])
+  updatedByUser   User?         @relation("FoodCostDetailUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([categoryId])
+  @@index([foodCostEntryId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@map("food_cost_details")
+}
+
+model BeverageCostEntry {
+  id                Int                  @id @default(autoincrement())
+  date              DateTime
+  propertyId        Int?                 @map("property_id")
+  outletId          Int                  @map("outlet_id")
+  totalBeverageCost Float                @map("total_beverage_cost")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  createdBy         Int?                 @map("created_by")
+  updatedBy         Int?                 @map("updated_by")
+  details           BeverageCostDetail[]
+  createdByUser     User?                @relation("BeverageCostEntryCreatedBy", fields: [createdBy], references: [id])
+  outlet            Outlet               @relation(fields: [outletId], references: [id])
+  property          Property?            @relation(fields: [propertyId], references: [id])
+  updatedByUser     User?                @relation("BeverageCostEntryUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([propertyId])
+  @@index([outletId])
+  @@index([date])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@map("beverage_cost_entries")
+}
+
+model BeverageCostDetail {
+  id                  Int               @id @default(autoincrement())
+  beverageCostEntryId Int               @map("beverage_cost_entry_id")
+  categoryId          Int               @map("category_id")
+  categoryName        String?           @map("category_name")
+  cost                Float
+  description         String?
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+  createdBy           Int?              @map("created_by")
+  updatedBy           Int?              @map("updated_by")
+  beverageCostEntry   BeverageCostEntry @relation(fields: [beverageCostEntryId], references: [id])
+  category            Category          @relation(fields: [categoryId], references: [id])
+  createdByUser       User?             @relation("BeverageCostDetailCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser       User?             @relation("BeverageCostDetailUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@index([beverageCostEntryId])
+  @@index([categoryId])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@map("beverage_cost_details")
+}
+
+model DailyFinancialSummary {
+  id                      Int       @id @default(autoincrement())
+  date                    DateTime
+  propertyId              Int?      @map("property_id")
+  actualFoodRevenue       Float     @map("actual_food_revenue")
+  budgetFoodRevenue       Float     @map("budget_food_revenue")
+  actualFoodCost          Float?    @map("actual_food_cost")
+  budgetFoodCost          Float     @map("budget_food_cost")
+  actualFoodCostPct       Float?    @map("actual_food_cost_pct")
+  budgetFoodCostPct       Float     @map("budget_food_cost_pct")
+  foodVariancePct         Float?    @map("food_variance_pct")
+  entFood                 Float     @map("ent_food")
+  coFood                  Float     @map("co_food")
+  otherFoodAdjustment     Float     @map("other_food_adjustment")
+  actualBeverageRevenue   Float     @map("actual_beverage_revenue")
+  budgetBeverageRevenue   Float     @map("budget_beverage_revenue")
+  actualBeverageCost      Float?    @map("actual_beverage_cost")
+  budgetBeverageCost      Float     @map("budget_beverage_cost")
+  actualBeverageCostPct   Float?    @map("actual_beverage_cost_pct")
+  budgetBeverageCostPct   Float     @map("budget_beverage_cost_pct")
+  beverageVariancePct     Float?    @map("beverage_variance_pct")
+  entBeverage             Float     @map("ent_beverage")
+  coBeverage              Float     @map("co_beverage")
+  otherBeverageAdjustment Float     @map("other_beverage_adjustment")
+  note                    String?
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
+  createdBy               Int?      @map("created_by")
+  updatedBy               Int?      @map("updated_by")
+  createdByUser           User?     @relation("DailyFinancialSummaryCreatedBy", fields: [createdBy], references: [id])
+  property                Property? @relation(fields: [propertyId], references: [id])
+  updatedByUser           User?     @relation("DailyFinancialSummaryUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@unique([date, propertyId])
+  @@index([propertyId])
+  @@index([date])
+  @@index([createdBy])
+  @@index([updatedBy])
+  @@map("daily_financial_summaries")
+}
+
+enum UserRole {
+  super_admin
+  property_owner
+  property_admin
+  regional_manager
+  property_manager
+  supervisor
+  user
+  readonly
+}
+
+enum PropertyType {
+  restaurant
+  hotel
+  cafe
+  bar
+  catering
+  franchise
+  chain
+  other
+}
+
+enum PermissionCategory {
+  SYSTEM_ADMIN
+  USER_MANAGEMENT
+  PROPERTY_MANAGEMENT
+  FINANCIAL_DATA
+  REPORTING
+  OUTLET_MANAGEMENT
+  COST_INPUT
+  DASHBOARD_ACCESS
+}
+
+enum PermissionAction {
+  CREATE
+  READ
+  UPDATE
+  DELETE
+  APPROVE
+  EXPORT
+  IMPORT
+  MANAGE
+  VIEW_ALL
+  VIEW_OWN
+}
+
+enum PropertyAccessLevel {
+  read_only
+  data_entry
+  management
+  full_control
+  owner
+}

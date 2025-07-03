@@ -68,7 +68,7 @@ export default function DailyFinancialSummaryDetailDialog({
 }: DailyFinancialSummaryDetailDialogProps) {
   if (!summary) return null;
 
-  const summaryDate = summary.date instanceof Date ? format(summary.date, "PPP") : "N/A";
+  const summaryDate = summary.date instanceof Date ? format(summary.date, "yyyy-MM-dd") : "N/A";
 
   const getActualCostColorClass = (actualPct: number | null | undefined, budgetPct: number | null | undefined) => {
     if (actualPct == null || budgetPct == null) return "";
@@ -106,73 +106,73 @@ export default function DailyFinancialSummaryDetailDialog({
                 {/* Food Section */}
                 <div className="space-y-1">
                   <h4 className="text-md font-semibold text-foreground flex items-center mb-2"><Utensils className="h-5 w-5 mr-2 text-muted-foreground" />Food</h4>
-                  <DetailItem label="Actual Food Revenue" value={summary.actual_food_revenue} isCurrency icon={DollarSign} />
-                  <DetailItem label="Budget Food Revenue" value={summary.budget_food_revenue} isCurrency icon={DollarSign} />
-                  <DetailItem label="Budget Food Cost" value={summary.budget_food_cost} isCurrency icon={DollarSign} />
-                  <DetailItem label="Budget Food Cost %" value={summary.budget_food_cost_pct} isPercentage icon={Percent} />
+                  <DetailItem label="Actual Food Revenue" value={summary.actualFoodRevenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Food Revenue" value={summary.budgetFoodRevenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Food Cost" value={summary.budgetFoodCost} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Food Cost %" value={summary.budgetFoodCostPct} isPercentage icon={Percent} />
                   <DetailItem 
                     label="Actual Food Cost" 
-                    value={summary.actual_food_cost} 
+                    value={summary.actualFoodCost} 
                     isCurrency 
                     icon={DollarSign} 
                     valueClassName="font-bold" 
                   />
                    <DetailItem 
                     label="Actual Food Cost %" 
-                    value={summary.actual_food_cost_pct} 
+                    value={summary.actualFoodCostPct} 
                     isPercentage 
-                    icon={summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct > summary.budget_food_cost_pct ? TrendingUp : (summary.actual_food_cost_pct != null && summary.budget_food_cost_pct != null && summary.actual_food_cost_pct < summary.budget_food_cost_pct ? TrendingDown : Percent)} 
-                    valueClassName={cn("font-bold", getActualCostColorClass(summary.actual_food_cost_pct, summary.budget_food_cost_pct))}
+                    icon={summary.actualFoodCostPct != null && summary.budgetFoodCostPct != null && summary.actualFoodCostPct > summary.budgetFoodCostPct ? TrendingUp : (summary.actualFoodCostPct != null && summary.budgetFoodCostPct != null && summary.actualFoodCostPct < summary.budgetFoodCostPct ? TrendingDown : Percent)} 
+                    valueClassName={cn("font-bold", getActualCostColorClass(summary.actualFoodCostPct, summary.budgetFoodCostPct))}
                   />
                   <DetailItem 
                     label="Food Variance %" 
-                    value={summary.food_variance_pct} 
+                    value={summary.foodVariancePct} 
                     isPercentage 
-                    icon={summary.food_variance_pct != null && summary.food_variance_pct > 0 ? TrendingUp : (summary.food_variance_pct != null && summary.food_variance_pct < 0 ? TrendingDown : Percent)} 
-                    valueClassName={cn("font-bold", getVarianceColorClass(summary.food_variance_pct))}
+                    icon={summary.foodVariancePct != null && summary.foodVariancePct > 0 ? TrendingUp : (summary.foodVariancePct != null && summary.foodVariancePct < 0 ? TrendingDown : Percent)} 
+                    valueClassName={cn("font-bold", getVarianceColorClass(summary.foodVariancePct))}
                   />
-                  <DetailItem label="Entertainment Food" value={summary.ent_food} isCurrency />
-                  <DetailItem label="OC Food" value={summary.oc_food} isCurrency />
-                  <DetailItem label="Other Food Adjustments" value={summary.other_food_adjustment} isCurrency />
+                  <DetailItem label="Entertainment Food" value={summary.entFood} isCurrency />
+                  <DetailItem label="Complimentary Food" value={summary.coFood} isCurrency />
+                  <DetailItem label="Other Food Adjustments" value={summary.otherFoodAdjustment} isCurrency />
                 </div>
                 {/* Beverage Section */}
                 <div className="space-y-1">
                   <h4 className="text-md font-semibold text-foreground flex items-center mb-2"><GlassWater className="h-5 w-5 mr-2 text-muted-foreground" />Beverage</h4>
-                  <DetailItem label="Actual Beverage Revenue" value={summary.actual_beverage_revenue} isCurrency icon={DollarSign} />
-                  <DetailItem label="Budget Beverage Revenue" value={summary.budget_beverage_revenue} isCurrency icon={DollarSign} />
-                  <DetailItem label="Budget Beverage Cost" value={summary.budget_beverage_cost} isCurrency icon={DollarSign} />
-                  <DetailItem label="Budget Beverage Cost %" value={summary.budget_beverage_cost_pct} isPercentage icon={Percent}/>
+                  <DetailItem label="Actual Beverage Revenue" value={summary.actualBeverageRevenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Beverage Revenue" value={summary.budgetBeverageRevenue} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Beverage Cost" value={summary.budgetBeverageCost} isCurrency icon={DollarSign} />
+                  <DetailItem label="Budget Beverage Cost %" value={summary.budgetBeverageCostPct} isPercentage icon={Percent}/>
                   <DetailItem 
                     label="Actual Beverage Cost" 
-                    value={summary.actual_beverage_cost} 
+                    value={summary.actualBeverageCost} 
                     isCurrency 
                     icon={DollarSign} 
                     valueClassName="font-bold" 
                   />
                   <DetailItem 
                     label="Actual Beverage Cost %" 
-                    value={summary.actual_beverage_cost_pct} 
+                    value={summary.actualBeverageCostPct} 
                     isPercentage 
-                    icon={summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct > summary.budget_beverage_cost_pct ? TrendingUp : (summary.actual_beverage_cost_pct != null && summary.budget_beverage_cost_pct != null && summary.actual_beverage_cost_pct < summary.budget_beverage_cost_pct ? TrendingDown : Percent)} 
-                    valueClassName={cn("font-bold", getActualCostColorClass(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))}
+                    icon={summary.actualBeverageCostPct != null && summary.budgetBeverageCostPct != null && summary.actualBeverageCostPct > summary.budgetBeverageCostPct ? TrendingUp : (summary.actualBeverageCostPct != null && summary.budgetBeverageCostPct != null && summary.actualBeverageCostPct < summary.budgetBeverageCostPct ? TrendingDown : Percent)} 
+                    valueClassName={cn("font-bold", getActualCostColorClass(summary.actualBeverageCostPct, summary.budgetBeverageCostPct))}
                   />
                   <DetailItem 
                     label="Beverage Variance %" 
-                    value={summary.beverage_variance_pct} 
+                    value={summary.beverageVariancePct} 
                     isPercentage 
-                    icon={summary.beverage_variance_pct != null && summary.beverage_variance_pct > 0 ? TrendingUp : (summary.beverage_variance_pct != null && summary.beverage_variance_pct < 0 ? TrendingDown : Percent)} 
-                    valueClassName={cn("font-bold", getVarianceColorClass(summary.beverage_variance_pct))}
+                    icon={summary.beverageVariancePct != null && summary.beverageVariancePct > 0 ? TrendingUp : (summary.beverageVariancePct != null && summary.beverageVariancePct < 0 ? TrendingDown : Percent)} 
+                    valueClassName={cn("font-bold", getVarianceColorClass(summary.beverageVariancePct))}
                   />
-                  <DetailItem label="Entertainment Beverage" value={summary.entertainment_beverage_cost} isCurrency />
-                  <DetailItem label="OC Beverage" value={summary.officer_check_comp_beverage} isCurrency />
-                  <DetailItem label="Other Beverage Adjustments" value={summary.other_beverage_adjustments} isCurrency />
+                  <DetailItem label="Entertainment Beverage" value={summary.entBeverage} isCurrency />
+                  <DetailItem label="Complimentary Beverage" value={summary.coBeverage} isCurrency />
+                  <DetailItem label="Other Beverage Adjustments" value={summary.otherBeverageAdjustment} isCurrency />
                 </div>
               </div>
-              {summary.notes && (
+              {summary.note && (
                 <>
                   <Separator className="my-4" />
                   <h4 className="text-sm font-medium text-muted-foreground mb-1">Notes:</h4>
-                  <p className="text-sm text-foreground bg-muted/50 p-3 rounded-md">{summary.notes}</p>
+                  <p className="text-sm text-foreground bg-muted/50 p-3 rounded-md">{summary.note}</p>
                 </>
               )}
             </section>
@@ -192,31 +192,31 @@ export default function DailyFinancialSummaryDetailDialog({
                   </h4>
                   <DetailItem 
                     label="Revenue Variance" 
-                    value={summary.actual_food_revenue && summary.budget_food_revenue ? summary.actual_food_revenue - summary.budget_food_revenue : null} 
+                    value={summary.actualFoodRevenue && summary.budgetFoodRevenue ? summary.actualFoodRevenue - summary.budgetFoodRevenue : null} 
                     isCurrency 
-                    icon={summary.actual_food_revenue && summary.budget_food_revenue && (summary.actual_food_revenue - summary.budget_food_revenue) > 0 ? TrendingUp : TrendingDown}
-                    valueClassName={cn("font-bold", summary.actual_food_revenue && summary.budget_food_revenue && (summary.actual_food_revenue - summary.budget_food_revenue) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                    icon={summary.actualFoodRevenue && summary.budgetFoodRevenue && (summary.actualFoodRevenue - summary.budgetFoodRevenue) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actualFoodRevenue && summary.budgetFoodRevenue && (summary.actualFoodRevenue - summary.budgetFoodRevenue) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
                   />
                   <DetailItem 
                     label="Revenue Achievement %" 
-                    value={summary.actual_food_revenue && summary.budget_food_revenue && summary.budget_food_revenue > 0 ? (summary.actual_food_revenue / summary.budget_food_revenue) * 100 : null} 
+                    value={summary.actualFoodRevenue && summary.budgetFoodRevenue && summary.budgetFoodRevenue > 0 ? (summary.actualFoodRevenue / summary.budgetFoodRevenue) * 100 : null} 
                     isPercentage 
                     icon={Percent}
                     valueClassName="font-bold"
                   />
                   <DetailItem 
                     label="Cost Variance" 
-                    value={summary.actual_food_cost && summary.budget_food_cost ? summary.actual_food_cost - summary.budget_food_cost : null} 
+                    value={summary.actualFoodCost && summary.budgetFoodCost ? summary.actualFoodCost - summary.budgetFoodCost : null} 
                     isCurrency 
-                    icon={summary.actual_food_cost && summary.budget_food_cost && (summary.actual_food_cost - summary.budget_food_cost) > 0 ? TrendingUp : TrendingDown}
-                    valueClassName={cn("font-bold", summary.actual_food_cost && summary.budget_food_cost && (summary.actual_food_cost - summary.budget_food_cost) > 0 ? "text-destructive" : "text-green-600 dark:text-green-500")}
+                    icon={summary.actualFoodCost && summary.budgetFoodCost && (summary.actualFoodCost - summary.budgetFoodCost) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actualFoodCost && summary.budgetFoodCost && (summary.actualFoodCost - summary.budgetFoodCost) > 0 ? "text-destructive" : "text-green-600 dark:text-green-500")}
                   />
                   <DetailItem 
                     label="Cost Control %" 
-                    value={summary.actual_food_cost_pct && summary.budget_food_cost_pct ? summary.budget_food_cost_pct - summary.actual_food_cost_pct : null} 
+                    value={summary.actualFoodCostPct && summary.budgetFoodCostPct ? summary.budgetFoodCostPct - summary.actualFoodCostPct : null} 
                     isPercentage 
-                    icon={summary.actual_food_cost_pct && summary.budget_food_cost_pct && (summary.budget_food_cost_pct - summary.actual_food_cost_pct) > 0 ? TrendingDown : TrendingUp}
-                    valueClassName={cn("font-bold", summary.actual_food_cost_pct && summary.budget_food_cost_pct && (summary.budget_food_cost_pct - summary.actual_food_cost_pct) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                    icon={summary.actualFoodCostPct && summary.budgetFoodCostPct && (summary.budgetFoodCostPct - summary.actualFoodCostPct) > 0 ? TrendingDown : TrendingUp}
+                    valueClassName={cn("font-bold", summary.actualFoodCostPct && summary.budgetFoodCostPct && (summary.budgetFoodCostPct - summary.actualFoodCostPct) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
                   />
                 </div>
                 {/* Beverage Budget vs Actual */}
@@ -227,31 +227,31 @@ export default function DailyFinancialSummaryDetailDialog({
                   </h4>
                   <DetailItem 
                     label="Revenue Variance" 
-                    value={summary.actual_beverage_revenue && summary.budget_beverage_revenue ? summary.actual_beverage_revenue - summary.budget_beverage_revenue : null} 
+                    value={summary.actualBeverageRevenue && summary.budgetBeverageRevenue ? summary.actualBeverageRevenue - summary.budgetBeverageRevenue : null} 
                     isCurrency 
-                    icon={summary.actual_beverage_revenue && summary.budget_beverage_revenue && (summary.actual_beverage_revenue - summary.budget_beverage_revenue) > 0 ? TrendingUp : TrendingDown}
-                    valueClassName={cn("font-bold", summary.actual_beverage_revenue && summary.budget_beverage_revenue && (summary.actual_beverage_revenue - summary.budget_beverage_revenue) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                    icon={summary.actualBeverageRevenue && summary.budgetBeverageRevenue && (summary.actualBeverageRevenue - summary.budgetBeverageRevenue) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actualBeverageRevenue && summary.budgetBeverageRevenue && (summary.actualBeverageRevenue - summary.budgetBeverageRevenue) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
                   />
                   <DetailItem 
                     label="Revenue Achievement %" 
-                    value={summary.actual_beverage_revenue && summary.budget_beverage_revenue && summary.budget_beverage_revenue > 0 ? (summary.actual_beverage_revenue / summary.budget_beverage_revenue) * 100 : null} 
+                    value={summary.actualBeverageRevenue && summary.budgetBeverageRevenue && summary.budgetBeverageRevenue > 0 ? (summary.actualBeverageRevenue / summary.budgetBeverageRevenue) * 100 : null} 
                     isPercentage 
                     icon={Percent}
                     valueClassName="font-bold"
                   />
                   <DetailItem 
                     label="Cost Variance" 
-                    value={summary.actual_beverage_cost && summary.budget_beverage_cost ? summary.actual_beverage_cost - summary.budget_beverage_cost : null} 
+                    value={summary.actualBeverageCost && summary.budgetBeverageCost ? summary.actualBeverageCost - summary.budgetBeverageCost : null} 
                     isCurrency 
-                    icon={summary.actual_beverage_cost && summary.budget_beverage_cost && (summary.actual_beverage_cost - summary.budget_beverage_cost) > 0 ? TrendingUp : TrendingDown}
-                    valueClassName={cn("font-bold", summary.actual_beverage_cost && summary.budget_beverage_cost && (summary.actual_beverage_cost - summary.budget_beverage_cost) > 0 ? "text-destructive" : "text-green-600 dark:text-green-500")}
+                    icon={summary.actualBeverageCost && summary.budgetBeverageCost && (summary.actualBeverageCost - summary.budgetBeverageCost) > 0 ? TrendingUp : TrendingDown}
+                    valueClassName={cn("font-bold", summary.actualBeverageCost && summary.budgetBeverageCost && (summary.actualBeverageCost - summary.budgetBeverageCost) > 0 ? "text-destructive" : "text-green-600 dark:text-green-500")}
                   />
                   <DetailItem 
                     label="Cost Control %" 
-                    value={summary.actual_beverage_cost_pct && summary.budget_beverage_cost_pct ? summary.budget_beverage_cost_pct - summary.actual_beverage_cost_pct : null} 
+                    value={summary.actualBeverageCostPct && summary.budgetBeverageCostPct ? summary.budgetBeverageCostPct - summary.actualBeverageCostPct : null} 
                     isPercentage 
-                    icon={summary.actual_beverage_cost_pct && summary.budget_beverage_cost_pct && (summary.budget_beverage_cost_pct - summary.actual_beverage_cost_pct) > 0 ? TrendingDown : TrendingUp}
-                    valueClassName={cn("font-bold", summary.actual_beverage_cost_pct && summary.budget_beverage_cost_pct && (summary.budget_beverage_cost_pct - summary.actual_beverage_cost_pct) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
+                    icon={summary.actualBeverageCostPct && summary.budgetBeverageCostPct && (summary.budgetBeverageCostPct - summary.actualBeverageCostPct) > 0 ? TrendingDown : TrendingUp}
+                    valueClassName={cn("font-bold", summary.actualBeverageCostPct && summary.budgetBeverageCostPct && (summary.budgetBeverageCostPct - summary.actualBeverageCostPct) > 0 ? "text-green-600 dark:text-green-500" : "text-destructive")}
                   />
                 </div>
               </div>
@@ -265,29 +265,66 @@ export default function DailyFinancialSummaryDetailDialog({
                   <Skeleton className="h-8 w-full" /> <Skeleton className="h-16 w-full" />
                 </div>
               ) : foodCostEntries.length > 0 ? (
-                foodCostEntries.map((entry) => (
-                  <div key={entry.id} className="mb-6 last:mb-0 p-3 border rounded-md bg-card shadow-sm">
-                    <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-md font-semibold text-foreground flex items-center">
+                (() => {
+                  // Group entries by outlet
+                  const groupedByOutlet = foodCostEntries.reduce((acc, entry) => {
+                    const outletKey = entry.outletName || `Outlet ${entry.outletId}`;
+                    if (!acc[outletKey]) {
+                      acc[outletKey] = [];
+                    }
+                    acc[outletKey].push(entry);
+                    return acc;
+                  }, {} as Record<string, typeof foodCostEntries>);
+
+                  return Object.entries(groupedByOutlet).map(([outletName, entries]) => {
+                    const totalOutletCost = entries.reduce((sum, entry) => sum + entry.totalFoodCost, 0);
+                    const allDetails = entries.flatMap(entry => entry.details || []);
+                    
+                    return (
+                      <div key={outletName} className="mb-6 last:mb-0 p-4 border rounded-md bg-card shadow-sm">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-lg font-semibold text-foreground flex items-center">
                             <Building className="h-5 w-5 mr-2 text-muted-foreground" />
-                            Outlet: {entry.outletName || entry.outlet_id}
-                        </h4>
-                        <Badge variant="secondary">Total Food Cost: {formatNumber(entry.total_food_cost)}</Badge>
-                    </div>
-                    {entry.details && entry.details.length > 0 ? (
-                      <Table>
-                        <TableHeader><TableRow><TableHead className="w-[40%]">Category</TableHead><TableHead className="w-[40%]">Description</TableHead><TableHead className="text-right w-[20%]">Cost</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                          {entry.details.map((detail) => (
-                            <TableRow key={detail.id}><TableCell className="text-xs flex items-center"><ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />{detail.categoryName || detail.category_id}</TableCell><TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell><TableCell className="text-right text-xs font-code">{formatNumber(detail.cost)}</TableCell></TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">No detailed food cost entries for this outlet.</p>
-                    )}
-                  </div>
-                ))
+                            {outletName}
+                          </h4>
+                          <Badge variant="secondary" className="text-sm">
+                            Total Food Cost: ${formatNumber(totalOutletCost)}
+                          </Badge>
+                        </div>
+                        
+                        {allDetails.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[40%]">Category</TableHead>
+                                <TableHead className="w-[40%]">Description</TableHead>
+                                <TableHead className="text-right w-[20%]">Cost</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {allDetails.map((detail) => (
+                                <TableRow key={detail.id}>
+                                  <TableCell className="text-xs flex items-center">
+                                    <ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />
+                                    {detail.categoryName || detail.categoryId}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {detail.description || "-"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs font-code">
+                                    ${formatNumber(detail.cost)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <p className="text-muted-foreground text-sm">No detailed food cost entries for this outlet.</p>
+                        )}
+                      </div>
+                    );
+                  });
+                })()
               ) : (
                 <p className="text-center text-muted-foreground py-4">No food cost entries available for this summary date.</p>
               )}
@@ -301,29 +338,66 @@ export default function DailyFinancialSummaryDetailDialog({
                   <Skeleton className="h-8 w-full" /> <Skeleton className="h-16 w-full" />
                 </div>
               ) : beverageCostEntries.length > 0 ? (
-                beverageCostEntries.map((entry) => (
-                  <div key={entry.id} className="mb-6 last:mb-0 p-3 border rounded-md bg-card shadow-sm">
-                    <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-md font-semibold text-foreground flex items-center">
+                (() => {
+                  // Group entries by outlet
+                  const groupedByOutlet = beverageCostEntries.reduce((acc, entry) => {
+                    const outletKey = entry.outletName || `Outlet ${entry.outletId}`;
+                    if (!acc[outletKey]) {
+                      acc[outletKey] = [];
+                    }
+                    acc[outletKey].push(entry);
+                    return acc;
+                  }, {} as Record<string, typeof beverageCostEntries>);
+
+                  return Object.entries(groupedByOutlet).map(([outletName, entries]) => {
+                    const totalOutletCost = entries.reduce((sum, entry) => sum + entry.totalBeverageCost, 0);
+                    const allDetails = entries.flatMap(entry => entry.details || []);
+                    
+                    return (
+                      <div key={outletName} className="mb-6 last:mb-0 p-4 border rounded-md bg-card shadow-sm">
+                        <div className="flex justify-between items-center mb-3">
+                          <h4 className="text-lg font-semibold text-foreground flex items-center">
                             <Building className="h-5 w-5 mr-2 text-muted-foreground" />
-                            Outlet: {entry.outletName || entry.outlet_id}
-                        </h4>
-                        <Badge variant="secondary">Total Beverage Cost: {formatNumber(entry.total_beverage_cost)}</Badge>
-                    </div>
-                    {entry.details && entry.details.length > 0 ? (
-                      <Table>
-                        <TableHeader><TableRow><TableHead className="w-[40%]">Category</TableHead><TableHead className="w-[40%]">Description</TableHead><TableHead className="text-right w-[20%]">Cost</TableHead></TableRow></TableHeader>
-                        <TableBody>
-                          {entry.details.map((detail) => (
-                            <TableRow key={detail.id}><TableCell className="text-xs flex items-center"><ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />{detail.categoryName || detail.category_id}</TableCell><TableCell className="text-xs text-muted-foreground">{detail.description || "-"}</TableCell><TableCell className="text-right text-xs font-code">{formatNumber(detail.cost)}</TableCell></TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">No detailed beverage cost entries for this outlet.</p>
-                    )}
-                  </div>
-                ))
+                            {outletName}
+                          </h4>
+                          <Badge variant="secondary" className="text-sm">
+                            Total Beverage Cost: ${formatNumber(totalOutletCost)}
+                          </Badge>
+                        </div>
+                        
+                        {allDetails.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[40%]">Category</TableHead>
+                                <TableHead className="w-[40%]">Description</TableHead>
+                                <TableHead className="text-right w-[20%]">Cost</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {allDetails.map((detail) => (
+                                <TableRow key={detail.id}>
+                                  <TableCell className="text-xs flex items-center">
+                                    <ListChecks className="h-3.5 w-3.5 mr-1.5 text-muted-foreground/70" />
+                                    {detail.categoryName || detail.categoryId}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {detail.description || "-"}
+                                  </TableCell>
+                                  <TableCell className="text-right text-xs font-code">
+                                    ${formatNumber(detail.cost)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <p className="text-muted-foreground text-sm">No detailed beverage cost entries for this outlet.</p>
+                        )}
+                      </div>
+                    );
+                  });
+                })()
               ) : (
                 <p className="text-center text-muted-foreground py-4">No beverage cost entries available for this summary date.</p>
               )}

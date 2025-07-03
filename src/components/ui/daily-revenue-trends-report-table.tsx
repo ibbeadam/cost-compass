@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { format } from "date-fns";
+import { safeFormatDate } from "@/lib/date-utils";
 import {
   TrendingUp,
   TrendingDown,
@@ -53,6 +54,9 @@ export function DailyRevenueTrendsReportTable({
       </div>
     );
   }
+  
+  // Additional safety checks for critical data structures
+  try {
 
   // Ensure all required properties exist with default values
   const summary = reportData.summary || {
@@ -76,9 +80,63 @@ export function DailyRevenueTrendsReportTable({
       totalRevenue: 0,
     },
   };
+  
+  // Ensure dates are properly initialized
+  if (summary.highestRevenueDay && !summary.highestRevenueDay.date) {
+    summary.highestRevenueDay.date = new Date();
+  }
+  if (summary.lowestRevenueDay && !summary.lowestRevenueDay.date) {
+    summary.lowestRevenueDay.date = new Date();
+  }
 
   const dailyTrends = reportData.dailyTrends || [];
   const weeklyTrends = reportData.weeklyTrends || [];
+  
+  // Helper function to safely get week property with fallbacks
+  const getWeekValue = (week: any, primaryKey: string, fallbackKey?: string, defaultValue: number = 0) => {
+    if (week[primaryKey] !== undefined && week[primaryKey] !== null) {
+      return week[primaryKey];
+    }
+    if (fallbackKey && week[fallbackKey] !== undefined && week[fallbackKey] !== null) {
+      return week[fallbackKey];
+    }
+    return defaultValue;
+  };
+  
+  // Helper function to calculate average daily values with validation
+  const getAverageDailyValue = (week: any, totalKey: string, fallbackTotalKey?: string) => {
+    const total = getWeekValue(week, totalKey, fallbackTotalKey, 0);
+    const days = getWeekValue(week, 'daysInWeek', undefined, 1);
+    return days > 0 ? total / days : 0;
+  };
+  
+  // Validate and fix weekly trends data
+  const validatedWeeklyTrends = weeklyTrends.map((week, index) => {
+    const foodRevenue = getWeekValue(week, 'foodRevenue', 'totalFoodRevenue', 0);
+    const beverageRevenue = getWeekValue(week, 'beverageRevenue', 'totalBeverageRevenue', 0);
+    const totalRevenue = getWeekValue(week, 'totalRevenue', undefined, 0);
+    const daysInWeek = getWeekValue(week, 'daysInWeek', undefined, 1);
+    
+    // Validate that total revenue matches food + beverage (with tolerance for rounding)
+    const calculatedTotal = foodRevenue + beverageRevenue;
+    const actualTotal = totalRevenue || calculatedTotal;
+    
+    // Log inconsistencies for debugging
+    if (Math.abs(actualTotal - calculatedTotal) > 0.01 && calculatedTotal > 0) {
+      console.warn(`Week ${index + 1}: Total revenue (${actualTotal}) doesn't match food (${foodRevenue}) + beverage (${beverageRevenue}) = ${calculatedTotal}`);
+    }
+    
+    return {
+      ...week,
+      foodRevenue,
+      beverageRevenue,
+      totalRevenue: actualTotal,
+      daysInWeek: Math.max(1, daysInWeek), // Ensure at least 1 day
+      averageDailyFoodRevenue: getWeekValue(week, 'averageDailyFoodRevenue') || (daysInWeek > 0 ? foodRevenue / daysInWeek : 0),
+      averageDailyBeverageRevenue: getWeekValue(week, 'averageDailyBeverageRevenue') || (daysInWeek > 0 ? beverageRevenue / daysInWeek : 0),
+      averageDailyRevenue: getWeekValue(week, 'averageDailyRevenue', 'averageDailyTotalRevenue') || (daysInWeek > 0 ? actualTotal / daysInWeek : 0),
+    };
+  });
   const performanceMetrics = reportData.performanceMetrics || {
     foodRevenueGrowth: 0,
     beverageRevenueGrowth: 0,
@@ -105,6 +163,8 @@ export function DailyRevenueTrendsReportTable({
     from: new Date(),
     to: new Date(),
   };
+  
+  // Use centralized date formatting utility
   const outletName = reportData.outletName;
 
   const renderCurrency = (value: number) => {
@@ -181,8 +241,8 @@ export function DailyRevenueTrendsReportTable({
             Daily Revenue Trends
           </h2>
           <p className="text-muted-foreground">
-            {format(dateRange.from, "MMM dd, yyyy")} -{" "}
-            {format(dateRange.to, "MMM dd, yyyy")}
+            {safeFormatDate(dateRange.from)} -{" "}
+            {safeFormatDate(dateRange.to)}
             {outletName && (
               <span className="ml-2 inline-flex items-center gap-1">
                 <Calendar className="h-4 w-4" />
@@ -500,7 +560,7 @@ export function DailyRevenueTrendsReportTable({
                 {renderCurrency(summary.highestRevenueDay.totalRevenue)}
               </div>
               <div className="text-sm text-muted-foreground">
-                {format(summary.highestRevenueDay.date, "MMM dd, yyyy")}
+                {safeFormatDate(summary.highestRevenueDay.date)}
               </div>
               <div className="text-xs text-muted-foreground">
                 Food: {renderCurrency(summary.highestRevenueDay.foodRevenue)} |
@@ -554,7 +614,7 @@ export function DailyRevenueTrendsReportTable({
                     {dailyTrends.map((day, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-mono">
-                          {format(day.date, "MMM dd, yyyy")}
+                          {safeFormatDate(day.date)}
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           {renderCurrency(day.foodRevenue)}
@@ -660,7 +720,7 @@ export function DailyRevenueTrendsReportTable({
                 <Calendar className="h-5 w-5" />
                 <CardTitle>Weekly Trends</CardTitle>
                 <span className="text-sm text-muted-foreground">
-                  ({weeklyTrends.length} weeks)
+                  ({validatedWeeklyTrends.length} weeks)
                 </span>
               </Button>
             </CollapsibleTrigger>
@@ -690,17 +750,17 @@ export function DailyRevenueTrendsReportTable({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {weeklyTrends.map((week, index) => (
+                    {validatedWeeklyTrends.map((week, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-mono">
-                          {format(week.weekStart, "MMM dd")} -{" "}
-                          {format(week.weekEnd, "MMM dd")}
+                          {safeFormatDate(week.weekStartDate || week.weekStart, "MMM dd")} -{" "}
+                          {safeFormatDate(week.weekEndDate || week.weekEnd, "MMM dd")}
                         </TableCell>
                         <TableCell className="text-right font-mono">
-                          {renderCurrency(week.totalFoodRevenue)}
+                          {renderCurrency(week.foodRevenue)}
                         </TableCell>
                         <TableCell className="text-right font-mono">
-                          {renderCurrency(week.totalBeverageRevenue)}
+                          {renderCurrency(week.beverageRevenue)}
                         </TableCell>
                         <TableCell className="text-right font-mono font-semibold">
                           {renderCurrency(week.totalRevenue)}
@@ -712,7 +772,7 @@ export function DailyRevenueTrendsReportTable({
                           {renderCurrency(week.averageDailyBeverageRevenue)}
                         </TableCell>
                         <TableCell className="text-right font-mono font-semibold">
-                          {renderCurrency(week.averageDailyTotalRevenue)}
+                          {renderCurrency(week.averageDailyRevenue)}
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           {week.daysInWeek}
@@ -722,10 +782,101 @@ export function DailyRevenueTrendsReportTable({
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Weekly Trends Summary for Validation */}
+              {validatedWeeklyTrends.length > 0 && (
+                <div className="mt-4 p-4 bg-muted/20 rounded-lg border">
+                  <h4 className="font-semibold mb-2 text-sm">Weekly Trends Summary</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Total Weeks:</span>
+                      <div className="font-mono font-semibold">{validatedWeeklyTrends.length}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Avg Food/Week:</span>
+                      <div className="font-mono font-semibold">
+                        {renderCurrency(validatedWeeklyTrends.reduce((sum, w) => sum + w.foodRevenue, 0) / validatedWeeklyTrends.length)}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Avg Beverage/Week:</span>
+                      <div className="font-mono font-semibold">
+                        {renderCurrency(validatedWeeklyTrends.reduce((sum, w) => sum + w.beverageRevenue, 0) / validatedWeeklyTrends.length)}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Avg Total/Week:</span>
+                      <div className="font-mono font-semibold">
+                        {renderCurrency(validatedWeeklyTrends.reduce((sum, w) => sum + w.totalRevenue, 0) / validatedWeeklyTrends.length)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Calculation Verification */}
+                  <div className="mt-3 pt-3 border-t">
+                    <h5 className="font-medium mb-2 text-xs">Calculation Verification</h5>
+                    <div className="space-y-1 text-xs">
+                      {validatedWeeklyTrends.slice(0, 3).map((week, index) => {
+                        const calculatedTotal = week.foodRevenue + week.beverageRevenue;
+                        const isCorrect = Math.abs(week.totalRevenue - calculatedTotal) < 0.01;
+                        const avgDailyCheck = week.daysInWeek > 0 ? week.totalRevenue / week.daysInWeek : 0;
+                        const avgDailyCorrect = Math.abs(week.averageDailyRevenue - avgDailyCheck) < 0.01;
+                        
+                        return (
+                          <div key={index} className={cn("flex flex-col gap-1", isCorrect && avgDailyCorrect ? "text-green-600" : "text-orange-600")}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" 
+                                    style={{backgroundColor: isCorrect ? '#10b981' : '#f59e0b'}} />
+                              <span className="font-mono">
+                                Week {index + 1}: {renderCurrency(week.foodRevenue)} + {renderCurrency(week.beverageRevenue)} = {renderCurrency(calculatedTotal)}
+                                {!isCorrect && ` (Reported: ${renderCurrency(week.totalRevenue)})`}
+                              </span>
+                            </div>
+                            {!avgDailyCorrect && (
+                              <div className="ml-4 text-xs text-orange-500">
+                                Daily avg: {renderCurrency(week.averageDailyRevenue)} (Expected: {renderCurrency(avgDailyCheck)})
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {validatedWeeklyTrends.length > 3 && (
+                        <div className="text-muted-foreground">... and {validatedWeeklyTrends.length - 3} more weeks</div>
+                      )}
+                      
+                      {/* Overall validation status */}
+                      <div className="mt-2 pt-2 border-t">
+                        {(() => {
+                          const incorrectWeeks = validatedWeeklyTrends.filter(week => {
+                            const calculatedTotal = week.foodRevenue + week.beverageRevenue;
+                            return Math.abs(week.totalRevenue - calculatedTotal) > 0.01;
+                          }).length;
+                          
+                          return incorrectWeeks === 0 ? (
+                            <div className="text-green-600 font-medium">✅ All calculations verified correctly</div>
+                          ) : (
+                            <div className="text-orange-600 font-medium">⚠️ {incorrectWeeks} week(s) have calculation discrepancies</div>
+                          );
+                        })()
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CollapsibleContent>
           </Collapsible>
         </CardHeader>
       </Card>
     </div>
   );
+  } catch (error) {
+    console.error('Error rendering Daily Revenue Trends Report:', error);
+    return (
+      <div className="text-center py-10 text-destructive">
+        <p>Error displaying report: {error instanceof Error ? error.message : 'Unknown error'}</p>
+        <p className="text-sm text-muted-foreground mt-2">Please check the data format and try again.</p>
+      </div>
+    );
+  }
 }

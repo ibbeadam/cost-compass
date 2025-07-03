@@ -14,11 +14,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { User, LogOut, Settings, LogIn } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useNextAuth } from "@/hooks/useNextAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function UserNav() {
-  const { user, userProfile, loading, signOut } = useAuth();
+  const { user, userProfile, loading, signOut } = useNextAuth();
 
   const handleLogout = async () => {
     await signOut();
@@ -44,20 +44,12 @@ export function UserNav() {
     );
   }
 
-  // Use userProfile's displayName if available
-  const userName = userProfile?.displayName || user?.displayName || "User";
+  // Use user's name from NextAuth session
+  const userName = user?.name || "User";
   const userEmail = user?.email || "No email provided";
-  // Type guard for photoURL property
-  const getPhotoURL = (profile: any) => {
-    if (profile && typeof profile === "object" && "photoURL" in profile) {
-      return (profile as { photoURL?: string }).photoURL;
-    }
-    return undefined;
-  };
 
   const userAvatar =
-    getPhotoURL(userProfile) ||
-    (user && "photoURL" in user ? (user as any).photoURL : undefined) ||
+    user?.image ||
     `https://placehold.co/40x40.png?text=${userName
       .substring(0, 2)
       .toUpperCase()}`;

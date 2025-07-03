@@ -45,3 +45,7 @@ next-env.d.ts
 
 # Firebase
 firebase-debug.log
+**/firebase-service-account.json
+scripts/firebase-service-account.json
+
+/src/generated/prisma

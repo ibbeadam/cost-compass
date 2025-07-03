@@ -162,140 +162,159 @@ function NotificationItem({ notification, onMarkAsRead, onRemove }: Notification
 }
 
 export function NotificationBell() {
-  const { unreadCount } = useNotifications();
-  
-  return (
-    <div className="relative">
-      {unreadCount > 0 ? (
-        <BellRing className="h-5 w-5" />
-      ) : (
+  try {
+    const { unreadCount } = useNotifications();
+    
+    return (
+      <div className="relative">
+        {unreadCount > 0 ? (
+          <BellRing className="h-5 w-5" />
+        ) : (
+          <Bell className="h-5 w-5" />
+        )}
+        {unreadCount > 0 && (
+          <Badge 
+            variant="destructive" 
+            className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Badge>
+        )}
+      </div>
+    );
+  } catch (error) {
+    // NotificationProvider not available (e.g., on login page)
+    return (
+      <div className="relative">
         <Bell className="h-5 w-5" />
-      )}
-      {unreadCount > 0 && (
-        <Badge 
-          variant="destructive" 
-          className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
-        >
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </Badge>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
 }
 
 export function NotificationCenter() {
-  const { 
-    notifications, 
-    unreadCount, 
-    markAsRead, 
-    markAllAsRead, 
-    removeNotification, 
-    clearAll 
-  } = useNotifications();
-  
-  const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  
-  const filteredNotifications = filter === 'unread' 
-    ? notifications.filter(n => !n.read)
-    : notifications;
+  try {
+    const { 
+      notifications, 
+      unreadCount, 
+      markAsRead, 
+      markAllAsRead, 
+      removeNotification, 
+      clearAll 
+    } = useNotifications();
+    
+    const [filter, setFilter] = useState<'all' | 'unread'>('all');
+    
+    const filteredNotifications = filter === 'unread' 
+      ? notifications.filter(n => !n.read)
+      : notifications;
 
-  return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="sm" className="relative">
-          <NotificationBell />
-        </Button>
-      </SheetTrigger>
-      <SheetContent className="w-full sm:w-96 sm:max-w-none">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Notifications
-            {unreadCount > 0 && (
-              <Badge variant="secondary">
-                {unreadCount} new
-              </Badge>
-            )}
-          </SheetTitle>
-          <SheetDescription>
-            Stay updated with your cost monitoring alerts and insights
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="mt-6 space-y-4">
-          {/* Filter and Actions */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button
-                variant={filter === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilter('all')}
-              >
-                All ({notifications.length})
-              </Button>
-              <Button
-                variant={filter === 'unread' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setFilter('unread')}
-              >
-                Unread ({unreadCount})
-              </Button>
-            </div>
-            
-            <div className="flex items-center gap-1">
+    return (
+      <Sheet>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="sm" className="relative">
+            <NotificationBell />
+          </Button>
+        </SheetTrigger>
+        <SheetContent className="w-full sm:w-96 sm:max-w-none">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5" />
+              Notifications
               {unreadCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={markAllAsRead}
-                  className="text-xs"
-                >
-                  Mark all read
-                </Button>
+                <Badge variant="secondary">
+                  {unreadCount} new
+                </Badge>
               )}
-              {notifications.length > 0 && (
+            </SheetTitle>
+            <SheetDescription>
+              Stay updated with your cost monitoring alerts and insights
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-4">
+            {/* Filter and Actions */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
                 <Button
-                  variant="ghost"
+                  variant={filter === 'all' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={clearAll}
-                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setFilter('all')}
                 >
-                  Clear all
+                  All ({notifications.length})
                 </Button>
-              )}
+                <Button
+                  variant={filter === 'unread' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilter('unread')}
+                >
+                  Unread ({unreadCount})
+                </Button>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                {unreadCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={markAllAsRead}
+                    className="text-xs"
+                  >
+                    Mark all read
+                  </Button>
+                )}
+                {notifications.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearAll}
+                    className="text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    Clear all
+                  </Button>
+                )}
+              </div>
             </div>
+
+            <Separator />
+
+            {/* Notifications List */}
+            <ScrollArea className="h-[calc(100vh-200px)]">
+              {filteredNotifications.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Bell className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No notifications</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {filter === 'unread' 
+                      ? "You're all caught up! No unread notifications."
+                      : "You'll see notifications here when they arrive."
+                    }
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredNotifications.map(notification => (
+                    <NotificationItem
+                      key={notification.id}
+                      notification={notification}
+                      onMarkAsRead={markAsRead}
+                      onRemove={removeNotification}
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
           </div>
-
-          <Separator />
-
-          {/* Notifications List */}
-          <ScrollArea className="h-[calc(100vh-200px)]">
-            {filteredNotifications.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Bell className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-medium mb-2">No notifications</h3>
-                <p className="text-sm text-muted-foreground">
-                  {filter === 'unread' 
-                    ? "You're all caught up! No unread notifications."
-                    : "You'll see notifications here when they arrive."
-                  }
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                {filteredNotifications.map(notification => (
-                  <NotificationItem
-                    key={notification.id}
-                    notification={notification}
-                    onMarkAsRead={markAsRead}
-                    onRemove={removeNotification}
-                  />
-                ))}
-              </div>
-            )}
-          </ScrollArea>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
+        </SheetContent>
+      </Sheet>
+    );
+  } catch (error) {
+    // NotificationProvider not available (e.g., on login page)
+    // Return a non-functional bell icon
+    return (
+      <Button variant="ghost" size="sm" className="relative cursor-not-allowed opacity-50" disabled>
+        <Bell className="h-5 w-5" />
+      </Button>
+    );
+  }
 }

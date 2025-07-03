@@ -80,8 +80,6 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
     return <p className="text-center text-muted-foreground">Report data is incomplete. Please try generating the report again.</p>;
   }
 
-  const [taxRate, setTaxRate] = useState<number>(0);
-
   const renderCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
     return `$${formatNumber(value)}`;
@@ -92,29 +90,9 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
     return `${formatNumber(value)}%`;
   };
 
-  // Calculate tax and net income based on user input
-  const grossProfit = data.netIncomeBeforeTaxes;
-  const incomeTaxExpense = grossProfit * (taxRate / 100);
-  const netIncome = grossProfit - incomeTaxExpense;
-
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-foreground text-center">Monthly Profit/Loss Report for {data.monthYear}</h2>
-
-      {/* Tax Rate Input */}
-      <div className="flex items-center gap-2 justify-end mb-2">
-        <label htmlFor="tax-rate-input" className="font-medium">Tax Rate (%):</label>
-        <input
-          id="tax-rate-input"
-          type="number"
-          min={0}
-          max={100}
-          step={0.01}
-          value={taxRate}
-          onChange={e => setTaxRate(Number(e.target.value))}
-          className="border rounded px-2 py-1 w-24 text-right font-mono"
-        />
-      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -130,7 +108,7 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard title="Gross Profit" value={grossProfit} isCurrency trendValue={grossProfit} />
+        <StatCard title="Gross Profit" value={data.grossProfit} isCurrency trendValue={data.grossProfit} />
         <StatCard title="Food Cost %" value={data.foodCostPercentage} isPercentage trendValue={data.foodCostPercentage - data.averageBudgetFoodCostPct} />
         <StatCard title="Beverage Cost %" value={data.beverageCostPercentage} isPercentage trendValue={data.beverageCostPercentage - data.averageBudgetBeverageCostPct} />
         <StatCard title="Overall Cost %" value={data.overallCostPercentage} isPercentage trendValue={data.overallCostPercentage - ((data.averageBudgetFoodCostPct + data.averageBudgetBeverageCostPct) / 2)} />
@@ -215,20 +193,26 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow className="bg-accent/10">
-                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
-                  <TableCell className="font-semibold">Food OC & ENT</TableCell>
-                  <TableCell className="text-right font-mono">{renderCurrency((data as any).ocEntFood)}</TableCell>
-                </TableRow>
-                <TableRow className="bg-accent/10">
-                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
-                  <TableCell className="font-semibold">Beverage OC & ENT</TableCell>
-                  <TableCell className="text-right font-mono">{renderCurrency((data as any).ocEntBeverage)}</TableCell>
-                </TableRow>
-                <TableRow className="font-bold bg-muted">
-                  <TableCell colSpan={2} className="text-right">OC & ENT TOTAL</TableCell>
-                  <TableCell className="text-right">{renderCurrency(((data as any).ocEntFood || 0) + ((data as any).ocEntBeverage || 0))}</TableCell>
-                </TableRow>
+                {(data as any).ocEntItems?.map((item: any, index: number) => (
+                  <TableRow key={item.referenceId} className="bg-accent/10">
+                    <TableCell className="font-mono text-muted-foreground">{item.referenceId}</TableCell>
+                    <TableCell className="font-semibold">{item.description}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(item.amount)}</TableCell>
+                  </TableRow>
+                ))}
+                {((data as any).ocEntItems?.length || 0) > 0 && (
+                  <TableRow className="font-bold bg-muted">
+                    <TableCell colSpan={2} className="text-right">OC & ENT TOTAL</TableCell>
+                    <TableCell className="text-right">
+                      {renderCurrency((data as any).ocEntItems?.reduce((sum: number, item: any) => sum + item.amount, 0) || 0)}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {((data as any).ocEntItems?.length || 0) === 0 && (
+                  <TableRow className="bg-accent/10">
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">No OC & ENT data for this period</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
@@ -245,20 +229,26 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow className="bg-accent/5">
-                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
-                  <TableCell className="font-semibold">Food Other Adjustments</TableCell>
-                  <TableCell className="text-right font-mono">{renderCurrency((data as any).otherAdjFood)}</TableCell>
-                </TableRow>
-                <TableRow className="bg-accent/5">
-                  <TableCell className="font-mono text-muted-foreground">-</TableCell>
-                  <TableCell className="font-semibold">Beverage Other Adjustments</TableCell>
-                  <TableCell className="text-right font-mono">{renderCurrency((data as any).otherAdjBeverage)}</TableCell>
-                </TableRow>
-                <TableRow className="font-bold bg-muted">
-                  <TableCell colSpan={2} className="text-right">Other Adjustments TOTAL</TableCell>
-                  <TableCell className="text-right">{renderCurrency(((data as any).otherAdjFood || 0) + ((data as any).otherAdjBeverage || 0))}</TableCell>
-                </TableRow>
+                {(data as any).otherAdjustmentItems?.map((item: any, index: number) => (
+                  <TableRow key={item.referenceId} className="bg-accent/5">
+                    <TableCell className="font-mono text-muted-foreground">{item.referenceId}</TableCell>
+                    <TableCell className="font-semibold">{item.description}</TableCell>
+                    <TableCell className="text-right font-mono">{renderCurrency(item.amount)}</TableCell>
+                  </TableRow>
+                ))}
+                {((data as any).otherAdjustmentItems?.length || 0) > 0 && (
+                  <TableRow className="font-bold bg-muted">
+                    <TableCell colSpan={2} className="text-right">Other Adjustments TOTAL</TableCell>
+                    <TableCell className="text-right">
+                      {renderCurrency((data as any).otherAdjustmentItems?.reduce((sum: number, item: any) => sum + item.amount, 0) || 0)}
+                    </TableCell>
+                  </TableRow>
+                )}
+                {((data as any).otherAdjustmentItems?.length || 0) === 0 && (
+                  <TableRow className="bg-accent/5">
+                    <TableCell colSpan={3} className="text-center text-muted-foreground">No other adjustments for this period</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
@@ -270,9 +260,7 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
                 <TableRow className="font-bold bg-primary/20 text-lg">
                   <TableCell colSpan={2} className="text-right">Total Expenses After Adjustments</TableCell>
                   <TableCell className="text-right">
-                    {renderCurrency(
-                      (data.totalExpenses || 0) - (((data as any).ocEntFood || 0) + ((data as any).ocEntBeverage || 0)) + (((data as any).otherAdjFood || 0) + ((data as any).otherAdjBeverage || 0))
-                    )}
+                    {renderCurrency((data as any).totalExpensesAfterAdjustments || 0)}
                   </TableCell>
                 </TableRow>
               </TableBody>
@@ -282,19 +270,19 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
           <div className="space-y-2 max-w-sm ml-auto text-right text-base font-semibold">
             <div className="flex justify-between items-center">
               <span>NET INCOME BEFORE TAXES</span>
-              <span className="font-mono">{renderCurrency(grossProfit)}</span>
+              <span className="font-mono">{renderCurrency(data.netIncomeBeforeTaxes)}</span>
             </div>
             <div className="flex justify-between items-center">
               <span>INCOME TAX EXPENSE</span>
-              <span className="font-mono">{renderCurrency(incomeTaxExpense)}</span>
+              <span className="font-mono">{renderCurrency(data.incomeTaxExpense)}</span>
             </div>
             <div className="flex justify-between items-center border-b pb-2">
               <span>TAX RATE</span>
-              <span className="font-mono">{renderPercentage(taxRate)}</span>
+              <span className="font-mono">{renderPercentage(data.taxRate)}</span>
             </div>
             <div className="flex justify-between items-center text-lg pt-2 font-extrabold text-primary">
               <span>NET INCOME</span>
-              <span className="font-mono">{renderCurrency(netIncome)}</span>
+              <span className="font-mono">{renderCurrency(data.netIncome)}</span>
             </div>
           </div>
         </CardContent>

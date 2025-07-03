@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { showToast } from "@/lib/toast";
+import { normalizeDate } from "@/lib/utils";
 import type { Outlet, Category, FoodCostEntry, FoodCostDetail } from "@/types";
 import { getOutletsAction, getFoodCategoriesAction } from "@/actions/foodCostActions"; // Reusing from foodCostActions
 import FoodCostInputForm from "./FoodCostInputForm";
-import { getFoodCostEntryWithDetailsAction } from "@/actions/foodCostActions";
+import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions";
 
 export default function FoodCostInputClient() {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -45,7 +46,7 @@ export default function FoodCostInputClient() {
         ]);
         setOutlets(fetchedOutlets);
         if (fetchedOutlets.length > 0 && !selectedOutletId) {
-          setSelectedOutletId(fetchedOutlets[0].id);
+          setSelectedOutletId(fetchedOutlets[0].id.toString());
         }
         setFoodCategories(fetchedCategories);
       } catch (error) {
@@ -86,18 +87,20 @@ export default function FoodCostInputClient() {
       return;
     }
 
-    // If we reach here, selectedDate is a valid Date object, and selectedOutletId is truthy.\
+    // If we reach here, selectedDate is a valid Date object, and selectedOutletId is truthy.
     setIsLoadingEntry(true);
     try {
-      // All calls to selectedDate.toISOString() are now safe.\
-      const entry = await getFoodCostEntryWithDetailsAction(selectedDate, selectedOutletId);
+      // Get food cost entries for the specific date and outlet
+      const entries = await getFoodCostEntriesForDateAction(selectedDate, Number(selectedOutletId));
+      // Take the first entry if there are multiple (usually there should be only one per day per outlet)
+      const entry = entries.length > 0 ? entries[0] : null;
       setCurrentEntry(entry);
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-${entry?.id || 'new'}`);
     } catch (error) {
       showToast.error((error as Error).message);
       setCurrentEntry(null);
       console.log("Error fetching cost entry:", error);
-      // selectedDate is guaranteed to be a valid Date here due to the checks above.\
+      // selectedDate is guaranteed to be a valid Date here due to the checks above.
       setFormKey(`${selectedDate.toISOString()}-${selectedOutletId}-error`);
     } finally {
       setIsLoadingEntry(false);
@@ -112,9 +115,9 @@ export default function FoodCostInputClient() {
 
   const handleDateChange = (date: Date | undefined) => {
     if (date && isValid(date)) {
-      // Create a new Date object representing the start of the day in UTC
-      const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-      setSelectedDate(utcDate);
+      // Use the standardized date normalization function
+      const normalizedDate = normalizeDate(date);
+      setSelectedDate(normalizedDate);
     } else {
       setSelectedDate(date); // Handle undefined or invalid dates
     }
@@ -157,7 +160,7 @@ export default function FoodCostInputClient() {
               </SelectTrigger>
               <SelectContent>
                 {outlets.map((outlet) => (
-                  <SelectItem key={outlet.id} value={outlet.id}>
+                  <SelectItem key={outlet.id} value={outlet.id.toString()}>
                     {outlet.name}
                   </SelectItem>
                 ))}

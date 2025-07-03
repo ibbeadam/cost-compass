@@ -5,8 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getAllUsersAction } from "@/actions/prismaUserActions";
 
 export function AuthDebug() {
   const { user, userProfile, isAdmin, loading } = useAuth();

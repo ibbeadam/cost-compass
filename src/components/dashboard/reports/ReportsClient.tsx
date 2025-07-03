@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   FileSpreadsheet,
@@ -32,6 +33,8 @@ import {
   getDetailedFoodCostReportAction,
   getCostAnalysisByCategoryReportAction,
 } from "@/actions/foodCostActions";
+import { getPropertiesAction } from "@/actions/propertyActions";
+import { useAuth } from "@/contexts/AuthContext";
 import { getDetailedBeverageCostReportAction } from "@/actions/beverageCostActions";
 import {
   getMonthlyProfitLossReportAction,
@@ -106,7 +109,12 @@ export default function ReportsClient() {
   const [selectedOutletId, setSelectedOutletId] = useState<string | undefined>(
     "all"
   );
+  const [taxRate, setTaxRate] = useState<number>(25); // Default 25% tax rate
   const [isFetchingOutlets, setIsFetchingOutlets] = useState(true);
+  const [properties, setProperties] = useState<any[]>([]);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | undefined>("all");
+  const [isLoadingProperties, setIsLoadingProperties] = useState(true);
+  const { user } = useAuth();
   const [reportData, setReportData] = useState<
     | DetailedFoodCostReportResponse
     | DetailedBeverageCostReportResponse
@@ -177,6 +185,27 @@ export default function ReportsClient() {
     fetchOutlets();
   }, []);
 
+  // Load properties for super admin users
+  useEffect(() => {
+    const loadProperties = async () => {
+      if (user?.role === "super_admin") {
+        try {
+          const propertiesData = await getPropertiesAction();
+          setProperties([
+            { id: "all", name: "All Properties" },
+            ...propertiesData
+          ]);
+        } catch (error) {
+          console.error("Error loading properties:", error);
+          showToast.error("Failed to load properties");
+        }
+      }
+      setIsLoadingProperties(false);
+    };
+    
+    loadProperties();
+  }, [user]);
+
   const handleGenerateReport = async () => {
     if (!dateRange?.from || !dateRange?.to) {
       showToast.error("Please select a date range to generate the report.");
@@ -198,6 +227,7 @@ export default function ReportsClient() {
           dateRange.to,
           "all"
         );
+        console.log("Food report data received:", data);
         setReportData(data);
       } else if (selectedReport === "detailed_beverage_cost") {
         console.log(
@@ -208,6 +238,7 @@ export default function ReportsClient() {
           dateRange.to,
           "all"
         );
+        console.log("Beverage report data received:", data);
         setReportData(data);
       } else if (selectedReport === "monthly_profit_loss") {
         if (!dateRange?.from || !dateRange?.to) {
@@ -221,7 +252,9 @@ export default function ReportsClient() {
         // but we need to create a new action that accepts date range instead of year/month
         const data = await getMonthlyProfitLossReportForDateRangeAction(
           dateRange.from,
-          dateRange.to
+          dateRange.to,
+          undefined, // outletId - not used for this report
+          taxRate
         );
         console.log("Monthly Profit/Loss Report data:", data);
         console.log("incomeItems:", data.incomeItems);
@@ -275,9 +308,10 @@ export default function ReportsClient() {
         console.log("Calling getYearOverYearReportAction from client...");
         // For Year-over-Year, we'll use the current year from the date range
         const currentYear = dateRange.from.getFullYear();
+        const previousYear = currentYear - 1; // Calculate previous year
         const data = await getYearOverYearReportAction(
           currentYear,
-          selectedOutletId === "all" ? undefined : selectedOutletId
+          previousYear
         );
         console.log("Year-over-Year Report data:", data);
         setReportData(data);
@@ -370,7 +404,7 @@ export default function ReportsClient() {
       return;
     }
 
-    if (!dateRange?.from || !dateRange?.to) {
+    if (selectedReport !== "monthly_profit_loss" && (!dateRange?.from || !dateRange?.to)) {
       showToast.error("Please select a date range to export the report.");
       return;
     }
@@ -550,12 +584,22 @@ export default function ReportsClient() {
       });
     } else if (
       selectedReport === "monthly_profit_loss" &&
-      "monthYear" in reportData
+      Array.isArray(reportData) &&
+      reportData.length > 0
     ) {
-      const monthlyReportData = reportData as MonthlyProfitLossReport;
-      ws_data.push([
-        `Monthly Profit/Loss Report for ${monthlyReportData.monthYear}`,
-      ]);
+      // Handle array of monthly reports
+      const monthlyReports = reportData as MonthlyProfitLossReport[];
+      
+      // Export all monthly reports
+      monthlyReports.forEach((monthlyReportData, index) => {
+        if (index > 0) {
+          ws_data.push([]); // Add separator between reports
+          ws_data.push([]);
+        }
+        
+        ws_data.push([
+          `Monthly Profit/Loss Report for ${monthlyReportData.monthYear}`,
+        ]);
       ws_data.push([]);
       // INCOME SECTION
       ws_data.push(["INCOME"]);
@@ -660,18 +704,19 @@ export default function ReportsClient() {
         "TAX RATE",
         formatNumber(monthlyReportData.taxRate || 0) + "%",
       ]);
-      ws_data.push(["NET INCOME", formatNumber(monthlyReportData.netIncome)]);
+        ws_data.push(["NET INCOME", formatNumber(monthlyReportData.netIncome)]);
+      }); // Close the forEach loop
+
+      // Generate filename based on first report's month/year
+      const firstReport = monthlyReports[0];
+      const filename = monthlyReports.length > 1 
+        ? `Monthly_Profit_Loss_Reports_${firstReport.monthYear.replace(/[^a-zA-Z0-9-]/g, "_")}_and_more.xlsx`
+        : `Monthly_Profit_Loss_Report_${firstReport.monthYear.replace(/[^a-zA-Z0-9-]/g, "_")}.xlsx`;
 
       const ws = XLSX.utils.aoa_to_sheet(ws_data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Monthly Profit Loss Report");
-      XLSX.writeFile(
-        wb,
-        `Monthly_Profit_Loss_Report_${monthlyReportData.monthYear.replace(
-          /[^a-zA-Z0-9-]/g,
-          "_"
-        )}.xlsx`
-      );
+      XLSX.writeFile(wb, filename);
 
       showToast.success("Report successfully exported to Excel.");
       return; // Exit early to avoid creating duplicate files
@@ -1044,8 +1089,8 @@ export default function ReportsClient() {
       ]);
       dailyRevenueTrendsReport.weeklyTrends.forEach((week) => {
         ws_data.push([
-          `${formatDateFn(week.weekStart, "MMM dd")} - ${formatDateFn(
-            week.weekEnd,
+          `${formatDateFn(week.weekStartDate, "MMM dd")} - ${formatDateFn(
+            week.weekEndDate,
             "MMM dd"
           )}`,
           formatNumber(week.totalFoodRevenue),
@@ -1067,6 +1112,364 @@ export default function ReportsClient() {
           dateRange.from,
           "yyyyMMdd"
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`
+      );
+
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "year_over_year" && reportData) {
+      // Year-over-Year Report Export
+      const yearOverYearReport = reportData as any;
+      ws_data.push(["Year-over-Year Performance Report"]);
+      ws_data.push([
+        `${yearOverYearReport.currentYearData.year} vs ${yearOverYearReport.previousYearData.year} Comparison`,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // High-Level Metrics
+      ws_data.push(["High-Level Performance Metrics"]);
+      ws_data.push(["Metric", "Growth/Change"]);
+      ws_data.push([
+        "Total Revenue Growth",
+        `${formatNumber(yearOverYearReport.growthMetrics.revenueGrowth)}%`,
+      ]);
+      ws_data.push([
+        "Profit Growth",
+        `${formatNumber(yearOverYearReport.growthMetrics.profitGrowth)}%`,
+      ]);
+      ws_data.push([
+        "Margin Improvement",
+        `${formatNumber(yearOverYearReport.growthMetrics.marginImprovement)}%`,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Financial Comparison
+      ws_data.push(["Detailed Financial Comparison"]);
+      ws_data.push([
+        "Metric",
+        `${yearOverYearReport.previousYearData.year}`,
+        `${yearOverYearReport.currentYearData.year}`,
+        "Growth %",
+        "Change ($)",
+      ]);
+      ws_data.push([
+        "Total Revenue",
+        formatNumber(yearOverYearReport.previousYearData.totalRevenue),
+        formatNumber(yearOverYearReport.currentYearData.totalRevenue),
+        `${formatNumber(yearOverYearReport.growthMetrics.revenueGrowth)}%`,
+        formatNumber(yearOverYearReport.currentYearData.totalRevenue - yearOverYearReport.previousYearData.totalRevenue),
+      ]);
+      ws_data.push([
+        "Food Revenue",
+        formatNumber(yearOverYearReport.previousYearData.totalFoodRevenue),
+        formatNumber(yearOverYearReport.currentYearData.totalFoodRevenue),
+        `${formatNumber(yearOverYearReport.growthMetrics.foodRevenueGrowth)}%`,
+        formatNumber(yearOverYearReport.currentYearData.totalFoodRevenue - yearOverYearReport.previousYearData.totalFoodRevenue),
+      ]);
+      ws_data.push([
+        "Beverage Revenue",
+        formatNumber(yearOverYearReport.previousYearData.totalBeverageRevenue),
+        formatNumber(yearOverYearReport.currentYearData.totalBeverageRevenue),
+        `${formatNumber(yearOverYearReport.growthMetrics.beverageRevenueGrowth)}%`,
+        formatNumber(yearOverYearReport.currentYearData.totalBeverageRevenue - yearOverYearReport.previousYearData.totalBeverageRevenue),
+      ]);
+      ws_data.push([
+        "Total Costs",
+        formatNumber(yearOverYearReport.previousYearData.totalCosts),
+        formatNumber(yearOverYearReport.currentYearData.totalCosts),
+        `${formatNumber(yearOverYearReport.growthMetrics.costGrowth)}%`,
+        formatNumber(yearOverYearReport.currentYearData.totalCosts - yearOverYearReport.previousYearData.totalCosts),
+      ]);
+      ws_data.push([
+        "Net Profit",
+        formatNumber(yearOverYearReport.previousYearData.netProfit),
+        formatNumber(yearOverYearReport.currentYearData.netProfit),
+        `${formatNumber(yearOverYearReport.growthMetrics.profitGrowth)}%`,
+        formatNumber(yearOverYearReport.currentYearData.netProfit - yearOverYearReport.previousYearData.netProfit),
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Monthly Performance
+      ws_data.push(["Monthly Performance Tracking"]);
+      ws_data.push([
+        "Month",
+        `${yearOverYearReport.previousYearData.year}`,
+        `${yearOverYearReport.currentYearData.year}`,
+        "Growth %",
+        "Performance",
+      ]);
+      yearOverYearReport.monthlyComparison.forEach((month: any) => {
+        ws_data.push([
+          month.monthName,
+          formatNumber(month.previousYearRevenue),
+          formatNumber(month.currentYearRevenue),
+          `${formatNumber(month.growth)}%`,
+          month.performance.replace("_", " "),
+        ]);
+      });
+      ws_data.push([]); // Empty row for spacing
+
+      // Insights
+      ws_data.push(["Key Insights & Recommendations"]);
+      ws_data.push(["Strongest Performing Months"]);
+      yearOverYearReport.insights.strongestMonths.forEach((month: string) => {
+        ws_data.push([month]);
+      });
+      ws_data.push([]);
+      ws_data.push(["Areas for Improvement"]);
+      yearOverYearReport.insights.weakestMonths.forEach((month: string) => {
+        ws_data.push([month]);
+      });
+      ws_data.push([]);
+      ws_data.push(["Strategic Recommendations"]);
+      yearOverYearReport.insights.recommendations.forEach((recommendation: string) => {
+        ws_data.push([recommendation]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Year-over-Year Report");
+      XLSX.writeFile(
+        wb,
+        `Year_Over_Year_Report_${yearOverYearReport.currentYearData.year}_vs_${yearOverYearReport.previousYearData.year}.xlsx`
+      );
+
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "real_time_kpi" && reportData) {
+      // Real-Time KPI Dashboard Export
+      const kpiReport = reportData as any;
+      ws_data.push(["Real-Time KPI Dashboard"]);
+      ws_data.push([
+        `${kpiReport.outletName} • Last updated: ${kpiReport.lastUpdated.toLocaleString()}`,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Current Period KPIs
+      ws_data.push(["Current Period KPIs"]);
+      ws_data.push(["Metric", "Value", "Target", "Status"]);
+      ws_data.push([
+        "Today's Revenue",
+        formatNumber(kpiReport.currentPeriodKPIs.todayRevenue),
+        formatNumber(kpiReport.currentPeriodKPIs.revenueTarget),
+        `${formatNumber(kpiReport.currentPeriodKPIs.revenueAchievement)}% Achievement`,
+      ]);
+      ws_data.push([
+        "Food Cost %",
+        `${formatNumber(kpiReport.currentPeriodKPIs.currentFoodCostPct)}%`,
+        `${formatNumber(kpiReport.currentPeriodKPIs.targetFoodCostPct)}%`,
+        `${formatNumber(kpiReport.currentPeriodKPIs.foodCostVariance)}% Variance`,
+      ]);
+      ws_data.push([
+        "Beverage Cost %",
+        `${formatNumber(kpiReport.currentPeriodKPIs.currentBeverageCostPct)}%`,
+        `${formatNumber(kpiReport.currentPeriodKPIs.targetBeverageCostPct)}%`,
+        `${formatNumber(kpiReport.currentPeriodKPIs.beverageCostVariance)}% Variance`,
+      ]);
+      ws_data.push([
+        "Profit Margin",
+        `${formatNumber(kpiReport.currentPeriodKPIs.profitMargin)}%`,
+        "15%",
+        kpiReport.currentPeriodKPIs.profitMargin >= 15 ? "Excellent" : kpiReport.currentPeriodKPIs.profitMargin >= 10 ? "Good" : "Below Target",
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Trending KPIs
+      ws_data.push(["Trending KPIs"]);
+      ws_data.push(["KPI Name", "Current Value", "Target", "Trend", "Status"]);
+      kpiReport.trendingKPIs.forEach((kpi: any) => {
+        ws_data.push([
+          kpi.name,
+          formatNumber(kpi.value),
+          formatNumber(kpi.target),
+          `${kpi.trend} (${formatNumber(kpi.trendPercentage)}%)`,
+          kpi.status,
+        ]);
+      });
+      ws_data.push([]); // Empty row for spacing
+
+      // Month-to-Date Metrics
+      ws_data.push(["Month-to-Date Metrics"]);
+      ws_data.push(["Metric", "Value"]);
+      ws_data.push([
+        "Total Revenue",
+        formatNumber(kpiReport.monthToDateMetrics.totalRevenue),
+      ]);
+      ws_data.push([
+        "Total Costs",
+        formatNumber(kpiReport.monthToDateMetrics.totalCosts),
+      ]);
+      ws_data.push([
+        "Net Profit",
+        formatNumber(kpiReport.monthToDateMetrics.netProfit),
+      ]);
+      ws_data.push([
+        "Profit Margin",
+        `${formatNumber(kpiReport.monthToDateMetrics.profitMargin)}%`,
+      ]);
+      ws_data.push([
+        "Average Daily Revenue",
+        formatNumber(kpiReport.monthToDateMetrics.averageDailyRevenue),
+      ]);
+      ws_data.push([
+        "Revenue Growth",
+        `${formatNumber(kpiReport.monthToDateMetrics.revenueGrowth)}%`,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Alerts
+      if (kpiReport.alerts.length > 0) {
+        ws_data.push(["Active Alerts"]);
+        ws_data.push(["Severity", "Message", "Type", "Timestamp"]);
+        kpiReport.alerts.forEach((alert: any) => {
+          ws_data.push([
+            alert.severity,
+            alert.message,
+            alert.type.replace("_", " "),
+            alert.timestamp.toLocaleString(),
+          ]);
+        });
+      } else {
+        ws_data.push(["Active Alerts"]);
+        ws_data.push(["No active alerts at this time"]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Real-Time KPI Dashboard");
+      XLSX.writeFile(
+        wb,
+        `Real_Time_KPI_Dashboard_${formatDateFn(new Date(), "yyyyMMdd_HHmmss")}.xlsx`
+      );
+
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "forecasting_report" && reportData) {
+      // Forecasting Report Export
+      const forecastReport = reportData as any;
+      ws_data.push(["Revenue & Cost Forecasting Report"]);
+      ws_data.push([
+        `${forecastReport.outletName} • Historical: ${forecastReport.dateRange.from.toLocaleDateString()} - ${forecastReport.dateRange.to.toLocaleDateString()}`,
+      ]);
+      ws_data.push([
+        `Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${forecastReport.forecastPeriod.to.toLocaleDateString()}`,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Historical Analysis
+      ws_data.push(["Historical Analysis"]);
+      ws_data.push(["Metric", "Value"]);
+      ws_data.push([
+        "Total Revenue",
+        formatNumber(forecastReport.historicalAnalysis.totalRevenue),
+      ]);
+      ws_data.push([
+        "Total Costs",
+        formatNumber(forecastReport.historicalAnalysis.totalCosts),
+      ]);
+      ws_data.push([
+        "Average Daily Revenue",
+        formatNumber(forecastReport.historicalAnalysis.averageDailyRevenue),
+      ]);
+      ws_data.push([
+        "Growth Rate",
+        `${formatNumber(forecastReport.historicalAnalysis.growthRate)}%`,
+      ]);
+      ws_data.push([
+        "Revenue Volatility",
+        `${formatNumber(forecastReport.historicalAnalysis.volatility)}%`,
+      ]);
+      ws_data.push([
+        "Data Points",
+        forecastReport.historicalAnalysis.dataPoints,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Cost Forecast Summary
+      ws_data.push(["Cost Forecast Summary"]);
+      ws_data.push(["Metric", "Value"]);
+      ws_data.push([
+        "Predicted Food Cost %",
+        `${formatNumber(forecastReport.costForecast.predictedFoodCostPct)}%`,
+      ]);
+      ws_data.push([
+        "Predicted Beverage Cost %",
+        `${formatNumber(forecastReport.costForecast.predictedBeverageCostPct)}%`,
+      ]);
+      ws_data.push([
+        "Cost Efficiency Ratio",
+        `${formatNumber(forecastReport.costForecast.costEfficiencyRatio)}%`,
+      ]);
+      ws_data.push([
+        "Confidence Level",
+        `${formatNumber(forecastReport.costForecast.confidenceLevel)}%`,
+      ]);
+      ws_data.push([]); // Empty row for spacing
+
+      // Daily Revenue Forecast (first 7 days)
+      ws_data.push(["Daily Revenue Forecast (Next 7 Days)"]);
+      ws_data.push([
+        "Date",
+        "Predicted Revenue",
+        "Confidence Range (Low)",
+        "Confidence Range (High)",
+        "Confidence Level",
+      ]);
+      forecastReport.revenueForecast.daily.slice(0, 7).forEach((forecast: any) => {
+        ws_data.push([
+          forecast.date.toLocaleDateString(),
+          formatNumber(forecast.predictedRevenue),
+          formatNumber(forecast.confidenceInterval.lower),
+          formatNumber(forecast.confidenceInterval.upper),
+          `${formatNumber(forecast.confidenceLevel)}%`,
+        ]);
+      });
+      ws_data.push([]); // Empty row for spacing
+
+      // Monthly Forecasts
+      ws_data.push(["Monthly Forecasts"]);
+      ws_data.push([
+        "Month",
+        "Forecast Revenue",
+        "Forecast Costs",
+        "Forecast Profit",
+        "Confidence Level",
+      ]);
+      forecastReport.revenueForecast.monthly.forEach((monthly: any) => {
+        ws_data.push([
+          monthly.month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+          formatNumber(monthly.forecastRevenue),
+          formatNumber(monthly.forecastCosts),
+          formatNumber(monthly.forecastProfit),
+          `${formatNumber(monthly.confidenceLevel)}%`,
+        ]);
+      });
+      ws_data.push([]); // Empty row for spacing
+
+      // Insights
+      ws_data.push(["Key Insights"]);
+      ws_data.push([
+        "Expected Growth",
+        `${formatNumber(forecastReport.insights.expectedGrowth)}%`,
+      ]);
+      ws_data.push([]);
+      ws_data.push(["Risk Factors"]);
+      forecastReport.insights.riskFactors.forEach((risk: string) => {
+        ws_data.push([risk]);
+      });
+      ws_data.push([]);
+      ws_data.push(["Opportunities"]);
+      forecastReport.insights.opportunities.forEach((opportunity: string) => {
+        ws_data.push([opportunity]);
+      });
+      ws_data.push([]);
+      ws_data.push(["Recommendations"]);
+      forecastReport.insights.recommendations.forEach((recommendation: string) => {
+        ws_data.push([recommendation]);
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Forecasting Report");
+      XLSX.writeFile(
+        wb,
+        `Forecasting_Report_${formatDateFn(forecastReport.dateRange.from, "yyyyMMdd")}_to_${formatDateFn(forecastReport.dateRange.to, "yyyyMMdd")}.xlsx`
       );
 
       showToast.success("Report successfully exported to Excel.");
@@ -1108,7 +1511,7 @@ export default function ReportsClient() {
       return;
     }
 
-    if (!dateRange?.from || !dateRange?.to) {
+    if (selectedReport !== "monthly_profit_loss" && (!dateRange?.from || !dateRange?.to)) {
       showToast.error("Please select a date range to export the report.");
       return;
     }
@@ -1439,9 +1842,11 @@ export default function ReportsClient() {
       );
     } else if (
       selectedReport === "monthly_profit_loss" &&
-      "monthYear" in reportData
+      Array.isArray(reportData) &&
+      reportData.length > 0
     ) {
-      const monthlyReportData = reportData as MonthlyProfitLossReport;
+      // Handle array of monthly reports - export the first one for now
+      const monthlyReportData = reportData[0] as MonthlyProfitLossReport;
       doc.setFontSize(18);
       doc.text(
         `Monthly Profit/Loss Report for ${monthlyReportData.monthYear}`,
@@ -1533,21 +1938,18 @@ export default function ReportsClient() {
       doc.setFontSize(14);
       doc.text("OC & ENT", 14, yPos);
       yPos += 6;
+      const ocEntBody = (monthlyReportData as any).ocEntItems?.length > 0 
+        ? (monthlyReportData as any).ocEntItems.map((item: any) => [
+            item.referenceId,
+            item.description,
+            renderCurrency(item.amount),
+          ])
+        : [["", "No OC & ENT data for this period", ""]];
+
       autoTable(doc, {
         startY: yPos,
         head: [["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]],
-        body: [
-          [
-            "OC-001",
-            "Food OC & ENT",
-            renderCurrency((monthlyReportData as any).ocEntFood),
-          ],
-          [
-            "OC-002",
-            "Beverage OC & ENT",
-            renderCurrency((monthlyReportData as any).ocEntBeverage),
-          ],
-        ],
+        body: ocEntBody,
         theme: "grid",
         headStyles: {
           fillColor: [240, 240, 240],
@@ -1584,21 +1986,18 @@ export default function ReportsClient() {
       doc.setFontSize(14);
       doc.text("Other Adjustments", 14, yPos);
       yPos += 6;
+      const otherAdjBody = (monthlyReportData as any).otherAdjustmentItems?.length > 0 
+        ? (monthlyReportData as any).otherAdjustmentItems.map((item: any) => [
+            item.referenceId,
+            item.description,
+            renderCurrency(item.amount),
+          ])
+        : [["", "No other adjustments for this period", ""]];
+
       autoTable(doc, {
         startY: yPos,
         head: [["REFERENCE ID.", "DESCRIPTION", "AMOUNT"]],
-        body: [
-          [
-            "OA-001",
-            "Food Other Adjustments",
-            renderCurrency((monthlyReportData as any).otherAdjFood),
-          ],
-          [
-            "OA-002",
-            "Beverage Other Adjustments",
-            renderCurrency((monthlyReportData as any).otherAdjBeverage),
-          ],
-        ],
+        body: otherAdjBody,
         theme: "grid",
         headStyles: {
           fillColor: [240, 240, 240],
@@ -1638,13 +2037,7 @@ export default function ReportsClient() {
           [
             "",
             "Total Expenses After Adjustments",
-            renderCurrency(
-              (monthlyReportData.totalExpenses || 0) -
-                (((monthlyReportData as any).ocEntFood || 0) +
-                  ((monthlyReportData as any).ocEntBeverage || 0)) +
-                (((monthlyReportData as any).otherAdjFood || 0) +
-                  ((monthlyReportData as any).otherAdjBeverage || 0))
-            ),
+            renderCurrency((monthlyReportData as any).totalExpensesAfterAdjustments || 0),
           ],
         ],
         theme: "plain",
@@ -2255,19 +2648,91 @@ export default function ReportsClient() {
       });
       yPos += 15;
 
+      // Add new page if needed
+      if (yPos > 220) {
+        doc.addPage();
+        yPos = 20;
+      }
+
       // Daily trends section
       doc.setFontSize(14);
       doc.text("Daily Trends", 14, yPos);
       yPos += 6;
-      dailyRevenueTrendsReport.dailyTrends.forEach((trend) => {
-        doc.text(
-          `${formatDateFn(trend.date, "MMM dd, yyyy")}: ${renderCurrency(
-            trend.foodRevenue
-          )}`,
-          14,
-          yPos
-        );
-        yPos += 5;
+      
+      const dailyHeaders = [["Date", "Food Revenue", "Beverage Revenue", "Total Revenue", "Total Covers", "Avg Check"]];
+      const dailyData = dailyRevenueTrendsReport.dailyTrends.map((trend) => [
+        formatDateFn(trend.date, "MMM dd, yyyy"),
+        renderCurrency(trend.foodRevenue),
+        renderCurrency(trend.beverageRevenue), 
+        renderCurrency(trend.totalRevenue),
+        trend.totalCovers.toString(),
+        renderCurrency(trend.averageCheck)
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: dailyHeaders,
+        body: dailyData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 8, cellPadding: 2 },
+        columnStyles: { 
+          1: { halign: "right" },
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" },
+          5: { halign: "right" }
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Add new page if needed
+      if (yPos > 220) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      // Weekly trends section
+      doc.setFontSize(14);
+      doc.text("Weekly Trends", 14, yPos);
+      yPos += 6;
+      
+      const weeklyHeaders = [["Week", "Food Revenue", "Beverage Revenue", "Total Revenue", "Days"]];
+      const weeklyData = dailyRevenueTrendsReport.weeklyTrends.map((week) => [
+        `${formatDateFn(week.weekStartDate, "MMM dd")} - ${formatDateFn(week.weekEndDate, "MMM dd")}`,
+        renderCurrency(week.foodRevenue),
+        renderCurrency(week.beverageRevenue),
+        renderCurrency(week.totalRevenue),
+        week.daysInWeek.toString()
+      ]);
+
+      autoTable(doc, {
+        startY: yPos,
+        head: weeklyHeaders,
+        body: weeklyData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 9, cellPadding: 2 },
+        columnStyles: { 
+          1: { halign: "right" },
+          2: { halign: "right" },
+          3: { halign: "right" },
+          4: { halign: "right" }
+        },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
       });
 
       doc.save(
@@ -2275,6 +2740,542 @@ export default function ReportsClient() {
           dateRange.from,
           "yyyyMMdd"
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "year_over_year" && reportData) {
+      // Year-over-Year Report PDF Export
+      const yearOverYearReport = reportData as any;
+
+      // Report Title
+      doc.setFontSize(18);
+      doc.text("Year-over-Year Performance Report", 14, yPos);
+      yPos += 10;
+      doc.setFontSize(12);
+      doc.text(
+        `${yearOverYearReport.currentYearData.year} vs ${yearOverYearReport.previousYearData.year} Comparison`,
+        14,
+        yPos
+      );
+      yPos += 15;
+
+      // High-Level Metrics
+      doc.setFontSize(14);
+      doc.text("High-Level Performance Metrics", 14, yPos);
+      yPos += 10;
+
+      const metricsHeaders = [["Metric", "Growth/Change"]];
+      const metricsData = [
+        ["Total Revenue Growth", `${formatNumber(yearOverYearReport.growthMetrics.revenueGrowth)}%`],
+        ["Profit Growth", `${formatNumber(yearOverYearReport.growthMetrics.profitGrowth)}%`],
+        ["Margin Improvement", `${formatNumber(yearOverYearReport.growthMetrics.marginImprovement)}%`],
+      ];
+
+      autoTable(doc, {
+        head: metricsHeaders,
+        body: metricsData,
+        startY: yPos,
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+      
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Financial Comparison
+      doc.setFontSize(14);
+      doc.text("Detailed Financial Comparison", 14, yPos);
+      yPos += 10;
+
+      const financialHeaders = [
+        ["Metric", `${yearOverYearReport.previousYearData.year}`, `${yearOverYearReport.currentYearData.year}`, "Growth %", "Change ($)"]
+      ];
+      const financialData = [
+        [
+          "Total Revenue",
+          `$${formatNumber(yearOverYearReport.previousYearData.totalRevenue)}`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalRevenue)}`,
+          `${formatNumber(yearOverYearReport.growthMetrics.revenueGrowth)}%`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalRevenue - yearOverYearReport.previousYearData.totalRevenue)}`,
+        ],
+        [
+          "Food Revenue",
+          `$${formatNumber(yearOverYearReport.previousYearData.totalFoodRevenue)}`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalFoodRevenue)}`,
+          `${formatNumber(yearOverYearReport.growthMetrics.foodRevenueGrowth)}%`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalFoodRevenue - yearOverYearReport.previousYearData.totalFoodRevenue)}`,
+        ],
+        [
+          "Beverage Revenue",
+          `$${formatNumber(yearOverYearReport.previousYearData.totalBeverageRevenue)}`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalBeverageRevenue)}`,
+          `${formatNumber(yearOverYearReport.growthMetrics.beverageRevenueGrowth)}%`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalBeverageRevenue - yearOverYearReport.previousYearData.totalBeverageRevenue)}`,
+        ],
+        [
+          "Total Costs",
+          `$${formatNumber(yearOverYearReport.previousYearData.totalCosts)}`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalCosts)}`,
+          `${formatNumber(yearOverYearReport.growthMetrics.costGrowth)}%`,
+          `$${formatNumber(yearOverYearReport.currentYearData.totalCosts - yearOverYearReport.previousYearData.totalCosts)}`,
+        ],
+        [
+          "Net Profit",
+          `$${formatNumber(yearOverYearReport.previousYearData.netProfit)}`,
+          `$${formatNumber(yearOverYearReport.currentYearData.netProfit)}`,
+          `${formatNumber(yearOverYearReport.growthMetrics.profitGrowth)}%`,
+          `$${formatNumber(yearOverYearReport.currentYearData.netProfit - yearOverYearReport.previousYearData.netProfit)}`,
+        ],
+      ];
+
+      autoTable(doc, {
+        head: financialHeaders,
+        body: financialData,
+        startY: yPos,
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Monthly Performance (add new page if needed)
+      if (yPos > 250) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Monthly Performance Tracking", 14, yPos);
+      yPos += 10;
+
+      const monthlyHeaders = [
+        ["Month", `${yearOverYearReport.previousYearData.year}`, `${yearOverYearReport.currentYearData.year}`, "Growth %", "Performance"]
+      ];
+      const monthlyData = yearOverYearReport.monthlyComparison.map((month: any) => [
+        month.monthName,
+        `$${formatNumber(month.previousYearRevenue)}`,
+        `$${formatNumber(month.currentYearRevenue)}`,
+        `${formatNumber(month.growth)}%`,
+        month.performance.replace("_", " "),
+      ]);
+
+      autoTable(doc, {
+        head: monthlyHeaders,
+        body: monthlyData,
+        startY: yPos,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+
+      // Key Insights (add new page if needed)
+      if (yPos > 230) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Key Insights & Recommendations", 14, yPos);
+      yPos += 10;
+
+      // Strongest Performing Months
+      doc.setFontSize(12);
+      doc.text("Strongest Performing Months:", 14, yPos);
+      yPos += 8;
+      doc.setFontSize(10);
+      yearOverYearReport.insights.strongestMonths.forEach((month: string) => {
+        doc.text(`• ${month}`, 20, yPos);
+        yPos += 5;
+      });
+      yPos += 5;
+
+      // Areas for Improvement
+      doc.setFontSize(12);
+      doc.text("Areas for Improvement:", 14, yPos);
+      yPos += 8;
+      doc.setFontSize(10);
+      yearOverYearReport.insights.weakestMonths.forEach((month: string) => {
+        doc.text(`• ${month}`, 20, yPos);
+        yPos += 5;
+      });
+      yPos += 5;
+
+      // Strategic Recommendations
+      doc.setFontSize(12);
+      doc.text("Strategic Recommendations:", 14, yPos);
+      yPos += 8;
+      doc.setFontSize(10);
+      yearOverYearReport.insights.recommendations.forEach((recommendation: string) => {
+        // Handle long recommendations by splitting them across lines
+        const maxWidth = 170;
+        const lines = doc.splitTextToSize(recommendation, maxWidth);
+        lines.forEach((line: string, index: number) => {
+          doc.text(index === 0 ? `• ${line}` : `  ${line}`, 20, yPos);
+          yPos += 5;
+        });
+      });
+
+      doc.save(
+        `Year_Over_Year_Report_${yearOverYearReport.currentYearData.year}_vs_${yearOverYearReport.previousYearData.year}.pdf`
+      );
+    } else if (selectedReport === "real_time_kpi" && reportData) {
+      // Real-Time KPI Dashboard PDF Export
+      const kpiReport = reportData as any;
+
+      // Report Title
+      doc.setFontSize(18);
+      doc.text("Real-Time KPI Dashboard", 14, yPos);
+      yPos += 10;
+      doc.setFontSize(10);
+      doc.text(
+        `${kpiReport.outletName} • Last updated: ${kpiReport.lastUpdated.toLocaleString()}`,
+        14,
+        yPos
+      );
+      yPos += 15;
+
+      // Current Period KPIs
+      doc.setFontSize(14);
+      doc.text("Current Period KPIs", 14, yPos);
+      yPos += 10;
+
+      const currentKPIHeaders = [["Metric", "Value", "Target", "Status"]];
+      const currentKPIData = [
+        [
+          "Today's Revenue",
+          `$${formatNumber(kpiReport.currentPeriodKPIs.todayRevenue)}`,
+          `$${formatNumber(kpiReport.currentPeriodKPIs.revenueTarget)}`,
+          `${formatNumber(kpiReport.currentPeriodKPIs.revenueAchievement)}% Achievement`,
+        ],
+        [
+          "Food Cost %",
+          `${formatNumber(kpiReport.currentPeriodKPIs.currentFoodCostPct)}%`,
+          `${formatNumber(kpiReport.currentPeriodKPIs.targetFoodCostPct)}%`,
+          `${formatNumber(kpiReport.currentPeriodKPIs.foodCostVariance)}% Variance`,
+        ],
+        [
+          "Beverage Cost %",
+          `${formatNumber(kpiReport.currentPeriodKPIs.currentBeverageCostPct)}%`,
+          `${formatNumber(kpiReport.currentPeriodKPIs.targetBeverageCostPct)}%`,
+          `${formatNumber(kpiReport.currentPeriodKPIs.beverageCostVariance)}% Variance`,
+        ],
+        [
+          "Profit Margin",
+          `${formatNumber(kpiReport.currentPeriodKPIs.profitMargin)}%`,
+          "15%",
+          kpiReport.currentPeriodKPIs.profitMargin >= 15 ? "Excellent" : kpiReport.currentPeriodKPIs.profitMargin >= 10 ? "Good" : "Below Target",
+        ],
+      ];
+
+      autoTable(doc, {
+        head: currentKPIHeaders,
+        body: currentKPIData,
+        startY: yPos,
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Trending KPIs
+      doc.setFontSize(14);
+      doc.text("Trending KPIs", 14, yPos);
+      yPos += 10;
+
+      const trendingHeaders = [["KPI Name", "Current Value", "Target", "Trend", "Status"]];
+      const trendingData = kpiReport.trendingKPIs.map((kpi: any) => [
+        kpi.name,
+        formatNumber(kpi.value),
+        formatNumber(kpi.target),
+        `${kpi.trend} (${formatNumber(kpi.trendPercentage)}%)`,
+        kpi.status,
+      ]);
+
+      autoTable(doc, {
+        head: trendingHeaders,
+        body: trendingData,
+        startY: yPos,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Month-to-Date Metrics
+      if (yPos > 230) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Month-to-Date Metrics", 14, yPos);
+      yPos += 10;
+
+      const mtdHeaders = [["Metric", "Value"]];
+      const mtdData = [
+        ["Total Revenue", `$${formatNumber(kpiReport.monthToDateMetrics.totalRevenue)}`],
+        ["Total Costs", `$${formatNumber(kpiReport.monthToDateMetrics.totalCosts)}`],
+        ["Net Profit", `$${formatNumber(kpiReport.monthToDateMetrics.netProfit)}`],
+        ["Profit Margin", `${formatNumber(kpiReport.monthToDateMetrics.profitMargin)}%`],
+        ["Average Daily Revenue", `$${formatNumber(kpiReport.monthToDateMetrics.averageDailyRevenue)}`],
+        ["Revenue Growth", `${formatNumber(kpiReport.monthToDateMetrics.revenueGrowth)}%`],
+      ];
+
+      autoTable(doc, {
+        head: mtdHeaders,
+        body: mtdData,
+        startY: yPos,
+        styles: { fontSize: 10, cellPadding: 3 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+
+      // Active Alerts
+      if (kpiReport.alerts.length > 0) {
+        if (yPos > 200) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(14);
+        doc.text("Active Alerts", 14, yPos);
+        yPos += 10;
+
+        const alertHeaders = [["Severity", "Message", "Type", "Timestamp"]];
+        const alertData = kpiReport.alerts.map((alert: any) => [
+          alert.severity,
+          alert.message,
+          alert.type.replace("_", " "),
+          alert.timestamp.toLocaleString(),
+        ]);
+
+        autoTable(doc, {
+          head: alertHeaders,
+          body: alertData,
+          startY: yPos,
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [220, 53, 69] }, // Red color for alerts
+          margin: { left: 14, right: 14 },
+          columnStyles: {
+            1: { cellWidth: 80 }, // Make message column wider
+          },
+        });
+      } else {
+        if (yPos > 250) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(14);
+        doc.text("Active Alerts", 14, yPos);
+        yPos += 10;
+        doc.setFontSize(10);
+        doc.text("No active alerts at this time", 14, yPos);
+      }
+
+      doc.save(
+        `Real_Time_KPI_Dashboard_${formatDateFn(new Date(), "yyyyMMdd_HHmmss")}.pdf`
+      );
+    } else if (selectedReport === "forecasting_report" && reportData) {
+      // Forecasting Report PDF Export
+      const forecastReport = reportData as any;
+
+      // Report Title
+      doc.setFontSize(18);
+      doc.text("Revenue & Cost Forecasting Report", 14, yPos);
+      yPos += 10;
+      doc.setFontSize(10);
+      doc.text(
+        `${forecastReport.outletName} • Historical: ${forecastReport.dateRange.from.toLocaleDateString()} - ${forecastReport.dateRange.to.toLocaleDateString()}`,
+        14,
+        yPos
+      );
+      yPos += 5;
+      doc.text(
+        `Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${forecastReport.forecastPeriod.to.toLocaleDateString()}`,
+        14,
+        yPos
+      );
+      yPos += 15;
+
+      // Historical Analysis
+      doc.setFontSize(14);
+      doc.text("Historical Analysis", 14, yPos);
+      yPos += 10;
+
+      const historicalHeaders = [["Metric", "Value"]];
+      const historicalData = [
+        ["Total Revenue", `$${formatNumber(forecastReport.historicalAnalysis.totalRevenue)}`],
+        ["Total Costs", `$${formatNumber(forecastReport.historicalAnalysis.totalCosts)}`],
+        ["Average Daily Revenue", `$${formatNumber(forecastReport.historicalAnalysis.averageDailyRevenue)}`],
+        ["Growth Rate", `${formatNumber(forecastReport.historicalAnalysis.growthRate)}%`],
+        ["Revenue Volatility", `${formatNumber(forecastReport.historicalAnalysis.volatility)}%`],
+        ["Data Points", forecastReport.historicalAnalysis.dataPoints.toString()],
+      ];
+
+      autoTable(doc, {
+        head: historicalHeaders,
+        body: historicalData,
+        startY: yPos,
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Cost Forecast Summary
+      doc.setFontSize(14);
+      doc.text("Cost Forecast Summary", 14, yPos);
+      yPos += 10;
+
+      const costForecastHeaders = [["Metric", "Value"]];
+      const costForecastData = [
+        ["Predicted Food Cost %", `${formatNumber(forecastReport.costForecast.predictedFoodCostPct)}%`],
+        ["Predicted Beverage Cost %", `${formatNumber(forecastReport.costForecast.predictedBeverageCostPct)}%`],
+        ["Cost Efficiency Ratio", `${formatNumber(forecastReport.costForecast.costEfficiencyRatio)}%`],
+        ["Confidence Level", `${formatNumber(forecastReport.costForecast.confidenceLevel)}%`],
+      ];
+
+      autoTable(doc, {
+        head: costForecastHeaders,
+        body: costForecastData,
+        startY: yPos,
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Daily Revenue Forecast (next 7 days)
+      if (yPos > 200) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Daily Revenue Forecast (Next 7 Days)", 14, yPos);
+      yPos += 10;
+
+      const dailyForecastHeaders = [["Date", "Predicted Revenue", "Confidence Range", "Confidence Level"]];
+      const dailyForecastData = forecastReport.revenueForecast.daily.slice(0, 7).map((forecast: any) => [
+        forecast.date.toLocaleDateString(),
+        `$${formatNumber(forecast.predictedRevenue)}`,
+        `$${formatNumber(forecast.confidenceInterval.lower)} - $${formatNumber(forecast.confidenceInterval.upper)}`,
+        `${formatNumber(forecast.confidenceLevel)}%`,
+      ]);
+
+      autoTable(doc, {
+        head: dailyForecastHeaders,
+        body: dailyForecastData,
+        startY: yPos,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 10;
+
+      // Monthly Forecasts
+      if (yPos > 230) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Monthly Forecasts", 14, yPos);
+      yPos += 10;
+
+      const monthlyHeaders = [["Month", "Forecast Revenue", "Forecast Costs", "Forecast Profit", "Confidence"]];
+      const monthlyData = forecastReport.revenueForecast.monthly.map((monthly: any) => [
+        monthly.month.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        `$${formatNumber(monthly.forecastRevenue)}`,
+        `$${formatNumber(monthly.forecastCosts)}`,
+        `$${formatNumber(monthly.forecastProfit)}`,
+        `${formatNumber(monthly.confidenceLevel)}%`,
+      ]);
+
+      autoTable(doc, {
+        head: monthlyHeaders,
+        body: monthlyData,
+        startY: yPos,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [66, 139, 202] },
+        margin: { left: 14, right: 14 },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+
+      // Key Insights
+      if (yPos > 200) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Key Insights", 14, yPos);
+      yPos += 10;
+
+      // Expected Growth
+      doc.setFontSize(12);
+      doc.text(`Expected Growth: ${formatNumber(forecastReport.insights.expectedGrowth)}%`, 14, yPos);
+      yPos += 10;
+
+      // Risk Factors
+      if (forecastReport.insights.riskFactors.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Risk Factors:", 14, yPos);
+        yPos += 8;
+        doc.setFontSize(10);
+        forecastReport.insights.riskFactors.forEach((risk: string) => {
+          const lines = doc.splitTextToSize(`• ${risk}`, 170);
+          lines.forEach((line: string, index: number) => {
+            doc.text(index === 0 ? line : `  ${line}`, 20, yPos);
+            yPos += 5;
+          });
+        });
+        yPos += 5;
+      }
+
+      // Opportunities
+      if (forecastReport.insights.opportunities.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Opportunities:", 14, yPos);
+        yPos += 8;
+        doc.setFontSize(10);
+        forecastReport.insights.opportunities.forEach((opportunity: string) => {
+          const lines = doc.splitTextToSize(`• ${opportunity}`, 170);
+          lines.forEach((line: string, index: number) => {
+            doc.text(index === 0 ? line : `  ${line}`, 20, yPos);
+            yPos += 5;
+          });
+        });
+        yPos += 5;
+      }
+
+      // Recommendations
+      if (forecastReport.insights.recommendations.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Recommendations:", 14, yPos);
+        yPos += 8;
+        doc.setFontSize(10);
+        forecastReport.insights.recommendations.forEach((recommendation: string) => {
+          const lines = doc.splitTextToSize(`• ${recommendation}`, 170);
+          lines.forEach((line: string, index: number) => {
+            doc.text(index === 0 ? line : `  ${line}`, 20, yPos);
+            yPos += 5;
+          });
+        });
+      }
+
+      doc.save(
+        `Forecasting_Report_${formatDateFn(forecastReport.dateRange.from, "yyyyMMdd")}_to_${formatDateFn(forecastReport.dateRange.to, "yyyyMMdd")}.pdf`
       );
     }
 
@@ -2400,6 +3401,29 @@ export default function ReportsClient() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Tax Rate Input - Only for Monthly Profit/Loss Report */}
+          {selectedReport === "monthly_profit_loss" && (
+            <div className="w-32 min-w-[120px]">
+              <label
+                htmlFor="tax-rate-input"
+                className="block text-sm font-medium text-foreground mb-1"
+              >
+                Tax Rate (%)
+              </label>
+              <Input
+                id="tax-rate-input"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={taxRate}
+                onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                placeholder="25"
+                className="w-full text-center"
+              />
+            </div>
+          )}
 
           <Button
             onClick={handleGenerateReport}
@@ -2600,11 +3624,15 @@ export default function ReportsClient() {
           {!isLoadingReport &&
             reportData &&
             selectedReport === "monthly_profit_loss" &&
-            "monthYear" in reportData && (
+            Array.isArray(reportData) &&
+            reportData.length > 0 && (
               <div className="space-y-6">
-                <MonthlyProfitLossReportTable
-                  data={reportData as MonthlyProfitLossReport}
-                />
+                {reportData.map((report: any, index: number) => (
+                  <MonthlyProfitLossReportTable
+                    key={index}
+                    data={report as MonthlyProfitLossReport}
+                  />
+                ))}
               </div>
             )}
           {!isLoadingReport &&

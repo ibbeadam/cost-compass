@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Timestamp } from "firebase/firestore";
 import {
   PlusCircle,
   Edit,
@@ -45,29 +44,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CategoryForm } from "./CategoryForm";
 import {
-  getPaginatedCategoriesAction,
-  initializeDefaultCategoriesAction,
-} from "@/actions/categoryActions";
+  getAllCategoriesAction,
+  createCategoryAction,
+} from "@/actions/prismaCategoryActions";
 import { showToast } from "@/lib/toast";
-import { deleteCategoryAction } from "@/actions/categoryActions";
+import { deleteCategoryAction } from "@/actions/prismaCategoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
 
-const ITEMS_PER_PAGE = 5;
-
-const convertTimestampsToDates = (category: Category): Category => {
-  return {
-    ...category,
-    createdAt:
-      category.createdAt && category.createdAt instanceof Timestamp
-        ? category.createdAt.toDate()
-        : category.createdAt,
-    updatedAt:
-      category.updatedAt && category.updatedAt instanceof Timestamp
-        ? category.updatedAt.toDate()
-        : category.updatedAt,
-  };
-};
+// No longer needed since Prisma returns Date objects directly
 
 export default function CategoryListClient() {
   const [allCategories, setAllCategories] = useState<Category[]>([]);
@@ -77,15 +63,14 @@ export default function CategoryListClient() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
   const fetchAllCategories = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Pass fetchAll = true to get all categories
-      const { categories: fetchedCategories, totalCount } =
-        await getPaginatedCategoriesAction(undefined, undefined, true);
-      setAllCategories(fetchedCategories.map(convertTimestampsToDates));
-      setTotalCategories(totalCount);
+      const fetchedCategories = await getAllCategoriesAction();
+      setAllCategories(fetchedCategories);
+      setTotalCategories(fetchedCategories.length);
       setCurrentPage(1); // Reset to first page
     } catch (error) {
       console.error("Error fetching all categories:", error);
@@ -98,8 +83,25 @@ export default function CategoryListClient() {
   const handleInitializeDefaultCategories = async () => {
     setIsInitializing(true);
     try {
-      const result = await initializeDefaultCategoriesAction();
-      showToast.success(`Successfully created ${result.created} default categories. Total categories: ${result.total}`);
+      // Create default categories manually for Prisma
+      const defaultCategories = [
+        { name: "Meat", type: "Food" as const },
+        { name: "Vegetables", type: "Food" as const },
+        { name: "Dairy", type: "Food" as const },
+        { name: "Beer", type: "Beverage" as const },
+        { name: "Wine", type: "Beverage" as const },
+        { name: "Spirits", type: "Beverage" as const },
+      ];
+      
+      for (const category of defaultCategories) {
+        try {
+          await createCategoryAction(category);
+        } catch (error) {
+          // Category might already exist, continue
+        }
+      }
+      
+      showToast.success("Successfully initialized default categories");
       await fetchAllCategories(); // Refresh the list
     } catch (error) {
       console.error("Error initializing categories:", error);
@@ -145,17 +147,22 @@ export default function CategoryListClient() {
     setEditingCategory(null);
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalCategories / ITEMS_PER_PAGE));
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
+  const totalPages = Math.max(1, Math.ceil(totalCategories / itemsPerPage));
   const currentItems = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return allCategories.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [allCategories, currentPage]);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return allCategories.slice(startIndex, startIndex + itemsPerPage);
+  }, [allCategories, currentPage, itemsPerPage]);
 
   const startIndexDisplay =
-    totalCategories > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+    totalCategories > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
   const endIndexDisplay =
     totalCategories > 0
-      ? Math.min(currentPage * ITEMS_PER_PAGE, totalCategories)
+      ? Math.min(currentPage * itemsPerPage, totalCategories)
       : 0;
 
   const renderPageNumbers = () => {
@@ -205,7 +212,7 @@ export default function CategoryListClient() {
         </div>
         <div className="rounded-lg border overflow-hidden shadow-md bg-card">
           <Skeleton className="h-12 w-full bg-muted/50" />
-          {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
+          {[...Array(itemsPerPage)].map((_, i) => (
             <div key={i} className="flex items-center p-4 border-b">
               <Skeleton className="h-6 w-1/3 bg-muted mr-4" />
               <Skeleton className="h-6 w-1/4 bg-muted mr-4" />
@@ -362,12 +369,19 @@ export default function CategoryListClient() {
               </TableBody>
             </Table>
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-between items-center mt-4 px-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4 px-2">
+            <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
                 Showing {startIndexDisplay} to {endIndexDisplay} of{" "}
                 {totalCategories} results
               </div>
+              <RecordsPerPageSelector
+                value={itemsPerPage}
+                onChange={handleItemsPerPageChange}
+                disabled={isLoading}
+              />
+            </div>
+            {totalPages > 1 && (
               <div className="flex items-center space-x-1">
                 <Button
                   variant="outline"
@@ -391,8 +405,8 @@ export default function CategoryListClient() {
                   <span className="sr-only">Next Page</span>
                 </Button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>

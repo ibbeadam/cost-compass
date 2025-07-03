@@ -3,8 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,18 +23,22 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      showToast.success("Welcome back! Login successful.");
-      router.push("/dashboard"); 
-    } catch (err: any) {
-      let errorMessage = "Failed to log in. Please check your credentials.";
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        errorMessage = "Invalid email or password.";
-      } else if (err.code === 'auth/invalid-email') {
-        errorMessage = "Please enter a valid email address.";
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password.");
+        showToast.error("Invalid email or password.");
+      } else {
+        showToast.success("Welcome back! Login successful.");
+        router.push("/dashboard");
       }
-      setError(errorMessage);
-      showToast.error(errorMessage);
+    } catch (err: any) {
+      setError("Failed to log in. Please try again.");
+      showToast.error("Failed to log in. Please try again.");
     } finally {
       setIsLoading(false);
     }

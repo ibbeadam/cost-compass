@@ -1,14 +1,14 @@
 
 "use client";
 
-import { useAuth } from "@/contexts/AuthContext";
+import { useNextAuth } from "@/hooks/useNextAuth";
 import { useRouter, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { Skeleton } from "@/components/ui/skeleton"; 
 
 export default function PrivateRoute({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading } = useNextAuth();
   const router = useRouter();
   const pathname = usePathname();
 

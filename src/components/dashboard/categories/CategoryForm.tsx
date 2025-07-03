@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { Category } from "@/types/index";
-import { addCategoryAction, updateCategoryAction } from "@/actions/categoryActions";
+import { createCategoryAction, updateCategoryAction } from "@/actions/prismaCategoryActions";
 import { showToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
@@ -81,10 +81,18 @@ export function CategoryForm({ category, onSuccess, onCancel }: CategoryFormProp
     setIsSubmitting(true);
     try {
       if (category && category.id) {
-        await updateCategoryAction(category.id, data.name, data.description, data.type);
+        await updateCategoryAction(category.id, {
+          name: data.name,
+          description: data.description,
+          type: data.type,
+        });
         showToast.success("Category has been successfully updated!");
       } else {
-        await addCategoryAction(data.name, data.description, data.type);
+        await createCategoryAction({
+          name: data.name,
+          description: data.description,
+          type: data.type,
+        });
         showToast.success("New category has been successfully added!");
       }
       onSuccess();

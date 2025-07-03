@@ -119,39 +119,44 @@ function ToastNotification({ notification, onDismiss, duration = 5000 }: ToastNo
 }
 
 export function NotificationToastContainer() {
-  const { notifications } = useNotifications();
-  const [displayedToasts, setDisplayedToasts] = useState<string[]>([]);
+  try {
+    const { notifications } = useNotifications();
+    const [displayedToasts, setDisplayedToasts] = useState<string[]>([]);
 
-  // Only show toasts for new notifications (last 3, unread, high priority)
-  const toastNotifications = notifications
-    .filter(n => !n.read && (n.priority === 'high' || n.priority === 'urgent'))
-    .slice(0, 3)
-    .filter(n => !displayedToasts.includes(n.id));
+    // Only show toasts for new notifications (last 3, unread, high priority)
+    const toastNotifications = notifications
+      .filter(n => !n.read && (n.priority === 'high' || n.priority === 'urgent'))
+      .slice(0, 3)
+      .filter(n => !displayedToasts.includes(n.id));
 
-  const handleDismissToast = (notificationId: string) => {
-    setDisplayedToasts(prev => [...prev, notificationId]);
-  };
+    const handleDismissToast = (notificationId: string) => {
+      setDisplayedToasts(prev => [...prev, notificationId]);
+    };
 
-  return (
-    <div className="fixed top-0 right-0 z-50 pointer-events-none">
-      <div className="space-y-2">
-        {toastNotifications.map((notification, index) => (
-          <div
-            key={notification.id}
-            className="pointer-events-auto"
-            style={{
-              transform: `translateY(${index * 8}px)`,
-              zIndex: 50 - index,
-            }}
-          >
-            <ToastNotification
-              notification={notification}
-              onDismiss={() => handleDismissToast(notification.id)}
-              duration={notification.priority === 'urgent' ? 8000 : 5000}
-            />
-          </div>
-        ))}
+    return (
+      <div className="fixed top-0 right-0 z-50 pointer-events-none">
+        <div className="space-y-2">
+          {toastNotifications.map((notification, index) => (
+            <div
+              key={notification.id}
+              className="pointer-events-auto"
+              style={{
+                transform: `translateY(${index * 8}px)`,
+                zIndex: 50 - index,
+              }}
+            >
+              <ToastNotification
+                notification={notification}
+                onDismiss={() => handleDismissToast(notification.id)}
+                duration={notification.priority === 'urgent' ? 8000 : 5000}
+              />
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  } catch (error) {
+    // NotificationProvider not available (e.g., on login page)
+    return null;
+  }
 }

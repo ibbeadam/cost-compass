@@ -4,6 +4,7 @@
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { UserNav } from "./UserNav";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { ThemeToggleButton } from "@/components/ui/theme-toggle";
 import { cn } from "@/lib/utils";
 
 export function AppHeader() {
@@ -20,6 +21,7 @@ export function AppHeader() {
             <SidebarTrigger className="text-foreground hover:text-primary" />
           </div>
           <div className="flex flex-1 items-center justify-end space-x-4">
+            <ThemeToggleButton />
             <NotificationCenter />
             <UserNav />
           </div>

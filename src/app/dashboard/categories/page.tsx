@@ -1,6 +1,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import CategoryListClient from "@/components/dashboard/categories/CategoryListClient";
+import { SuperAdminOnly } from "@/components/auth/PermissionGate";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -32,20 +33,33 @@ function CategoryListSkeleton() {
 
 export default function ManageCategoriesPage() {
   return (
-    <div className="flex flex-col flex-grow w-full">
-      <Card className="shadow-lg bg-card w-full">
-        <CardHeader>
-          <CardTitle className="font-headline text-2xl">Manage Item Categories</CardTitle>
-          <CardDescription>
-            Define and manage categories for food and beverage items. These categories will be used for cost tracking.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<CategoryListSkeleton />}>
-            <CategoryListClient />
-          </Suspense>
-        </CardContent>
-      </Card>
-    </div>
+    <SuperAdminOnly 
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-muted-foreground">Access Denied</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              You don't have permission to access this page.
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col flex-grow w-full">
+        <Card className="shadow-lg bg-card w-full">
+          <CardHeader>
+            <CardTitle className="font-headline text-2xl">Manage Item Categories</CardTitle>
+            <CardDescription>
+              Define and manage categories for food and beverage items. These categories will be used for cost tracking.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<CategoryListSkeleton />}>
+              <CategoryListClient />
+            </Suspense>
+          </CardContent>
+        </Card>
+      </div>
+    </SuperAdminOnly>
   );
 }

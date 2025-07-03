@@ -2,13 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query as firestoreQuery,
-  Timestamp,
-} from "firebase/firestore";
-import {
   PlusCircle,
   Edit,
   Trash2,
@@ -18,11 +11,10 @@ import {
   ClipboardList,
   Upload,
   FileSpreadsheet,
+  Eye,
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import * as XLSX from 'xlsx';
-
-import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -55,12 +47,15 @@ import {
 import { showToast } from "@/lib/toast";
 import {
   deleteFoodCostEntryAction,
-  getFoodCostEntryWithDetailsAction,
-  getOutletsAction,
   getFoodCategoriesAction,
-  saveFoodCostEntryAction,
+  createFoodCostEntryAction,
+  getAllFoodCostEntriesAction,
+  getFoodCostEntryByIdAction,
 } from "@/actions/foodCostActions";
-import type { Outlet, Category, FoodCostEntry, FoodCostDetail } from "@/types";
+import { getAllOutletsAction } from "@/actions/prismaOutletActions";
+import { getPropertiesAction } from "@/actions/propertyActions";
+import { useAuth } from "@/contexts/AuthContext";
+import type { Outlet, Category, FoodCostEntry, FoodCostDetail, Property } from "@/types";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
@@ -70,8 +65,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-
-const ITEMS_PER_PAGE = 5;
+import { normalizeDate } from "@/lib/utils";
+import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
 
 // Excel import interface for food cost entries
 interface ExcelFoodCostRow {
@@ -87,6 +82,8 @@ interface ExcelFoodCostRow {
 }
 
 export default function FoodCostEntryListClient() {
+  const { user: sessionUser, userProfile } = useAuth();
+  const user = userProfile || sessionUser; // Use userProfile for database info, fallback to sessionUser
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
@@ -100,24 +97,34 @@ export default function FoodCostEntryListClient() {
   const [isLoadingOutlets, setIsLoadingOutlets] = useState(true);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isLoadingDetailsForEdit, setIsLoadingDetailsForEdit] = useState(false);
+  const [isLoadingImportProperties, setIsLoadingImportProperties] = useState(false);
 
   const [editingEntry, setEditingEntry] = useState<
     (FoodCostEntry & { details: FoodCostDetail[] }) | null
   >(null);
+  
+  // View dialog states
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingEntry, setViewingEntry] = useState<
+    (FoodCostEntry & { details: FoodCostDetail[] }) | null
+  >(null);
+  const [isLoadingDetailsForView, setIsLoadingDetailsForView] = useState(false);
+
+  // Import dialog states
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [importedData, setImportedData] = useState<ExcelFoodCostRow[]>([]);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [selectedImportPropertyId, setSelectedImportPropertyId] = useState<number | undefined>(undefined);
+  const [importProperties, setImportProperties] = useState<Property[]>([]);
 
   const [dialogDate, setDialogDate] = useState<Date>(new Date());
-  const [dialogOutletId, setDialogOutletId] = useState<string | undefined>(
-    undefined
-  );
 
   const [error, setError] = useState<Error | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
 
-  // Excel import states
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
-  const [importedData, setImportedData] = useState<ExcelFoodCostRow[]>([]);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importErrors, setImportErrors] = useState<string[]>([]);
+  // Remove duplicate - already defined above
 
   // File input ref
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -126,105 +133,45 @@ export default function FoodCostEntryListClient() {
     setIsClient(true);
   }, []);
 
-  useEffect(() => {
-    if (!isClient) return;
+  const fetchFoodCostEntries = useCallback(async () => {
     setIsLoadingEntries(true);
-    if (!db) {
+    try {
+      const entries = await getAllFoodCostEntriesAction();
+      // Ensure proper data transformation
+      const transformedEntries = entries.map(entry => ({
+        ...entry,
+        id: Number(entry.id),
+        date: entry.date instanceof Date ? entry.date : new Date(entry.date),
+        outletId: Number(entry.outletId),
+        totalFoodCost: Number(entry.totalFoodCost),
+      }));
+      setAllFoodCostEntries(transformedEntries);
+      setCurrentPage(1);
+      console.log("Fetched food cost entries:", transformedEntries.length, "entries");
+    } catch (err) {
+      console.error("Error fetching food cost entries:", err);
+      showToast.error("Could not load food cost entries.");
+      setError(err as Error);
+    } finally {
       setIsLoadingEntries(false);
-      setError(new Error("Firestore database is not initialized."));
-      return;
     }
-    const q = firestoreQuery(
-      collection(db, "foodCostEntries"),
-      orderBy("date", "desc")
-    );
+  }, []);
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedEntries = snapshot.docs.map((doc) => {
-          const data = doc.data();
-
-          const convertToValidDate = (fieldValue: any): Date => {
-            if (fieldValue instanceof Timestamp) {
-              return fieldValue.toDate();
-            }
-            if (fieldValue instanceof Date && isValid(fieldValue)) {
-              return fieldValue;
-            }
-            if (
-              typeof fieldValue === "string" ||
-              typeof fieldValue === "number"
-            ) {
-              const d = new Date(fieldValue);
-              if (isValid(d)) return d;
-            }
-            if (
-              typeof fieldValue === "object" &&
-              fieldValue !== null &&
-              "_seconds" in fieldValue &&
-              "_nanoseconds" in fieldValue
-            ) {
-              try {
-                const ts = new Timestamp(
-                  (fieldValue as any)._seconds,
-                  (fieldValue as any)._nanoseconds
-                );
-                const d = ts.toDate();
-                if (isValid(d)) return d;
-              } catch (e) {
-                console.warn(
-                  "Failed to convert object to Timestamp:",
-                  fieldValue,
-                  e
-                );
-              }
-            }
-            console.warn(
-              "Returning default invalid date for field:",
-              fieldValue
-            );
-            return new Date(0);
-          };
-
-          const entryDate = convertToValidDate(data.date);
-
-          return {
-            id: doc.id,
-            date: entryDate,
-            outlet_id: data.outlet_id,
-            total_food_cost: data.total_food_cost,
-            createdAt: convertToValidDate(data.createdAt),
-            updatedAt: convertToValidDate(data.updatedAt),
-          } as FoodCostEntry;
-        });
-        setAllFoodCostEntries(fetchedEntries);
-        setIsLoadingEntries(false);
-        setCurrentPage(1); // Reset to first page on new data
-      },
-      (err) => {
-        console.error("Error fetching food cost entries:", err);
-        showToast.error("Could not load food cost entries.");
-        setIsLoadingEntries(false);
-        setError(err as Error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [isClient]);
+  useEffect(() => {
+    if (isClient) {
+      fetchFoodCostEntries();
+    }
+  }, [isClient, fetchFoodCostEntries]);
 
   const fetchOutletsAndCategories = useCallback(async () => {
     try {
       setIsLoadingOutlets(true);
       setIsLoadingCategories(true);
       const [outletsData, categoriesData] = await Promise.all([
-        getOutletsAction(),
+        getAllOutletsAction(),
         getFoodCategoriesAction(),
       ]);
       setOutlets(outletsData);
-      if (outletsData.length > 0 && !dialogOutletId) {
-        setDialogOutletId(outletsData[0].id);
-      }
       setFoodCategories(categoriesData);
     } catch (err) {
       console.error("Error fetching outlets or categories:", err);
@@ -234,7 +181,7 @@ export default function FoodCostEntryListClient() {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [dialogOutletId]);
+  }, []);
 
   useEffect(() => {
     if (isClient) {
@@ -242,11 +189,20 @@ export default function FoodCostEntryListClient() {
     }
   }, [isClient, fetchOutletsAndCategories]);
 
+  // Fetch properties for import when dialog opens
+  useEffect(() => {
+    if (isImportDialogOpen && user?.role === "super_admin") {
+      setIsLoadingImportProperties(true);
+      getPropertiesAction()
+        .then(setImportProperties)
+        .catch(console.error)
+        .finally(() => setIsLoadingImportProperties(false));
+    }
+  }, [isImportDialogOpen, user?.role]);
+
   const handleAddNew = () => {
     setEditingEntry(null);
     setDialogDate(new Date());
-    const initialOutletId = outlets.length > 0 ? outlets[0].id : undefined;
-    setDialogOutletId(initialOutletId);
     setIsFormOpen(true);
   };
 
@@ -257,20 +213,14 @@ export default function FoodCostEntryListClient() {
     }
     setIsLoadingDetailsForEdit(true);
     try {
-      const fullEntryWithDetails = await getFoodCostEntryWithDetailsAction(
-        listEntry.date,
-        listEntry.outlet_id
-      );
+      const fullEntryWithDetails = await getFoodCostEntryByIdAction(listEntry.id);
       if (fullEntryWithDetails) {
-        setEditingEntry(fullEntryWithDetails);
+        setEditingEntry(fullEntryWithDetails as any);
         setDialogDate(
           fullEntryWithDetails.date instanceof Date
             ? fullEntryWithDetails.date
-            : fullEntryWithDetails.date instanceof Timestamp
-            ? fullEntryWithDetails.date.toDate()
             : new Date(fullEntryWithDetails.date)
         );
-        setDialogOutletId(fullEntryWithDetails.outlet_id);
         setIsFormOpen(true);
       } else {
         showToast.error("Could not load the details for the selected entry. It might have been deleted.");
@@ -282,20 +232,63 @@ export default function FoodCostEntryListClient() {
     }
   };
 
+  const handleView = async (listEntry: FoodCostEntry) => {
+    if (!(listEntry.date instanceof Date) || !isValid(listEntry.date)) {
+      showToast.error(`Cannot view entry. The date for entry ID ${listEntry.id} is invalid. Please check the data. Date value: ${listEntry.date}`);
+      return;
+    }
+    
+    console.log("Viewing entry:", listEntry.id, "Type:", typeof listEntry.id);
+    setIsLoadingDetailsForView(true);
+    
+    try {
+      const fullEntryWithDetails = await getFoodCostEntryByIdAction(Number(listEntry.id));
+      console.log("Received entry details:", fullEntryWithDetails);
+      
+      if (fullEntryWithDetails) {
+        setViewingEntry(fullEntryWithDetails as any);
+        setIsViewDialogOpen(true);
+      } else {
+        showToast.error("Could not load the details for the selected entry. It might have been deleted.");
+      }
+    } catch (err) {
+      console.error("Error in handleView:", err);
+      const errorMessage = err instanceof Error ? err.message : "Failed to load entry details for viewing.";
+      showToast.error(errorMessage);
+    } finally {
+      setIsLoadingDetailsForView(false);
+    }
+  };
+
   const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingEntry(null);
-    // Data will be re-fetched by onSnapshot
+    // Refresh the data
+    fetchFoodCostEntries();
   };
 
-  const handleDelete = async (entryId: string) => {
+  const handleDelete = async (entryId: number) => {
+    if (!entryId || isNaN(entryId)) {
+      console.error("Invalid entry ID:", entryId);
+      showToast.error("Invalid entry ID. Cannot delete.");
+      return;
+    }
+
     try {
-      await deleteFoodCostEntryAction(entryId);
+      console.log("Attempting to delete food cost entry with ID:", entryId, "Type:", typeof entryId);
+      
+      // Call the delete action
+      const result = await deleteFoodCostEntryAction(entryId);
+      console.log("Delete action result:", result);
+      
       showToast.success("The food cost entry has been deleted.");
-      // Data will be re-fetched by onSnapshot
+      
+      // Refresh the data
+      await fetchFoodCostEntries();
     } catch (err) {
       console.error("Error deleting food cost entry:", err);
-      showToast.error((err as Error).message || "Could not delete entry.");
+      const errorMessage = err instanceof Error ? err.message : "Could not delete entry.";
+      showToast.error(errorMessage);
     }
   };
 
@@ -358,10 +351,13 @@ export default function FoodCostEntryListClient() {
               continue;
             }
 
-            // Find outlet by name
-            const outlet = outlets.find(o => o.name.toLowerCase() === outletName.toLowerCase());
+            // Find outlet by name (case-insensitive and trim whitespace)
+            const outlet = outlets.find(o => 
+              o.name.toLowerCase().trim() === outletName.toLowerCase().trim()
+            );
             if (!outlet) {
-              errors.push(`Row ${i + 1}: Outlet "${outletName}" not found`);
+              const availableOutlets = outlets.map(o => o.name).join(', ');
+              errors.push(`Row ${i + 1}: Outlet "${outletName}" not found. Available outlets: ${availableOutlets}`);
               continue;
             }
 
@@ -370,19 +366,23 @@ export default function FoodCostEntryListClient() {
             for (const col of categoryColumns) {
               const costValue = parseFloat(row[col.costIndex]) || 0;
               if (costValue > 0) {
-                // Find category by name
-                const category = foodCategories.find(c => 
-                  c.name.toLowerCase().includes(col.categoryName.toLowerCase()) ||
-                  col.categoryName.toLowerCase().includes(c.name.toLowerCase())
-                );
+                // Find category by name (improved matching)
+                const category = foodCategories.find(c => {
+                  const categoryNameLower = c.name.toLowerCase().trim();
+                  const colNameLower = col.categoryName.toLowerCase().trim();
+                  return categoryNameLower === colNameLower ||
+                         categoryNameLower.includes(colNameLower) ||
+                         colNameLower.includes(categoryNameLower);
+                });
                 
                 if (!category) {
-                  errors.push(`Row ${i + 1}: Category "${col.categoryName}" not found`);
+                  const availableCategories = foodCategories.filter(c => c.type === 'Food').map(c => c.name).join(', ');
+                  errors.push(`Row ${i + 1}: Food category "${col.categoryName}" not found. Available food categories: ${availableCategories}`);
                   continue;
                 }
 
                 categories.push({
-                  category_id: category.id,
+                  category_id: category.id.toString(),
                   category_name: category.name,
                   cost: costValue,
                   description: col.descIndex ? String(row[col.descIndex] || '').trim() : undefined
@@ -393,7 +393,7 @@ export default function FoodCostEntryListClient() {
             if (categories.length > 0) {
               const excelRow: ExcelFoodCostRow = {
                 date: date.toISOString().split('T')[0],
-                outlet_id: outlet.id,
+                outlet_id: outlet.id.toString(),
                 outlet_name: outlet.name,
                 categories
               };
@@ -408,6 +408,19 @@ export default function FoodCostEntryListClient() {
         setImportedData(processedData);
         setImportErrors(errors);
         setIsImportDialogOpen(true);
+        
+        // Reset property selection states
+        setSelectedImportPropertyId(undefined);
+        setImportProperties([]);
+        
+        // Load properties if super admin
+        if (user?.role === "super_admin") {
+          setIsLoadingImportProperties(true);
+          getPropertiesAction()
+            .then(setImportProperties)
+            .catch(console.error)
+            .finally(() => setIsLoadingImportProperties(false));
+        }
       } catch (error) {
         showToast.error("Failed to read Excel file. Please ensure it's a valid Excel file.");
       }
@@ -418,6 +431,12 @@ export default function FoodCostEntryListClient() {
   const handleImportData = async () => {
     if (importedData.length === 0) return;
 
+    // Validate property selection for super admin
+    if (user?.role === "super_admin" && !selectedImportPropertyId) {
+      showToast.error("Please select a property for import.");
+      return;
+    }
+
     setIsImporting(true);
     const errors: string[] = [];
     let successCount = 0;
@@ -425,33 +444,72 @@ export default function FoodCostEntryListClient() {
     try {
       for (const row of importedData) {
         try {
-          // Create food cost entry using correct parameter format
-          const items = row.categories.map(cat => ({
-            categoryId: cat.category_id,
-            cost: cat.cost,
-            description: cat.description || undefined
+          // Validate row data
+          if (!row.categories || row.categories.length === 0) {
+            errors.push(`${row.outlet_name} - ${row.date}: No valid categories found`);
+            continue;
+          }
+
+          // Prepare details for the food cost entry
+          const details = row.categories.map(cat => ({
+            categoryId: Number(cat.category_id),
+            categoryName: cat.category_name,
+            cost: Number(cat.cost),
+            description: cat.description || undefined,
           }));
 
-          await saveFoodCostEntryAction(
-            new Date(row.date),  // date parameter
-            row.outlet_id,       // outletId parameter  
-            items                // items parameter
-          );
+          // Validate details
+          const invalidDetails = details.filter(d => isNaN(d.categoryId) || isNaN(d.cost) || d.cost <= 0);
+          if (invalidDetails.length > 0) {
+            errors.push(`${row.outlet_name} - ${row.date}: Invalid category data found`);
+            continue;
+          }
+
+          // Calculate total food cost
+          const totalFoodCost = details.reduce((sum, detail) => sum + detail.cost, 0);
+
+          if (totalFoodCost <= 0) {
+            errors.push(`${row.outlet_name} - ${row.date}: Total cost must be greater than 0`);
+            continue;
+          }
+
+          // Validate outlet ID
+          const outletId = Number(row.outlet_id);
+          if (isNaN(outletId)) {
+            errors.push(`${row.outlet_name} - ${row.date}: Invalid outlet ID`);
+            continue;
+          }
+
+          // Create food cost entry using correct function signature
+          await createFoodCostEntryAction({
+            date: normalizeDate(row.date),
+            outletId,
+            totalFoodCost,
+            details,
+            propertyId: user?.role === "super_admin" ? selectedImportPropertyId : undefined,
+          });
+          
           successCount++;
         } catch (error) {
-          errors.push(`${row.outlet_name} - ${row.date}: ${error instanceof Error ? error.message : 'Failed to save'}`);
+          console.error('Import error for row:', row, error);
+          const errorMessage = error instanceof Error ? error.message : 'Failed to save';
+          errors.push(`${row.outlet_name} - ${row.date}: ${errorMessage}`);
         }
       }
 
       if (successCount > 0) {
         showToast.success(`Successfully imported ${successCount} food cost entries.${errors.length > 0 ? ` ${errors.length} errors occurred.` : ''}`);
-        setIsImportDialogOpen(false);
-        setImportedData([]);
-        setImportErrors([]);
+        fetchFoodCostEntries(); // Refresh the list
+        if (errors.length === 0) {
+          handleImportCancel();
+        }
       }
 
       if (errors.length > 0) {
         setImportErrors(errors);
+        if (successCount === 0) {
+          showToast.error(`Import failed. ${errors.length} errors occurred.`);
+        }
       }
     } catch (error) {
       showToast.error(error instanceof Error ? error.message : "Failed to import data");
@@ -464,6 +522,8 @@ export default function FoodCostEntryListClient() {
     setIsImportDialogOpen(false);
     setImportedData([]);
     setImportErrors([]);
+    setSelectedImportPropertyId(undefined);
+    setImportProperties([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -498,17 +558,22 @@ export default function FoodCostEntryListClient() {
     XLSX.writeFile(wb, 'food_cost_import_template.xlsx');
   };
 
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
   const totalEntries = allFoodCostEntries.length;
-  const totalPages = Math.max(1, Math.ceil(totalEntries / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
   const currentItems = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return allFoodCostEntries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [allFoodCostEntries, currentPage]);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return allFoodCostEntries.slice(startIndex, startIndex + itemsPerPage);
+  }, [allFoodCostEntries, currentPage, itemsPerPage]);
 
   const startIndexDisplay =
-    totalEntries > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+    totalEntries > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
   const endIndexDisplay =
-    totalEntries > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalEntries) : 0;
+    totalEntries > 0 ? Math.min(currentPage * itemsPerPage, totalEntries) : 0;
 
   const renderPageNumbers = () => {
     const pageNumbers = [];
@@ -614,7 +679,7 @@ export default function FoodCostEntryListClient() {
         <div>
           <div className="rounded-lg border overflow-hidden shadow-md bg-card p-4">
             <Skeleton className="h-8 w-3/4 mb-4 bg-muted/50" />
-            {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
+            {[...Array(itemsPerPage)].map((_, i) => (
               <div
                 key={i}
                 className="flex justify-between items-center p-4 border-b"
@@ -656,6 +721,7 @@ export default function FoodCostEntryListClient() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Outlet</TableHead>
+                  {user?.role === "super_admin" && <TableHead>Property</TableHead>}
                   <TableHead className="text-right">Total Cost</TableHead>
                   <TableHead className="text-right w-[120px]">
                     Actions
@@ -671,20 +737,38 @@ export default function FoodCostEntryListClient() {
                         : "Invalid Date"}
                     </TableCell>
                     <TableCell>
-                      {outlets.find((o) => o.id === entry.outlet_id)?.name ||
-                        entry.outlet_id ||
+                      {outlets.find((o) => o.id === entry.outletId)?.name ||
+                        entry.outletId ||
                         "Unknown Outlet"}
                     </TableCell>
+                    {user?.role === "super_admin" && (
+                      <TableCell>
+                        {(entry as any).property?.name || (entry as any).property?.propertyCode || 
+                         `Property ${(entry as any).propertyId || 'Unknown'}`}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-code">
-                      ${(entry.total_food_cost || 0).toFixed(2)}
+                      ${(entry.totalFoodCost || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => handleView(entry)}
+                        className="mr-1 hover:text-blue-600"
+                        disabled={isLoadingDetailsForView}
+                        title="View Details"
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span className="sr-only">View Entry</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => handleEdit(entry)}
-                        className="mr-2 hover:text-primary"
+                        className="mr-1 hover:text-primary"
                         disabled={isLoadingDetailsForEdit}
+                        title="Edit Entry"
                       >
                         <Edit className="h-4 w-4" />
                         <span className="sr-only">Edit Entry</span>
@@ -713,7 +797,7 @@ export default function FoodCostEntryListClient() {
                                 ? format(entry.date, "PPP")
                                 : "this date"}{" "}
                               at{" "}
-                              {outlets.find((o) => o.id === entry.outlet_id)
+                              {outlets.find((o) => o.id === entry.outletId)
                                 ?.name || "this outlet"}
                               .
                             </AlertDialogDescription>
@@ -721,7 +805,10 @@ export default function FoodCostEntryListClient() {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction
-                              onClick={() => handleDelete(entry.id)}
+                              onClick={() => {
+                                console.log("Delete button clicked for entry:", entry.id, "Type:", typeof entry.id);
+                                handleDelete(Number(entry.id));
+                              }}
                               className="bg-destructive hover:bg-destructive/80 text-destructive-foreground"
                             >
                               Delete
@@ -735,12 +822,19 @@ export default function FoodCostEntryListClient() {
               </TableBody>
             </Table>
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-between items-center mt-4 px-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4 px-2">
+            <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
                 Showing {startIndexDisplay} to {endIndexDisplay} of{" "}
                 {totalEntries} results
               </div>
+              <RecordsPerPageSelector
+                value={itemsPerPage}
+                onChange={handleItemsPerPageChange}
+                disabled={isLoadingEntries || isLoadingOutlets || isLoadingCategories}
+              />
+            </div>
+            {totalPages > 1 && (
               <div className="flex items-center space-x-1">
                 <Button
                   variant="outline"
@@ -774,8 +868,8 @@ export default function FoodCostEntryListClient() {
                   <span className="sr-only">Next Page</span>
                 </Button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
 
@@ -798,10 +892,7 @@ export default function FoodCostEntryListClient() {
             </DialogTitle>
             <DialogDescription>
               {editingEntry
-                ? `Update details for outlet: ${
-                    outlets.find((o) => o.id === dialogOutletId)?.name ||
-                    "Unknown"
-                  } on ${
+                ? `Update details for ${
                     dialogDate && isValid(dialogDate)
                       ? format(dialogDate, "PPP")
                       : "selected date"
@@ -811,9 +902,9 @@ export default function FoodCostEntryListClient() {
           </DialogHeader>
 
           <div className="flex-grow min-h-0 overflow-y-auto">
-            {isClient && (outlets.length > 0 || isLoadingOutlets) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
-                <div>
+            {isClient && (
+              <div className="p-4 border-b">
+                <div className="max-w-xs">
                   <Label
                     htmlFor="dialog-entry-date"
                     className="mb-1 block text-sm font-medium"
@@ -831,49 +922,16 @@ export default function FoodCostEntryListClient() {
                     className="w-full"
                   />
                 </div>
-                <div>
-                  <Label
-                    htmlFor="dialog-entry-outlet"
-                    className="mb-1 block text-sm font-medium"
-                  >
-                    Outlet
-                  </Label>
-                  {isLoadingOutlets ? (
-                    <Skeleton className="h-10 w-full bg-muted" />
-                  ) : (
-                    <Select
-                      value={dialogOutletId}
-                      onValueChange={setDialogOutletId}
-                    >
-                      <SelectTrigger
-                        id="dialog-entry-outlet"
-                        className="w-full"
-                      >
-                        <SelectValue placeholder="Select an outlet" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {outlets.map((outlet) => (
-                          <SelectItem key={outlet.id} value={outlet.id}>
-                            {outlet.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
               </div>
             )}
 
             <div className="p-6">
               {isClient &&
               (isLoadingOutlets || isLoadingCategories) &&
-              !editingEntry &&
-              (!dialogOutletId || !(dialogDate && isValid(dialogDate))) ? (
+              !editingEntry ? (
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
-                    {isLoadingOutlets || isLoadingCategories
-                      ? "Loading selection options..."
-                      : "Please select a date and outlet above to start."}
+                    Loading form options...
                   </p>
                 </div>
               ) : (
@@ -884,20 +942,19 @@ export default function FoodCostEntryListClient() {
                           dialogDate instanceof Date && isValid(dialogDate)
                             ? dialogDate.toISOString()
                             : "invalid-edit-date"
-                        }-${dialogOutletId || "no-dialog-outlet"}`
+                        }`
                       : `new-${
                           dialogDate instanceof Date && isValid(dialogDate)
                             ? dialogDate.toISOString()
                             : "invalid-new-date"
-                        }-${dialogOutletId || "no-dialog-outlet"}`
+                        }`
                   }
                   selectedDate={dialogDate}
-                  selectedOutletId={
-                    dialogOutletId || (outlets.length > 0 ? outlets[0].id : "")
-                  }
+                  outlets={outlets}
                   foodCategories={foodCategories}
                   existingEntry={editingEntry}
                   onSuccess={onFormSuccess}
+                  user={user}
                 />
               )}
             </div>
@@ -917,6 +974,64 @@ export default function FoodCostEntryListClient() {
               Review the data from your Excel file before importing. Make sure all dates, outlets, and categories are correct.
             </DialogDescription>
           </DialogHeader>
+          
+          {/* Property Selection for Import */}
+          {importedData.length > 0 && (
+            <div className="mb-4 p-4 border rounded-lg bg-muted">
+              <h4 className="font-medium mb-3">Import Settings</h4>
+              {user?.role === "super_admin" ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Property *</label>
+                  <Select
+                    value={selectedImportPropertyId ? String(selectedImportPropertyId) : ""}
+                    onValueChange={(value) => setSelectedImportPropertyId(value ? parseInt(value) : undefined)}
+                    disabled={isLoadingImportProperties}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingImportProperties ? "Loading..." : "Select property for import"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {importProperties.map((property) => (
+                        <SelectItem key={property.id} value={String(property.id)}>
+                          {property.name} ({property.propertyCode})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    All imported records will be assigned to the selected property.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Property</label>
+                  <div className="px-3 py-2 bg-background rounded-md border">
+                    <span className="text-sm font-medium">
+                      {(() => {
+                        if (!user) return 'Loading user information...';
+                        if (!user.propertyAccess) return 'Loading property access...';
+                        
+                        const accessibleProperty = user.propertyAccess.find(pa => pa.property?.isActive !== false);
+                        if (accessibleProperty?.property) {
+                          const { name, propertyCode } = accessibleProperty.property;
+                          return name && propertyCode ? `${name} (${propertyCode})` : name || `Property ${accessibleProperty.propertyId}`;
+                        }
+                        
+                        if (user.propertyAccess.length === 0) {
+                          return 'No property assigned';
+                        }
+                        
+                        return 'Loading property information...';
+                      })()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    All imported records will be assigned to your property.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           
           <div className="flex-grow min-h-0 overflow-y-auto">
             {importErrors.length > 0 && (
@@ -1005,6 +1120,233 @@ export default function FoodCostEntryListClient() {
                 `Import ${importedData.length} Records`
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog 
+        open={isViewDialogOpen} 
+        onOpenChange={(open) => {
+          setIsViewDialogOpen(open);
+          if (!open) setViewingEntry(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col bg-card">
+          <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
+            <DialogTitle className="font-headline text-xl flex items-center">
+              <Eye className="mr-2 h-5 w-5" />
+              Food Cost Entry Details
+            </DialogTitle>
+            <DialogDescription>
+              {viewingEntry ? (
+                <>
+                  Entry for {viewingEntry.date instanceof Date && isValid(viewingEntry.date)
+                    ? format(viewingEntry.date, "PPP")
+                    : "Invalid Date"} at {
+                    outlets.find((o) => o.id === viewingEntry.outletId)?.name || "Unknown Outlet"
+                  }
+                </>
+              ) : (
+                "Loading entry details..."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-grow min-h-0 overflow-y-auto p-6">
+            {viewingEntry ? (
+              <div className="space-y-6">
+                {/* Entry Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/30">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Date</label>
+                    <div className="text-base font-medium">
+                      {viewingEntry.date instanceof Date && isValid(viewingEntry.date)
+                        ? format(viewingEntry.date, "PPP")
+                        : "Invalid Date"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Outlet</label>
+                    <div className="text-base font-medium">
+                      {(viewingEntry as any).outlet?.name || "Unknown Outlet"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Property</label>
+                    <div className="text-base font-medium">
+                      {(viewingEntry as any).property?.name && (viewingEntry as any).property?.propertyCode
+                        ? `${(viewingEntry as any).property.name} (${(viewingEntry as any).property.propertyCode})`
+                        : (viewingEntry as any).property?.name || 
+                          (viewingEntry as any).property?.propertyCode || 
+                          `Property ${(viewingEntry as any).propertyId || 'Unknown'}`}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Total Cost</label>
+                    <div className="text-lg font-bold text-primary">
+                      ${(viewingEntry.totalFoodCost || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audit Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Creation Details */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-3">Creation Details</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Created At</label>
+                        <div className="text-sm font-medium">
+                          {viewingEntry.createdAt ? (
+                            <>
+                              <div>{format(new Date(viewingEntry.createdAt), "PPP")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(new Date(viewingEntry.createdAt), "p")}
+                              </div>
+                            </>
+                          ) : (
+                            "Not available"
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Created By</label>
+                        <div className="text-sm font-medium">
+                          {(viewingEntry as any).createdByUser ? (
+                            <>
+                              <div>{(viewingEntry as any).createdByUser.name || 'Unknown User'}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {(viewingEntry as any).createdByUser.email}
+                              </div>
+                            </>
+                          ) : (
+                            "System"
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Update Details */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-3">Last Updated</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Updated At</label>
+                        <div className="text-sm font-medium">
+                          {viewingEntry.updatedAt ? (
+                            <>
+                              <div>{format(new Date(viewingEntry.updatedAt), "PPP")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(new Date(viewingEntry.updatedAt), "p")}
+                              </div>
+                            </>
+                          ) : (
+                            "Not available"
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Updated By</label>
+                        <div className="text-sm font-medium">
+                          {(viewingEntry as any).updatedByUser ? (
+                            <>
+                              <div>{(viewingEntry as any).updatedByUser.name || 'Unknown User'}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {(viewingEntry as any).updatedByUser.email}
+                              </div>
+                            </>
+                          ) : (
+                            "Same as creator"
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cost Breakdown */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Cost Breakdown</h3>
+                  {viewingEntry.details && viewingEntry.details.length > 0 ? (
+                    <div className="space-y-3">
+                      {viewingEntry.details.map((detail, index) => (
+                        <div key={detail.id || index} className="flex items-center justify-between p-3 border rounded-lg bg-card">
+                          <div className="flex-grow">
+                            <div className="font-medium">
+                              {detail.categoryName || 
+                               foodCategories.find(c => c.id === detail.categoryId)?.name || 
+                               `Category ${detail.categoryId}`}
+                            </div>
+                            {detail.description && (
+                              <div className="text-sm text-muted-foreground mt-1">
+                                {detail.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-lg">
+                              ${detail.cost.toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No cost details available for this entry.
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center text-lg font-semibold">
+                    <span>Total Food Cost:</span>
+                    <span className="text-primary">
+                      ${(viewingEntry.totalFoodCost || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  {viewingEntry.details && viewingEntry.details.length > 0 && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {viewingEntry.details.length} item{viewingEntry.details.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center items-center h-40">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-muted-foreground">Loading entry details...</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 p-6 border-t">
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setIsViewDialogOpen(false)}
+              >
+                Close
+              </Button>
+              {viewingEntry && (
+                <Button
+                  onClick={() => {
+                    setIsViewDialogOpen(false);
+                    handleEdit(viewingEntry);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  Edit Entry
+                </Button>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>

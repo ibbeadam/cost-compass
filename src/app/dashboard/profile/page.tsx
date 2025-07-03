@@ -6,14 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { getFirestoreUserProfileByUid } from "@/lib/firestoreUtils";
-import { updateDoc, doc } from "firebase/firestore";
-import {
-  updatePassword,
-  reauthenticateWithCredential,
-  EmailAuthProvider,
-} from "firebase/auth";
-import { db } from "@/lib/firebase";
+import { updateUserAction } from "@/actions/prismaUserActions";
 import { showToast } from "@/lib/toast";
 
 // Import the shared User type

@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { format } from "date-fns";
+import { safeFormatDate } from "@/lib/date-utils";
 import { TrendingUp, TrendingDown, Target, DollarSign, Percent, BarChart3, Calendar, Building } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -150,7 +151,7 @@ export function BudgetVsActualsReportTable({ reportData }: BudgetVsActualsReport
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Budget vs. Actuals (F&B)</h2>
           <p className="text-muted-foreground">
-            {format(dateRange.from, "MMM dd, yyyy")} - {format(dateRange.to, "MMM dd, yyyy")}
+            {safeFormatDate(dateRange.from)} - {safeFormatDate(dateRange.to)}
             {outletName && (
               <span className="ml-2 inline-flex items-center gap-1">
                 <Building className="h-4 w-4" />
@@ -352,7 +353,7 @@ export function BudgetVsActualsReportTable({ reportData }: BudgetVsActualsReport
                       
                       return (
                         <TableRow key={index}>
-                          <TableCell className="font-mono">{format(day.date, "MMM dd, yyyy")}</TableCell>
+                          <TableCell className="font-mono">{safeFormatDate(day.date)}</TableCell>
                           <TableCell className="text-right font-mono">{renderCurrency(day.foodActualRevenue)}</TableCell>
                           <TableCell className="text-right font-mono">{renderCurrency(day.foodActualCost)}</TableCell>
                           <TableCell className="text-right font-mono">{renderPercentage(foodCostPct)}</TableCell>

@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Timestamp } from "firebase/firestore";
 import { PlusCircle, Edit, Trash2, AlertTriangle, DollarSign, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, Upload, FileSpreadsheet } from "lucide-react";
 import { format } from "date-fns";
 import * as XLSX from 'xlsx';
@@ -37,21 +36,23 @@ import {
 import DailyFinancialSummaryForm from "./DailyFinancialSummaryForm";
 import DailyFinancialSummaryDetailDialog from "./DailyFinancialSummaryDetailDialog";
 import { showToast } from "@/lib/toast";
-import { deleteDailyFinancialSummaryAction, getPaginatedDailyFinancialSummariesAction, saveDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
+import { getAllDailyFinancialSummariesAction, deleteDailyFinancialSummaryAction, getPaginatedDailyFinancialSummariesAction, saveDailyFinancialSummaryAction } from "@/actions/dailyFinancialSummaryActions";
 import { getFoodCostEntriesForDateAction } from "@/actions/foodCostActions";
 import { getBeverageCostEntriesForDateAction } from "@/actions/beverageCostActions";
+import { getAllOutletsAction } from "@/actions/prismaOutletActions";
+import { getPropertiesAction } from "@/actions/propertyActions";
+import { useAuth } from "@/contexts/AuthContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/utils";
-
-const ITEMS_PER_PAGE = 10;
+import { cn, formatNumber, normalizeDate } from "@/lib/utils";
+import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
 
 const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialSummary => {
   return {
     ...entry,
-    date: entry.date instanceof Timestamp ? entry.date.toDate() : new Date(entry.date as any),
-    createdAt: entry.createdAt && entry.createdAt instanceof Timestamp ? entry.createdAt.toDate() : (entry.createdAt ? new Date(entry.createdAt as any) : undefined),
-    updatedAt: entry.updatedAt && entry.updatedAt instanceof Timestamp ? entry.updatedAt.toDate() : (entry.updatedAt ? new Date(entry.updatedAt as any) : undefined),
+    date: new Date(entry.date),
+    createdAt: entry.createdAt ? new Date(entry.createdAt) : undefined,
+    updatedAt: entry.updatedAt ? new Date(entry.updatedAt) : undefined,
   };
 };
 
@@ -80,6 +81,8 @@ export default function DailyFinancialSummaryListClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingSummary, setEditingSummary] = useState<DailyFinancialSummary | null>(null);
+  const { user: sessionUser, userProfile } = useAuth();
+  const user = userProfile || sessionUser; // Use userProfile for database info, fallback to sessionUser
   
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [selectedSummaryForDetail, setSelectedSummaryForDetail] = useState<DailyFinancialSummary | null>(null);
@@ -92,12 +95,52 @@ export default function DailyFinancialSummaryListClient() {
   const [importedData, setImportedData] = useState<ExcelRow[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importProperties, setImportProperties] = useState<any[]>([]);
+  const [selectedImportPropertyId, setSelectedImportPropertyId] = useState<number | undefined>();
+  const [isLoadingImportProperties, setIsLoadingImportProperties] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalSummaries, setTotalSummaries] = useState(0);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // File input ref
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Load properties for import when dialog opens
+  useEffect(() => {
+    const loadImportProperties = async () => {
+      if (isImportDialogOpen && user?.role === "super_admin") {
+        setIsLoadingImportProperties(true);
+        try {
+          const propertiesData = await getPropertiesAction();
+          setImportProperties(propertiesData);
+        } catch (error) {
+          console.error("Error loading properties for import:", error);
+          showToast.error("Failed to load properties");
+        } finally {
+          setIsLoadingImportProperties(false);
+        }
+      } else if (isImportDialogOpen && user?.role !== "super_admin") {
+        // Auto-select property for non-super admin users
+        console.log('Loading properties for non-super admin user:', user?.email);
+        console.log('Property access count:', user?.propertyAccess?.length);
+        
+        if (user?.propertyAccess?.length) {
+          const firstAccessibleProperty = user.propertyAccess.find(pa => pa.property?.isActive !== false);
+          if (firstAccessibleProperty) {
+            console.log('Auto-selecting property for non-super admin:', firstAccessibleProperty.propertyId);
+            setSelectedImportPropertyId(firstAccessibleProperty.propertyId);
+          } else {
+            console.log('No accessible property found for user');
+          }
+        } else {
+          console.log('No property access found for user - this should not happen if userProfile is loaded correctly');
+        }
+      }
+    };
+    
+    loadImportProperties();
+  }, [isImportDialogOpen, user]);
 
   const fetchAllSummaries = useCallback(async () => {
     setIsLoading(true);
@@ -134,14 +177,30 @@ export default function DailyFinancialSummaryListClient() {
     try {
       if (summary.date) {
         const targetDate = summary.date instanceof Date ? summary.date : 
-          summary.date instanceof Timestamp ? summary.date.toDate() : 
           new Date(summary.date as string | number);
-        const [foodDetails, beverageDetails] = await Promise.all([
-            getFoodCostEntriesForDateAction(targetDate),
-            getBeverageCostEntriesForDateAction(targetDate)
+        
+        // Get the property ID from the summary to filter entries by property
+        const propertyId = (summary as any).propertyId;
+        
+        const [foodDetails, beverageDetails, outlets] = await Promise.all([
+            getFoodCostEntriesForDateAction(targetDate, undefined, propertyId),
+            getBeverageCostEntriesForDateAction(targetDate, undefined, propertyId),
+            getAllOutletsAction()
         ]);
-        setDetailedFoodCosts(foodDetails);
-        setDetailedBeverageCosts(beverageDetails);
+
+        // Map outlet names to the entries
+        const foodDetailsWithOutletNames = foodDetails.map(entry => ({
+          ...entry,
+          outletName: outlets.find(outlet => outlet.id === entry.outletId)?.name || `Outlet ${entry.outletId}`
+        }));
+
+        const beverageDetailsWithOutletNames = beverageDetails.map(entry => ({
+          ...entry,
+          outletName: outlets.find(outlet => outlet.id === entry.outletId)?.name || `Outlet ${entry.outletId}`
+        }));
+
+        setDetailedFoodCosts(foodDetailsWithOutletNames);
+        setDetailedBeverageCosts(beverageDetailsWithOutletNames);
       } else {
         setDetailedFoodCosts([]);
         setDetailedBeverageCosts([]);
@@ -155,7 +214,7 @@ export default function DailyFinancialSummaryListClient() {
     }
   };
 
-  const handleDelete = async (summaryId: string) => {
+  const handleDelete = async (summaryId: number) => {
     try {
       await deleteDailyFinancialSummaryAction(summaryId);
       fetchAllSummaries();
@@ -188,7 +247,11 @@ export default function DailyFinancialSummaryListClient() {
         const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          raw: false, // This will format dates as strings
+          dateNF: 'yyyy-mm-dd' // Format dates as YYYY-MM-DD
+        });
 
         // Skip header row and process data
         const processedData: ExcelRow[] = [];
@@ -202,11 +265,28 @@ export default function DailyFinancialSummaryListClient() {
           }
 
           try {
-            const dateStr = String(row[0]).trim();
-            const date = new Date(dateStr);
+            let date: Date;
+            const dateValue = row[0];
             
-            if (isNaN(date.getTime())) {
-              errors.push(`Row ${i + 1}: Invalid date format - ${dateStr}`);
+            // Handle Excel date parsing - simplified since we set raw: false
+            if (dateValue instanceof Date) {
+              date = dateValue;
+            } else {
+              // Convert string or number to date
+              const dateStr = String(dateValue).trim();
+              date = new Date(dateStr);
+              
+              // If parsing fails, try YYYY-MM-DD format which should be our standard
+              if (isNaN(date.getTime())) {
+                const yyyymmdd = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+                if (yyyymmdd) {
+                  date = new Date(parseInt(yyyymmdd[1]), parseInt(yyyymmdd[2]) - 1, parseInt(yyyymmdd[3]));
+                }
+              }
+            }
+            
+            if (!date || isNaN(date.getTime())) {
+              errors.push(`Row ${i + 1}: Invalid date format - ${dateValue}`);
               continue;
             }
 
@@ -248,6 +328,30 @@ export default function DailyFinancialSummaryListClient() {
   const handleImportData = async () => {
     if (importedData.length === 0) return;
 
+    // Validate property selection
+    if (user?.role === "super_admin" && !selectedImportPropertyId) {
+      showToast.error("Please select a property for the imported data.");
+      return;
+    }
+    
+    // Determine the property ID to use for import
+    let propertyIdToUse = selectedImportPropertyId;
+    
+    // For non-super admin users, ensure we have a property ID
+    if (user?.role !== "super_admin") {
+      if (!propertyIdToUse) {
+        // Try to get the first accessible property
+        const firstAccessibleProperty = user?.propertyAccess?.find(pa => pa.property?.isActive !== false);
+        if (firstAccessibleProperty) {
+          propertyIdToUse = firstAccessibleProperty.propertyId;
+          console.log('Using auto-selected property for import:', propertyIdToUse);
+        } else {
+          showToast.error("No accessible property found. Please contact your administrator.");
+          return;
+        }
+      }
+    }
+
     setIsImporting(true);
     const errors: string[] = [];
     let successCount = 0;
@@ -255,34 +359,40 @@ export default function DailyFinancialSummaryListClient() {
     try {
       for (const row of importedData) {
         try {
+          // Additional date validation before creating summary
+          const importDate = new Date(row.date);
+          if (isNaN(importDate.getTime())) {
+            throw new Error(`Invalid date: ${row.date}`);
+          }
+          
           const summaryData = {
-            date: new Date(row.date),
-            actual_food_revenue: row.actual_food_revenue,
-            budget_food_revenue: row.budget_food_revenue,
-            budget_food_cost: row.budget_food_cost,
-            budget_food_cost_pct: row.budget_food_cost_pct,
-            ent_food: row.ent_food,
-            oc_food: row.oc_food,
-            other_food_adjustment: row.other_food_adjustment,
-            actual_beverage_revenue: row.actual_beverage_revenue,
-            budget_beverage_revenue: row.budget_beverage_revenue,
-            budget_beverage_cost: row.budget_beverage_cost,
-            budget_beverage_cost_pct: row.budget_beverage_cost_pct,
-            entertainment_beverage_cost: row.entertainment_beverage_cost,
-            officer_check_comp_beverage: row.officer_check_comp_beverage,
-            other_beverage_adjustments: row.other_beverage_adjustments,
-            notes: row.notes,
-            actual_food_cost: 0,
-            actual_beverage_cost: 0,
-            actual_food_cost_pct: 0,
-            actual_beverage_cost_pct: 0,
-            food_variance_pct: 0,
-            beverage_variance_pct: 0,
+            date: normalizeDate(importDate),
+            propertyId: propertyIdToUse,
+            actualFoodRevenue: row.actual_food_revenue,
+            budgetFoodRevenue: row.budget_food_revenue,
+            budgetFoodCost: row.budget_food_cost,
+            budgetFoodCostPct: row.budget_food_cost_pct,
+            entFood: row.ent_food || 0,
+            coFood: row.oc_food || 0,
+            otherFoodAdjustment: row.other_food_adjustment || 0,
+            actualBeverageRevenue: row.actual_beverage_revenue,
+            budgetBeverageRevenue: row.budget_beverage_revenue,
+            budgetBeverageCost: row.budget_beverage_cost,
+            budgetBeverageCostPct: row.budget_beverage_cost_pct,
+            entBeverage: row.entertainment_beverage_cost || 0,
+            coBeverage: row.officer_check_comp_beverage || 0,
+            otherBeverageAdjustment: row.other_beverage_adjustments || 0,
+            note: row.notes,
           };
 
+          console.log('Attempting to save summary:', summaryData);
+          console.log('Property ID being used for import:', propertyIdToUse);
+          console.log('User role:', user?.role);
+          console.log('User property access:', user?.propertyAccess);
           await saveDailyFinancialSummaryAction(summaryData);
           successCount++;
         } catch (error) {
+          console.error('Import error details:', error);
           errors.push(`Date ${row.date}: ${error instanceof Error ? error.message : 'Failed to save'}`);
         }
       }
@@ -293,6 +403,8 @@ export default function DailyFinancialSummaryListClient() {
         setIsImportDialogOpen(false);
         setImportedData([]);
         setImportErrors([]);
+        setSelectedImportPropertyId(undefined);
+        setImportProperties([]);
       }
 
       if (errors.length > 0) {
@@ -309,6 +421,8 @@ export default function DailyFinancialSummaryListClient() {
     setIsImportDialogOpen(false);
     setImportedData([]);
     setImportErrors([]);
+    setSelectedImportPropertyId(undefined);
+    setImportProperties([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -352,14 +466,19 @@ export default function DailyFinancialSummaryListClient() {
     return "";
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalSummaries / ITEMS_PER_PAGE));
-  const currentItems = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return allSummaries.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [allSummaries, currentPage]);
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
-  const startIndexDisplay = totalSummaries > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
-  const endIndexDisplay = totalSummaries > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalSummaries) : 0;
+  const totalPages = Math.max(1, Math.ceil(totalSummaries / itemsPerPage));
+  const currentItems = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return allSummaries.slice(startIndex, startIndex + itemsPerPage);
+  }, [allSummaries, currentPage, itemsPerPage]);
+
+  const startIndexDisplay = totalSummaries > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const endIndexDisplay = totalSummaries > 0 ? Math.min(currentPage * itemsPerPage, totalSummaries) : 0;
 
   const renderPageNumbers = () => {
     const pageNumbers = [];
@@ -419,7 +538,7 @@ export default function DailyFinancialSummaryListClient() {
                 </tr>
               </thead>
               <tbody>
-                {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
+                {[...Array(itemsPerPage)].map((_, i) => (
                   <tr key={i} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                     {[...Array(10)].map((_, j) => (
                       <td key={j} className="p-4 align-middle">
@@ -498,6 +617,9 @@ export default function DailyFinancialSummaryListClient() {
                   <TableHead className="font-headline cursor-pointer hover:text-primary whitespace-nowrap px-2 py-3" onClick={() => showToast.info("Click any data cell in a row to view full details.")}>
                     Date
                   </TableHead>
+                  {user?.role === "super_admin" && (
+                    <TableHead className="font-headline whitespace-nowrap px-2 py-3">Property</TableHead>
+                  )}
                   <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food Rev.</TableHead>
                   <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food Cost</TableHead>
                   <TableHead className="font-headline text-right whitespace-nowrap px-2 py-3">Act. Food %</TableHead>
@@ -513,33 +635,41 @@ export default function DailyFinancialSummaryListClient() {
                 {currentItems.map((summary) => (
                   <TableRow key={summary.id} className="hover:bg-muted/30 cursor-pointer">
                     <TableCell className="font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
-                      {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}
+                      {summary.date instanceof Date ? format(summary.date, "yyyy-MM-dd") : summary.id}
                     </TableCell>
+                    {user?.role === "super_admin" && (
+                      <TableCell className="font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
+                        {(summary as any).property?.name || 'N/A'}
+                        {(summary as any).property?.propertyCode && (
+                          <span className="text-muted-foreground ml-1">({(summary as any).property.propertyCode})</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
-                      {renderCurrency(summary.actual_food_revenue)}
+                      {renderCurrency(summary.actualFoodRevenue)}
                     </TableCell>
                     <TableCell className="text-right font-code font-semibold whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
-                      {renderCurrency(summary.actual_food_cost)}
+                      {renderCurrency(summary.actualFoodCost)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getActualCostColor(summary.actual_food_cost_pct, summary.budget_food_cost_pct))} onClick={() => handleViewDetails(summary)}>
-                      {renderPercentage(summary.actual_food_cost_pct)}
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getActualCostColor(summary.actualFoodCostPct, summary.budgetFoodCostPct))} onClick={() => handleViewDetails(summary)}>
+                      {renderPercentage(summary.actualFoodCostPct)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getVarianceColor(summary.food_variance_pct))} onClick={() => handleViewDetails(summary)}>
-                      {summary.food_variance_pct != null && summary.food_variance_pct !== 0 ? (summary.food_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
-                      {renderPercentage(summary.food_variance_pct)}
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getVarianceColor(summary.foodVariancePct))} onClick={() => handleViewDetails(summary)}>
+                      {summary.foodVariancePct != null && summary.foodVariancePct !== 0 ? (summary.foodVariancePct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
+                      {renderPercentage(summary.foodVariancePct)}
                     </TableCell>
                     <TableCell className="text-right font-code whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
-                      {renderCurrency(summary.actual_beverage_revenue)}
+                      {renderCurrency(summary.actualBeverageRevenue)}
                     </TableCell>
                     <TableCell className="text-right font-code font-semibold whitespace-nowrap px-2 py-3" onClick={() => handleViewDetails(summary)}>
-                      {renderCurrency(summary.actual_beverage_cost)}
+                      {renderCurrency(summary.actualBeverageCost)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getActualCostColor(summary.actual_beverage_cost_pct, summary.budget_beverage_cost_pct))} onClick={() => handleViewDetails(summary)}>
-                      {renderPercentage(summary.actual_beverage_cost_pct)}
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getActualCostColor(summary.actualBeverageCostPct, summary.budgetBeverageCostPct))} onClick={() => handleViewDetails(summary)}>
+                      {renderPercentage(summary.actualBeverageCostPct)}
                     </TableCell>
-                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getVarianceColor(summary.beverage_variance_pct))} onClick={() => handleViewDetails(summary)}>
-                      {summary.beverage_variance_pct != null && summary.beverage_variance_pct !== 0 ? (summary.beverage_variance_pct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
-                      {renderPercentage(summary.beverage_variance_pct)}
+                    <TableCell className={cn("text-right font-code font-semibold whitespace-nowrap px-2 py-3", getVarianceColor(summary.beverageVariancePct))} onClick={() => handleViewDetails(summary)}>
+                      {summary.beverageVariancePct != null && summary.beverageVariancePct !== 0 ? (summary.beverageVariancePct > 0 ? <TrendingUp className="inline h-4 w-4 mr-1" /> : <TrendingDown className="inline h-4 w-4 mr-1" />) : null}
+                      {renderPercentage(summary.beverageVariancePct)}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap px-2 py-3">
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9">
@@ -580,11 +710,18 @@ export default function DailyFinancialSummaryListClient() {
         </div>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 px-2">
-          <div className="text-sm text-muted-foreground text-center sm:text-left">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4 px-2">
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-muted-foreground">
             Showing {startIndexDisplay} to {endIndexDisplay} of {totalSummaries} results
           </div>
+          <RecordsPerPageSelector
+            value={itemsPerPage}
+            onChange={handleItemsPerPageChange}
+            disabled={isLoading}
+          />
+        </div>
+        {totalPages > 1 && (
           <div className="flex items-center space-x-1">
             <Button
               variant="outline"
@@ -608,8 +745,8 @@ export default function DailyFinancialSummaryListClient() {
               <span className="sr-only">Next Page</span>
             </Button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <Dialog open={isFormOpen} onOpenChange={(open) => {if (!open) { setEditingSummary(null); setIsFormOpen(false); } else { setIsFormOpen(open); }}}>
         <DialogContent className="sm:max-w-2xl md:max-w-3xl max-h-[90vh] flex flex-col bg-card">
@@ -659,6 +796,64 @@ export default function DailyFinancialSummaryListClient() {
               Review the data from your Excel file before importing. Make sure all dates and values are correct.
             </DialogDescription>
           </DialogHeader>
+          
+          {/* Property Selection for Import */}
+          {importedData.length > 0 && (
+            <div className="mb-4 p-4 border rounded-lg bg-muted/30">
+              <h4 className="font-medium mb-3">Import Settings</h4>
+              {user?.role === "super_admin" ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Property *</label>
+                  <Select
+                    value={selectedImportPropertyId ? String(selectedImportPropertyId) : ""}
+                    onValueChange={(value) => setSelectedImportPropertyId(value ? parseInt(value) : undefined)}
+                    disabled={isLoadingImportProperties}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={isLoadingImportProperties ? "Loading..." : "Select property for import"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {importProperties.map((property) => (
+                        <SelectItem key={property.id} value={String(property.id)}>
+                          {property.name} ({property.propertyCode})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    All imported records will be assigned to the selected property.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Property</label>
+                  <div className="px-3 py-2 bg-background rounded-md border">
+                    <span className="text-sm font-medium">
+                      {(() => {
+                        if (!user) return 'Loading user information...';
+                        if (!user.propertyAccess) return 'Loading property access...';
+                        
+                        const accessibleProperty = user.propertyAccess.find(pa => pa.property?.isActive !== false);
+                        if (accessibleProperty?.property) {
+                          const { name, propertyCode } = accessibleProperty.property;
+                          return name && propertyCode ? `${name} (${propertyCode})` : name || `Property ${accessibleProperty.propertyId}`;
+                        }
+                        
+                        if (user.propertyAccess.length === 0) {
+                          return 'No property assigned';
+                        }
+                        
+                        return 'Loading property information...';
+                      })()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    All imported records will be assigned to your property.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
           
           <div className="flex-grow min-h-0 overflow-y-auto">
             {importErrors.length > 0 && (

@@ -2,13 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  collection,
-  onSnapshot,
-  orderBy,
-  query as firestoreQuery,
-  Timestamp,
-} from "firebase/firestore";
-import {
   PlusCircle,
   Edit,
   Trash2,
@@ -19,11 +12,11 @@ import {
   ClipboardList,
   Upload,
   FileSpreadsheet,
+  Eye,
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import * as XLSX from 'xlsx';
 
-import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -55,17 +48,20 @@ import {
 } from "@/components/ui/alert-dialog";
 import { showToast } from "@/lib/toast";
 import {
+  getAllBeverageCostEntriesAction,
   deleteBeverageCostEntryAction,
-  getBeverageCostEntryWithDetailsAction,
+  getBeverageCostEntryByIdAction,
   getBeverageCategoriesAction,
-  saveBeverageCostEntryAction,
+  createBeverageCostEntryAction,
 } from "@/actions/beverageCostActions";
-import { getOutletsAction } from "@/actions/foodCostActions"; // Re-use
+import { getAllOutletsAction } from "@/actions/prismaOutletActions";
+import { useAuth } from "@/contexts/AuthContext";
 import type {
   Outlet,
   Category,
   BeverageCostEntry,
   BeverageCostDetail,
+  Property,
 } from "@/types";
 import { DatePicker } from "@/components/ui/date-picker";
 import {
@@ -77,8 +73,8 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-
-const ITEMS_PER_PAGE = 5;
+import { normalizeDate } from "@/lib/utils";
+import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
 
 // Excel import interface for beverage cost entries
 interface ExcelBeverageCostRow {
@@ -94,6 +90,8 @@ interface ExcelBeverageCostRow {
 }
 
 export default function BeverageCostEntryListClient() {
+  const { user: sessionUser, userProfile } = useAuth();
+  const user = userProfile || sessionUser;
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
@@ -112,13 +110,16 @@ export default function BeverageCostEntryListClient() {
     (BeverageCostEntry & { details: BeverageCostDetail[] }) | null
   >(null);
 
-  const [dialogDate, setDialogDate] = useState<Date>(new Date());
-  const [dialogOutletId, setDialogOutletId] = useState<string | undefined>(
-    undefined
-  );
+  const [dialogDate, setDialogDate] = useState<Date>(normalizeDate(new Date()));
 
   const [error, setError] = useState<Error | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(5);
+
+  // View dialog states
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingEntry, setViewingEntry] = useState<(BeverageCostEntry & { details: BeverageCostDetail[] }) | null>(null);
+  const [isLoadingDetailsForView, setIsLoadingDetailsForView] = useState(false);
 
   // Bulk import states
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
@@ -134,98 +135,36 @@ export default function BeverageCostEntryListClient() {
     setIsClient(true);
   }, []);
 
-  useEffect(() => {
-    if (!isClient) return;
+  const fetchBeverageCostEntries = useCallback(async () => {
     setIsLoadingEntries(true);
-    if (!db) {
+    try {
+      const entries = await getAllBeverageCostEntriesAction();
+      setAllBeverageCostEntries(entries);
+      setCurrentPage(1);
+    } catch (err) {
+      console.error("Error fetching beverage cost entries:", err);
+      showToast.error("Could not load beverage cost entries.");
+      setError(err as Error);
+    } finally {
       setIsLoadingEntries(false);
-      setError(new Error("Firestore database is not initialized."));
-      return;
     }
-    const q = firestoreQuery(
-      collection(db, "beverageCostEntries"),
-      orderBy("date", "desc")
-    );
+  }, []);
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const fetchedEntries = snapshot.docs.map((doc) => {
-          const data = doc.data();
-
-          const convertToValidDate = (fieldValue: any): Date => {
-            if (fieldValue instanceof Timestamp) return fieldValue.toDate();
-            if (fieldValue instanceof Date && isValid(fieldValue))
-              return fieldValue;
-            if (
-              typeof fieldValue === "string" ||
-              typeof fieldValue === "number"
-            ) {
-              const d = new Date(fieldValue);
-              if (isValid(d)) return d;
-            }
-            if (
-              typeof fieldValue === "object" &&
-              fieldValue !== null &&
-              "_seconds" in fieldValue &&
-              "_nanoseconds" in fieldValue
-            ) {
-              try {
-                const ts = new Timestamp(
-                  (fieldValue as any)._seconds,
-                  (fieldValue as any)._nanoseconds
-                );
-                const d = ts.toDate();
-                if (isValid(d)) return d;
-              } catch (e) {
-                console.warn(
-                  "Failed to convert object to Timestamp:",
-                  fieldValue,
-                  e
-                );
-              }
-            }
-            return new Date(0);
-          };
-
-          const entryDate = convertToValidDate(data.date);
-
-          return {
-            id: doc.id,
-            date: entryDate,
-            outlet_id: data.outlet_id,
-            total_beverage_cost: data.total_beverage_cost,
-            createdAt: convertToValidDate(data.createdAt),
-            updatedAt: convertToValidDate(data.updatedAt),
-          } as BeverageCostEntry;
-        });
-        setAllBeverageCostEntries(fetchedEntries);
-        setIsLoadingEntries(false);
-        setCurrentPage(1);
-      },
-      (err) => {
-        console.error("Error fetching beverage cost entries:", err);
-        showToast.error("Could not load beverage cost entries.");
-        setIsLoadingEntries(false);
-        setError(err as Error);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [isClient]);
+  useEffect(() => {
+    if (isClient) {
+      fetchBeverageCostEntries();
+    }
+  }, [isClient, fetchBeverageCostEntries]);
 
   const fetchOutletsAndCategories = useCallback(async () => {
     try {
       setIsLoadingOutlets(true);
       setIsLoadingCategories(true);
       const [outletsData, categoriesData] = await Promise.all([
-        getOutletsAction(),
+        getAllOutletsAction(),
         getBeverageCategoriesAction(),
       ]);
       setOutlets(outletsData);
-      if (outletsData.length > 0 && !dialogOutletId) {
-        setDialogOutletId(outletsData[0].id);
-      }
       setBeverageCategories(categoriesData);
     } catch (err) {
       console.error("Error fetching outlets or categories:", err);
@@ -235,7 +174,7 @@ export default function BeverageCostEntryListClient() {
       setIsLoadingOutlets(false);
       setIsLoadingCategories(false);
     }
-  }, [dialogOutletId]);
+  }, []);
 
   useEffect(() => {
     if (isClient) {
@@ -245,9 +184,7 @@ export default function BeverageCostEntryListClient() {
 
   const handleAddNew = () => {
     setEditingEntry(null);
-    setDialogDate(new Date());
-    const initialOutletId = outlets.length > 0 ? outlets[0].id : undefined;
-    setDialogOutletId(initialOutletId);
+    setDialogDate(normalizeDate(new Date()));
     setIsFormOpen(true);
   };
 
@@ -258,18 +195,16 @@ export default function BeverageCostEntryListClient() {
     }
     setIsLoadingDetailsForEdit(true);
     try {
-      const fullEntryWithDetails = await getBeverageCostEntryWithDetailsAction(
-        listEntry.date,
-        listEntry.outlet_id
-      );
+      const fullEntryWithDetails = await getBeverageCostEntryByIdAction(listEntry.id);
       if (fullEntryWithDetails) {
-        setEditingEntry(fullEntryWithDetails);
+        setEditingEntry(fullEntryWithDetails as any);
         setDialogDate(
-          fullEntryWithDetails.date instanceof Date
-            ? fullEntryWithDetails.date
-            : (fullEntryWithDetails.date as Timestamp).toDate()
+          normalizeDate(
+            fullEntryWithDetails.date instanceof Date
+              ? fullEntryWithDetails.date
+              : new Date(fullEntryWithDetails.date)
+          )
         );
-        setDialogOutletId(fullEntryWithDetails.outlet_id);
         setIsFormOpen(true);
       } else {
         showToast.error("Could not load details. It might have been deleted.");
@@ -284,12 +219,32 @@ export default function BeverageCostEntryListClient() {
   const onFormSuccess = () => {
     setIsFormOpen(false);
     setEditingEntry(null);
+    fetchBeverageCostEntries(); // Refresh the list
   };
 
-  const handleDelete = async (entryId: string) => {
+  const handleView = async (listEntry: BeverageCostEntry) => {
+    setIsLoadingDetailsForView(true);
+    try {
+      const fullEntryWithDetails = await getBeverageCostEntryByIdAction(listEntry.id);
+      if (fullEntryWithDetails) {
+        setViewingEntry(fullEntryWithDetails as any);
+        setIsViewDialogOpen(true);
+      } else {
+        showToast.error("Could not load entry details. It might have been deleted.");
+      }
+    } catch (err) {
+      console.error("Error fetching beverage cost entry for view:", err);
+      showToast.error((err as Error).message || "Failed to load entry details.");
+    } finally {
+      setIsLoadingDetailsForView(false);
+    }
+  };
+
+  const handleDelete = async (entryId: number) => {
     try {
       await deleteBeverageCostEntryAction(entryId);
       showToast.success("The beverage cost entry has been deleted.");
+      fetchBeverageCostEntries(); // Refresh the list
     } catch (err) {
       console.error("Error deleting beverage cost entry:", err);
       showToast.error((err as Error).message || "Could not delete entry.");
@@ -425,7 +380,7 @@ export default function BeverageCostEntryListClient() {
           const category = beverageCategories.find(c => c.name === col.categoryName);
           if (category) {
             categories.push({
-              category_id: category.id,
+              category_id: category.id.toString(),
               category_name: category.name,
               cost: cost,
               description: description
@@ -441,7 +396,7 @@ export default function BeverageCostEntryListClient() {
 
       parsedData.push({
         date: String(date),
-        outlet_id: outlet.id,
+        outlet_id: outlet.id.toString(),
         outlet_name: outlet.name,
         categories
       });
@@ -465,14 +420,20 @@ export default function BeverageCostEntryListClient() {
     try {
       for (const row of importPreviewData) {
         try {
-          const date = new Date(row.date);
+          const date = normalizeDate(row.date);
           const items = row.categories.map(cat => ({
-            categoryId: cat.category_id,
+            categoryId: Number(cat.category_id),
+            categoryName: cat.category_name,
             cost: cat.cost,
             description: cat.description || ''
           }));
 
-          await saveBeverageCostEntryAction(date, row.outlet_id, items);
+          await createBeverageCostEntryAction({
+            date,
+            outletId: Number(row.outlet_id),
+            totalBeverageCost: row.categories.reduce((sum, cat) => sum + cat.cost, 0),
+            details: items,
+          });
           successCount++;
         } catch (error) {
           errorCount++;
@@ -482,13 +443,26 @@ export default function BeverageCostEntryListClient() {
 
       if (successCount > 0) {
         showToast.success(`Successfully imported ${successCount} beverage cost entries.${errorCount > 0 ? ` ${errorCount} errors occurred.` : ''}`);
-        setIsImportDialogOpen(false);
-        setImportPreviewData([]);
-        setImportErrors([]);
+        // Refresh the entries list after successful import
+        fetchBeverageCostEntries();
+        
+        // Close dialog and reset state if no errors
+        if (errorCount === 0) {
+          setIsImportDialogOpen(false);
+          setImportPreviewData([]);
+          setImportErrors([]);
+          setImportFile(null);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }
       }
 
       if (errorCount > 0) {
         setImportErrors(detailedErrors);
+        if (successCount === 0) {
+          showToast.error(`Import failed. ${errorCount} errors occurred.`);
+        }
       }
     } catch (error) {
       console.error('Bulk import error:', error);
@@ -507,20 +481,25 @@ export default function BeverageCostEntryListClient() {
     }
   };
 
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
   const totalEntries = allBeverageCostEntries.length;
-  const totalPages = Math.max(1, Math.ceil(totalEntries / ITEMS_PER_PAGE));
+  const totalPages = Math.max(1, Math.ceil(totalEntries / itemsPerPage));
   const currentItems = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const startIndex = (currentPage - 1) * itemsPerPage;
     return allBeverageCostEntries.slice(
       startIndex,
-      startIndex + ITEMS_PER_PAGE
+      startIndex + itemsPerPage
     );
-  }, [allBeverageCostEntries, currentPage]);
+  }, [allBeverageCostEntries, currentPage, itemsPerPage]);
 
   const startIndexDisplay =
-    totalEntries > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0;
+    totalEntries > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
   const endIndexDisplay =
-    totalEntries > 0 ? Math.min(currentPage * ITEMS_PER_PAGE, totalEntries) : 0;
+    totalEntries > 0 ? Math.min(currentPage * itemsPerPage, totalEntries) : 0;
 
   const renderPageNumbers = () => {
     const pageNumbers = [];
@@ -625,7 +604,7 @@ export default function BeverageCostEntryListClient() {
         <div>
           <div className="rounded-lg border overflow-hidden shadow-md bg-card p-4">
             <Skeleton className="h-8 w-3/4 mb-4 bg-muted/50" />
-            {[...Array(ITEMS_PER_PAGE)].map((_, i) => (
+            {[...Array(itemsPerPage)].map((_, i) => (
               <div
                 key={i}
                 className="flex justify-between items-center p-4 border-b"
@@ -669,6 +648,7 @@ export default function BeverageCostEntryListClient() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Outlet</TableHead>
+                  {user?.role === "super_admin" && <TableHead>Property</TableHead>}
                   <TableHead className="text-right">Total Cost</TableHead>
                   <TableHead className="text-right w-[120px]">
                     Actions
@@ -684,14 +664,32 @@ export default function BeverageCostEntryListClient() {
                         : "Invalid Date"}
                     </TableCell>
                     <TableCell>
-                      {outlets.find((o) => o.id === entry.outlet_id)?.name ||
-                        entry.outlet_id ||
+                      {outlets.find((o) => o.id === entry.outletId)?.name ||
                         "Unknown Outlet"}
                     </TableCell>
+                    {user?.role === "super_admin" && (
+                      <TableCell>
+                        {(entry as any).property?.name && (entry as any).property?.propertyCode
+                          ? `${(entry as any).property.name} (${(entry as any).property.propertyCode})`
+                          : (entry as any).property?.name || 
+                            (entry as any).property?.propertyCode || 
+                            `Property ${(entry as any).propertyId || 'Unknown'}`}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right font-code">
-                      ${(entry.total_beverage_cost || 0).toFixed(2)}
+                      ${(entry.totalBeverageCost || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleView(entry)}
+                        className="mr-2 hover:text-blue-600"
+                        disabled={isLoadingDetailsForView}
+                      >
+                        <Eye className="h-4 w-4" />
+                        <span className="sr-only">View Entry</span>
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -726,7 +724,7 @@ export default function BeverageCostEntryListClient() {
                                 ? format(entry.date, "PPP")
                                 : "this date"}{" "}
                               at{" "}
-                              {outlets.find((o) => o.id === entry.outlet_id)
+                              {outlets.find((o) => o.id === entry.outletId)
                                 ?.name || "this outlet"}
                               .
                             </AlertDialogDescription>
@@ -748,12 +746,19 @@ export default function BeverageCostEntryListClient() {
               </TableBody>
             </Table>
           </div>
-          {totalPages > 1 && (
-            <div className="flex justify-between items-center mt-4 px-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4 px-2">
+            <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
                 Showing {startIndexDisplay} to {endIndexDisplay} of{" "}
                 {totalEntries} results
               </div>
+              <RecordsPerPageSelector
+                value={itemsPerPage}
+                onChange={handleItemsPerPageChange}
+                disabled={isLoading}
+              />
+            </div>
+            {totalPages > 1 && (
               <div className="flex items-center space-x-1">
                 <Button
                   variant="outline"
@@ -777,8 +782,8 @@ export default function BeverageCostEntryListClient() {
                   <span className="sr-only">Next Page</span>
                 </Button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </>
       )}
 
@@ -801,10 +806,7 @@ export default function BeverageCostEntryListClient() {
             </DialogTitle>
             <DialogDescription>
               {editingEntry
-                ? `Update details for outlet: ${
-                    outlets.find((o) => o.id === dialogOutletId)?.name ||
-                    "Unknown"
-                  } on ${
+                ? `Update beverage cost entry for ${
                     dialogDate && isValid(dialogDate)
                       ? format(dialogDate, "PPP")
                       : "selected date"
@@ -814,9 +816,9 @@ export default function BeverageCostEntryListClient() {
           </DialogHeader>
 
           <div className="flex-grow min-h-0 overflow-y-auto">
-            {isClient && (outlets.length > 0 || isLoadingOutlets) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6 pb-4 border-b">
-                <div>
+            {isClient && (
+              <div className="p-6 pb-4 border-b">
+                <div className="max-w-sm">
                   <Label
                     htmlFor="dialog-beverage-entry-date"
                     className="mb-1 block text-sm font-medium"
@@ -828,41 +830,11 @@ export default function BeverageCostEntryListClient() {
                       dialogDate && isValid(dialogDate) ? dialogDate : undefined
                     }
                     setDate={(newDate) =>
-                      newDate && isValid(newDate) && setDialogDate(newDate)
+                      newDate && isValid(newDate) && setDialogDate(normalizeDate(newDate))
                     }
                     id="dialog-beverage-entry-date"
                     className="w-full"
                   />
-                </div>
-                <div>
-                  <Label
-                    htmlFor="dialog-beverage-entry-outlet"
-                    className="mb-1 block text-sm font-medium"
-                  >
-                    Outlet
-                  </Label>
-                  {isLoadingOutlets ? (
-                    <Skeleton className="h-10 w-full bg-muted" />
-                  ) : (
-                    <Select
-                      value={dialogOutletId}
-                      onValueChange={(id) => setDialogOutletId(id)}
-                    >
-                      <SelectTrigger
-                        id="dialog-beverage-entry-outlet"
-                        className="w-full"
-                      >
-                        <SelectValue placeholder="Select an outlet" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {outlets.map((outlet) => (
-                          <SelectItem key={outlet.id} value={outlet.id}>
-                            {outlet.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
                 </div>
               </div>
             )}
@@ -870,13 +842,12 @@ export default function BeverageCostEntryListClient() {
             <div className="p-6">
               {isClient &&
               (isLoadingOutlets || isLoadingCategories) &&
-              !editingEntry &&
-              (!dialogOutletId || !(dialogDate && isValid(dialogDate))) ? (
+              !editingEntry ? (
                 <div className="flex justify-center items-center h-40">
                   <p className="text-muted-foreground">
                     {isLoadingOutlets || isLoadingCategories
                       ? "Loading selection options..."
-                      : "Please select a date and outlet above to start."}
+                      : "Please select a date to start."}
                   </p>
                 </div>
               ) : (
@@ -887,20 +858,19 @@ export default function BeverageCostEntryListClient() {
                           dialogDate instanceof Date && isValid(dialogDate)
                             ? dialogDate.toISOString()
                             : "invalid-edit-date"
-                        }-${dialogOutletId || "no-dialog-outlet"}`
+                        }`
                       : `new-${
                           dialogDate instanceof Date && isValid(dialogDate)
                             ? dialogDate.toISOString()
                             : "invalid-new-date"
-                        }-${dialogOutletId || "no-dialog-outlet"}`
+                        }`
                   }
                   selectedDate={dialogDate}
-                  selectedOutletId={
-                    dialogOutletId || (outlets.length > 0 ? outlets[0].id : "")
-                  }
+                  outlets={outlets}
                   beverageCategories={beverageCategories}
                   existingEntry={editingEntry}
                   onSuccess={onFormSuccess}
+                  user={user}
                 />
               )}
             </div>
@@ -1008,6 +978,222 @@ export default function BeverageCostEntryListClient() {
                 `Import ${importPreviewData.length} Records`
               )}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog 
+        open={isViewDialogOpen} 
+        onOpenChange={(open) => {
+          setIsViewDialogOpen(open);
+          if (!open) setViewingEntry(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col bg-card">
+          <DialogHeader className="flex-shrink-0 p-6 pb-4 border-b">
+            <DialogTitle className="font-headline text-xl flex items-center">
+              <Eye className="mr-2 h-5 w-5" />
+              Beverage Cost Entry Details
+            </DialogTitle>
+            <DialogDescription>
+              {viewingEntry ? (
+                <>
+                  Entry for {viewingEntry.date instanceof Date && isValid(viewingEntry.date)
+                    ? format(viewingEntry.date, "PPP")
+                    : "Invalid Date"} at {
+                    outlets.find((o) => o.id === viewingEntry.outletId)?.name || "Unknown Outlet"
+                  }
+                </>
+              ) : (
+                "Loading entry details..."
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex-grow min-h-0 overflow-y-auto p-6">
+            {viewingEntry ? (
+              <div className="space-y-6">
+                {/* Entry Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-muted/30">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Date</label>
+                    <div className="text-base font-medium">
+                      {viewingEntry.date instanceof Date && isValid(viewingEntry.date)
+                        ? format(viewingEntry.date, "PPP")
+                        : "Invalid Date"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Outlet</label>
+                    <div className="text-base font-medium">
+                      {(viewingEntry as any).outlet?.name || "Unknown Outlet"}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Property</label>
+                    <div className="text-base font-medium">
+                      {(viewingEntry as any).property?.name && (viewingEntry as any).property?.propertyCode
+                        ? `${(viewingEntry as any).property.name} (${(viewingEntry as any).property.propertyCode})`
+                        : (viewingEntry as any).property?.name || 
+                          (viewingEntry as any).property?.propertyCode || 
+                          `Property ${(viewingEntry as any).propertyId || 'Unknown'}`}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Total Cost</label>
+                    <div className="text-lg font-bold text-primary">
+                      ${(viewingEntry.totalBeverageCost || 0).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audit Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Creation Details */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-3">Creation Details</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Created At</label>
+                        <div className="text-sm font-medium">
+                          {viewingEntry.createdAt ? (
+                            <>
+                              <div>{format(new Date(viewingEntry.createdAt), "PPP")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(new Date(viewingEntry.createdAt), "p")}
+                              </div>
+                            </>
+                          ) : (
+                            "Not available"
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Created By</label>
+                        <div className="text-sm font-medium">
+                          {(viewingEntry as any).createdByUser ? (
+                            <>
+                              <div>{(viewingEntry as any).createdByUser.name || 'Unknown User'}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {(viewingEntry as any).createdByUser.email}
+                              </div>
+                            </>
+                          ) : (
+                            "System"
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Update Details */}
+                  <div className="p-4 border rounded-lg bg-muted/20">
+                    <h4 className="text-sm font-semibold text-muted-foreground mb-3">Last Updated</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Updated At</label>
+                        <div className="text-sm font-medium">
+                          {viewingEntry.updatedAt ? (
+                            <>
+                              <div>{format(new Date(viewingEntry.updatedAt), "PPP")}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(new Date(viewingEntry.updatedAt), "p")}
+                              </div>
+                            </>
+                          ) : (
+                            "Not available"
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground">Updated By</label>
+                        <div className="text-sm font-medium">
+                          {(viewingEntry as any).updatedByUser ? (
+                            <>
+                              <div>{(viewingEntry as any).updatedByUser.name || 'Unknown User'}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {(viewingEntry as any).updatedByUser.email}
+                              </div>
+                            </>
+                          ) : (
+                            "Same as creator"
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cost Breakdown */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Cost Breakdown</h3>
+                  {viewingEntry.details && viewingEntry.details.length > 0 ? (
+                    <div className="space-y-3">
+                      {viewingEntry.details.map((detail, index) => (
+                        <div key={detail.id || index} className="flex items-center justify-between p-3 border rounded-lg bg-card">
+                          <div className="flex-grow">
+                            <div className="font-medium">
+                              {detail.categoryName || 
+                               beverageCategories.find(c => c.id === detail.categoryId)?.name || 
+                               `Category ${detail.categoryId}`}
+                            </div>
+                            {detail.description && (
+                              <div className="text-sm text-muted-foreground mt-1">
+                                {detail.description}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-lg">
+                              ${detail.cost.toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No cost details available for this entry.
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary */}
+                <div className="border-t pt-4">
+                  <div className="flex justify-between items-center text-lg font-semibold">
+                    <span>Total Beverage Cost:</span>
+                    <span className="text-primary">
+                      ${(viewingEntry.totalBeverageCost || 0).toFixed(2)}
+                    </span>
+                  </div>
+                  {viewingEntry.details && viewingEntry.details.length > 0 && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {viewingEntry.details.length} item{viewingEntry.details.length !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center items-center h-40">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                  <p className="text-muted-foreground">Loading entry details...</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 p-6 border-t">
+            <div className="flex justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsViewDialogOpen(false)}
+                className="min-w-[100px]"
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

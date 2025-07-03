@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppFooter } from "@/components/layout/AppFooter";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { NextAuthProvider } from "@/contexts/NextAuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationToastContainer } from "@/components/notifications/NotificationToast";
@@ -69,8 +70,8 @@ export default function RootLayout({
         </head>
         <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
           <ThemeProvider>
-            <AuthProvider>
-              <NotificationProvider>
+            <NextAuthProvider>
+              <AuthProvider>
                 <div className="flex min-h-screen w-full items-center justify-center">
                   {children}
                 </div>
@@ -87,8 +88,8 @@ export default function RootLayout({
                   pauseOnHover
                   theme="light"
                 />
-              </NotificationProvider>
-            </AuthProvider>
+              </AuthProvider>
+            </NextAuthProvider>
           </ThemeProvider>
         </body>
       </html>
@@ -128,27 +129,29 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
         <ThemeProvider>
-          <AuthProvider>
-            <NotificationProvider>
+          <NextAuthProvider>
+            <AuthProvider>
             {isAuthPage ? (
               <div className="flex min-h-screen w-full items-center justify-center overflow-x-hidden">
                 {children}
               </div>
             ) : (
-              <SidebarProvider>
-                <div className="flex min-h-screen w-full overflow-x-hidden">
-                  <AppSidebar />
-                  <div className="flex flex-1 flex-col overflow-x-hidden">
-                    <AppHeader />
-                    <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full overflow-x-hidden">
-                      {children}
-                    </main>
-                    <AppFooter />
+              <NotificationProvider>
+                <SidebarProvider>
+                  <div className="flex min-h-screen w-full overflow-x-hidden">
+                    <AppSidebar />
+                    <div className="flex flex-1 flex-col overflow-x-hidden">
+                      <AppHeader />
+                      <main className="flex-grow p-4 sm:p-6 lg:p-8 max-w-none w-full overflow-x-hidden">
+                        {children}
+                      </main>
+                      <AppFooter />
+                    </div>
                   </div>
-                </div>
-              </SidebarProvider>
+                </SidebarProvider>
+                <NotificationToastContainer />
+              </NotificationProvider>
             )}
-            <NotificationToastContainer />
             <Toaster />
             <ToastContainer
               position="top-right"
@@ -162,8 +165,8 @@ export default function RootLayout({
               pauseOnHover
               theme="light"
             />
-            </NotificationProvider>
-          </AuthProvider>
+            </AuthProvider>
+          </NextAuthProvider>
         </ThemeProvider>
       </body>
       <style jsx global>{`

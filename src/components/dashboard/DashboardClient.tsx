@@ -129,6 +129,15 @@ const StatCard: React.FC<
   isLoading,
   trendData,
 }) => {
+  // Track if this is the first render to avoid animation on data updates
+  const [hasRendered, setHasRendered] = useState(false);
+  
+  useEffect(() => {
+    if (!isLoading && value && value !== "$0" && value !== "0%") {
+      setHasRendered(true);
+    }
+  }, [isLoading, value]);
+  
   // Tooltip text for each stat (customize as needed)
   const iconTooltips: Record<string, string> = {
     "Total Food Revenue": "Total revenue from food sales.",
@@ -197,7 +206,7 @@ const StatCard: React.FC<
   }
   return (
     <Card
-      className="shadow-md bg-card transition-transform duration-200 hover:scale-[1.03] hover:shadow-lg border-t-4 border-primary/60 animate-fade-in focus-within:scale-[1.03]"
+      className={`shadow-md bg-card transition-transform duration-200 hover:scale-[1.03] hover:shadow-lg border-t-4 border-primary/60 focus-within:scale-[1.03] ${!hasRendered ? 'animate-fade-in' : ''}`}
       tabIndex={0}
     >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -435,63 +444,171 @@ export default function DashboardClient() {
   const [isLoadingAIInsights, setIsLoadingAIInsights] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   
-  // Track notification state to prevent spam
-  const [lastNotificationTime, setLastNotificationTime] = useState<number>(0);
-  const [notifiedAnalysisIds, setNotifiedAnalysisIds] = useState<Set<string>>(new Set());
-  const [forceNotifications, setForceNotifications] = useState<boolean>(false);
+  // Track notification state for intelligent notifications with persistent storage
+  const [lastNotificationTime, setLastNotificationTime] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('costCompass_lastNotificationTime');
+      return stored ? parseInt(stored, 10) : 0;
+    }
+    return 0;
+  });
+  
+  const [notifiedAnalysisIds, setNotifiedAnalysisIds] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('costCompass_notifiedAnalysisIds');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    }
+    return new Set();
+  });
+  
+  const [sessionStartTime] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('costCompass_sessionStartTime');
+      const storedTime = stored ? parseInt(stored, 10) : 0;
+      const now = Date.now();
+      
+      // Consider it a new session if more than 1 hour has passed
+      const oneHour = 60 * 60 * 1000;
+      if (now - storedTime > oneHour) {
+        const newSessionTime = now;
+        localStorage.setItem('costCompass_sessionStartTime', newSessionTime.toString());
+        return newSessionTime;
+      }
+      return storedTime;
+    }
+    return Date.now();
+  });
+  
+  const [lastAlertLevel, setLastAlertLevel] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('costCompass_lastAlertLevel');
+    }
+    return null;
+  });
 
-  // Helper function to determine if notifications should be shown
+  // Helper functions to sync notification state with localStorage
+  const updateLastNotificationTime = (time: number) => {
+    setLastNotificationTime(time);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('costCompass_lastNotificationTime', time.toString());
+    }
+  };
+
+  const updateNotifiedAnalysisIds = (newIds: Set<string>) => {
+    setNotifiedAnalysisIds(newIds);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('costCompass_notifiedAnalysisIds', JSON.stringify(Array.from(newIds)));
+    }
+  };
+
+  const updateLastAlertLevel = (level: string | null) => {
+    setLastAlertLevel(level);
+    if (typeof window !== 'undefined') {
+      if (level) {
+        localStorage.setItem('costCompass_lastAlertLevel', level);
+      } else {
+        localStorage.removeItem('costCompass_lastAlertLevel');
+      }
+    }
+  };
+
+  // Clean up old notification data (older than 24 hours)
+  const cleanupOldNotificationData = () => {
+    if (typeof window !== 'undefined') {
+      const now = Date.now();
+      const oneDayAgo = now - (24 * 60 * 60 * 1000);
+      
+      // Clean up old analysis IDs (keep only recent ones)
+      const stored = localStorage.getItem('costCompass_notifiedAnalysisIds');
+      if (stored) {
+        try {
+          const parsedIds = JSON.parse(stored);
+          // For now, we'll keep all IDs but this could be improved to include timestamps
+          // This is a simple cleanup that runs on component mount
+          if (parsedIds.length > 50) { // Keep only last 50 analyses
+            const recentIds = parsedIds.slice(-50);
+            localStorage.setItem('costCompass_notifiedAnalysisIds', JSON.stringify(recentIds));
+            setNotifiedAnalysisIds(new Set(recentIds));
+          }
+        } catch (error) {
+          console.warn('Error cleaning up notification data:', error);
+          localStorage.removeItem('costCompass_notifiedAnalysisIds');
+          setNotifiedAnalysisIds(new Set());
+        }
+      }
+      
+      // Clean up old session if more than 24 hours
+      const lastNotification = localStorage.getItem('costCompass_lastNotificationTime');
+      if (lastNotification && (now - parseInt(lastNotification, 10)) > oneDayAgo) {
+        localStorage.removeItem('costCompass_lastNotificationTime');
+        localStorage.removeItem('costCompass_lastAlertLevel');
+        setLastNotificationTime(0);
+        setLastAlertLevel(null);
+      }
+    }
+  };
+
+  // Intelligent notification system - user-friendly and context-aware
   const shouldShowNotifications = (analysisResult: DashboardAdvisorOutput | any, outletName: string): boolean => {
     const now = Date.now();
     const timeSinceLastNotification = now - lastNotificationTime;
-    const minNotificationInterval = 5 * 60 * 1000; // 5 minutes
+    const timeSinceSessionStart = now - sessionStartTime;
+    const minNotificationInterval = 15 * 60 * 1000; // 15 minutes (more reasonable)
+    const newSessionThreshold = 5 * 60 * 1000; // 5 minutes = fresh session
     
     // Create unique ID for this analysis context
     const analysisId = `${selectedPropertyId}-${selectedOutletId}-${dateRange?.from?.toISOString()}-${dateRange?.to?.toISOString()}`;
     
-    // If notifications are forced (user clicked "Get Alerts" button), always show them
-    if (forceNotifications) {
-      console.log(`Showing forced notifications for ${outletName} - user requested alerts`);
-      setLastNotificationTime(now);
-      setNotifiedAnalysisIds(prev => new Set([...prev, analysisId]));
-      setForceNotifications(false); // Reset flag after use
+    // Only show notifications for significant alerts
+    if (!analysisResult?.alertLevel || !['medium', 'high', 'critical'].includes(analysisResult.alertLevel)) {
+      console.log(`Skipping notifications: alert level '${analysisResult?.alertLevel}' not significant enough`);
+      return false;
+    }
+    
+    // Scenario 1: First meaningful analysis in a fresh session (within 5 minutes of page load)
+    const isNewSession = timeSinceSessionStart < newSessionThreshold;
+    if (isNewSession && !notifiedAnalysisIds.has(analysisId)) {
+      console.log(`Showing welcome notification for ${outletName} - fresh session with ${analysisResult.alertLevel} alert`);
+      updateLastNotificationTime(now);
+      updateNotifiedAnalysisIds(new Set([...notifiedAnalysisIds, analysisId]));
+      updateLastAlertLevel(analysisResult.alertLevel);
       return true;
     }
     
-    // Don't show notifications if:
-    // 1. We've already notified for this exact analysis context
+    // Scenario 2: Alert level has escalated (worse situation)
+    const alertLevelHierarchy = { 'low': 1, 'medium': 2, 'high': 3, 'critical': 4 };
+    const currentAlertValue = alertLevelHierarchy[analysisResult.alertLevel] || 0;
+    const lastAlertValue = alertLevelHierarchy[lastAlertLevel] || 0;
+    
+    if (lastAlertLevel && currentAlertValue > lastAlertValue) {
+      console.log(`Alert escalation detected: ${lastAlertLevel} → ${analysisResult.alertLevel} for ${outletName}`);
+      updateLastNotificationTime(now);
+      updateNotifiedAnalysisIds(new Set([...notifiedAnalysisIds, analysisId]));
+      updateLastAlertLevel(analysisResult.alertLevel);
+      return true;
+    }
+    
+    // Update alert level tracking (even if not notifying)
+    if (analysisResult.alertLevel !== lastAlertLevel) {
+      updateLastAlertLevel(analysisResult.alertLevel);
+    }
+    
+    // Scenario 3: Been a while since last notification and this is a critical issue
+    if (analysisResult.alertLevel === 'critical' && timeSinceLastNotification > minNotificationInterval) {
+      console.log(`Showing critical alert notification for ${outletName} - critical issue needs attention`);
+      updateLastNotificationTime(now);
+      updateNotifiedAnalysisIds(new Set([...notifiedAnalysisIds, analysisId]));
+      return true;
+    }
+    
+    // Skip notification - already handled or not urgent enough
     if (notifiedAnalysisIds.has(analysisId)) {
       console.log("Skipping notifications: already notified for this analysis context");
-      return false;
+    } else if (timeSinceLastNotification < minNotificationInterval) {
+      console.log(`Skipping notifications: only ${Math.round(timeSinceLastNotification / 1000 / 60)}m since last notification`);
     }
     
-    // 2. Too recent since last notification (rate limiting)
-    if (timeSinceLastNotification < minNotificationInterval) {
-      console.log(`Skipping notifications: only ${Math.round(timeSinceLastNotification / 1000)}s since last notification`);
-      return false;
-    }
-    
-    // 3. Alert level is not significant enough (only show for medium+ alerts)
-    if (analysisResult?.alertLevel && !['medium', 'high', 'critical'].includes(analysisResult.alertLevel)) {
-      console.log(`Skipping notifications: alert level '${analysisResult.alertLevel}' not significant enough`);
-      return false;
-    }
-    
-    console.log(`Showing notifications for ${outletName} - significant analysis with alert level: ${analysisResult?.alertLevel}`);
-    
-    // Update tracking state
-    setLastNotificationTime(now);
-    setNotifiedAnalysisIds(prev => new Set([...prev, analysisId]));
-    
-    return true;
-  };
-
-  // Function to manually trigger notifications
-  const requestNotifications = () => {
-    setForceNotifications(true);
-    // Trigger data refresh to re-run analysis and notifications
-    setIsLoadingData(true);
-    setIsLoadingAIInsights(true);
+    return false;
   };
 
   // Generate welcome message based on user role and property access
@@ -519,6 +636,11 @@ export default function DashboardClient() {
       from: subDays(new Date(), 29),
       to: new Date(),
     });
+  }, []);
+
+  // Clean up old notification data on component mount
+  useEffect(() => {
+    cleanupOldNotificationData();
   }, []);
 
   useEffect(() => {
@@ -1458,6 +1580,14 @@ export default function DashboardClient() {
     isLoading: boolean;
     itemType: "Food" | "Beverage";
   }> = ({ title, icon: Icon, data, isLoading, itemType }) => {
+    // Track if this is the first render to avoid animation on data updates
+    const [hasRendered, setHasRendered] = useState(false);
+    
+    useEffect(() => {
+      if (!isLoading && data) {
+        setHasRendered(true);
+      }
+    }, [isLoading, data]);
     // For progress bar calculation
     const maxValue = data && data.length > 0 ? data[0].value : 1;
     if (isLoading || dateRange === undefined) {
@@ -1484,7 +1614,7 @@ export default function DashboardClient() {
       );
     }
     return (
-      <Card className="shadow-md bg-card transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg border-t-4 border-primary/60 animate-fade-in">
+      <Card className={`shadow-md bg-card transition-transform duration-200 hover:scale-[1.02] hover:shadow-lg border-t-4 border-primary/60 ${!hasRendered ? 'animate-fade-in' : ''}`}>
         <CardHeader className="pb-3">
           <CardTitle className="font-headline text-lg flex items-center">
             <Icon className="mr-2 h-5 w-5 text-primary/80" />
@@ -1513,7 +1643,7 @@ export default function DashboardClient() {
             <ul className="space-y-2.5">
               {data.map((cat, idx) => (
                 <li
-                  key={`${cat.name}-${idx}-${cat.value}`}
+                  key={`${cat.name}-${idx}`}
                   className="flex justify-between items-center text-sm group hover:bg-muted/60 rounded px-2 py-1 transition cursor-pointer"
                   tabIndex={0}
                   title={`$${cat.value.toFixed(2)} (${(
@@ -1717,6 +1847,7 @@ export default function DashboardClient() {
       {/* Top Categories Row */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         <TopCategoryList
+          key="food-categories"
           title="Top Food Categories"
           icon={Apple}
           data={dashboardData?.topFoodCategories}
@@ -1724,6 +1855,7 @@ export default function DashboardClient() {
           itemType="Food"
         />
         <TopCategoryList
+          key="beverage-categories"
           title="Top Beverage Categories"
           icon={Martini}
           data={dashboardData?.topBeverageCategories}
@@ -1760,7 +1892,6 @@ export default function DashboardClient() {
           // The useEffect will automatically trigger when these states change
         }}
         showRefreshButton={!isLoadingAIInsights}
-        onRequestNotifications={requestNotifications}
       />
 
       {/* Charts Grid */}

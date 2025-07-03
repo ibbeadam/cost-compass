@@ -32,6 +32,7 @@ import {
 import type { CostAnalysisByCategoryReport } from "@/types";
 import { cn, formatNumber } from "@/lib/utils";
 import { format } from "date-fns";
+import { safeFormatDate } from "@/lib/date-utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -208,7 +209,7 @@ export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, 
         <div className="flex items-center justify-center gap-4 text-muted-foreground">
           <div className="flex items-center gap-1">
             <Calendar className="h-4 w-4" />
-            <span>{format(data.dateRange.from, "MMM dd, yyyy")} - {format(data.dateRange.to, "MMM dd, yyyy")}</span>
+            <span>{safeFormatDate(data.dateRange.from)} - {safeFormatDate(data.dateRange.to)}</span>
           </div>
           <div className="flex items-center gap-1">
             <Building2 className="h-4 w-4" />
