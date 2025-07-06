@@ -10,7 +10,8 @@ import { auditReportExport } from "@/lib/audit-middleware";
 export async function getMonthlyProfitLossReportAction(
   year: number,
   month: number, // 0-indexed (0 for January, 11 for December)
-  taxRate?: number // Optional tax rate (as percentage, e.g., 25 for 25%)
+  taxRate?: number, // Optional tax rate (as percentage, e.g., 25 for 25%)
+  propertyId?: number | string // Optional property filter
 ): Promise<any> {
   const startDate = startOfMonth(new Date(year, month));
   const endDate = endOfMonth(new Date(year, month));
@@ -20,24 +21,52 @@ export async function getMonthlyProfitLossReportAction(
     if (!currentUser) {
       throw new Error("Authentication required");
     }
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Monthly P&L Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      year,
+      month
+    });
+
     // Get all financial summaries for the month
-    const summaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const summariesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+
+    // Add property filtering if specified
+    if (numericPropertyId) {
+      summariesWhere.propertyId = numericPropertyId;
+    }
+
+    const summaries = await prisma.dailyFinancialSummary.findMany({
+      where: summariesWhere,
     });
 
     // Get outlet-wise food cost entries
-    const foodCostEntries = await prisma.foodCostEntry.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const foodCostEntriesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+
+    // Add property filtering if specified
+    if (numericPropertyId) {
+      foodCostEntriesWhere.propertyId = numericPropertyId;
+    }
+
+    const foodCostEntries = await prisma.foodCostEntry.findMany({
+      where: foodCostEntriesWhere,
       include: {
         outlet: true,
         details: {
@@ -49,13 +78,20 @@ export async function getMonthlyProfitLossReportAction(
     });
 
     // Get outlet-wise beverage cost entries
-    const beverageCostEntries = await prisma.beverageCostEntry.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const beverageCostEntriesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+
+    // Add property filtering if specified
+    if (numericPropertyId) {
+      beverageCostEntriesWhere.propertyId = numericPropertyId;
+    }
+
+    const beverageCostEntries = await prisma.beverageCostEntry.findMany({
+      where: beverageCostEntriesWhere,
       include: {
         outlet: true,
         details: {
@@ -283,6 +319,10 @@ export async function getMonthlyProfitLossReportAction(
       totalCoBeverage,
       totalOtherBeverageAdjustment,
       outletExpenses: Array.from(outletExpenses.values()),
+      propertyInfo: numericPropertyId ? await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: { id: true, name: true, propertyCode: true }
+      }).catch(() => null) : null,
     };
   } catch (error) {
     console.error("Error generating monthly profit loss report:", error);
@@ -293,17 +333,38 @@ export async function getMonthlyProfitLossReportAction(
 export async function getBudgetVsActualsReportAction(
   startDate: Date,
   endDate: Date,
-  outletId?: string
+  outletId?: string,
+  propertyId?: number | string
 ): Promise<BudgetVsActualsReport> {
   try {
-    // Get all financial summaries for the date range (no outlet filtering since DFS is aggregated)
-    const summaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Budget vs Actuals Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      startDate,
+      endDate
+    });
+
+    // Get financial summaries for the date range with property filtering
+    const financialSummariesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+    
+    if (numericPropertyId) {
+      financialSummariesWhere.propertyId = numericPropertyId;
+    }
+
+    const summaries = await prisma.dailyFinancialSummary.findMany({
+      where: financialSummariesWhere,
       orderBy: {
         date: "asc",
       },
@@ -321,25 +382,37 @@ export async function getBudgetVsActualsReportAction(
       outletName = outlet?.name;
 
       // Get outlet-specific food costs
-      const outletFoodEntries = await prisma.foodCostEntry.findMany({
-        where: {
-          outletId: parseInt(outletId),
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
+      const outletFoodWhere: any = {
+        outletId: parseInt(outletId),
+        date: {
+          gte: startDate,
+          lte: endDate,
         },
+      };
+      
+      if (numericPropertyId) {
+        outletFoodWhere.propertyId = numericPropertyId;
+      }
+
+      const outletFoodEntries = await prisma.foodCostEntry.findMany({
+        where: outletFoodWhere,
       });
 
       // Get outlet-specific beverage costs
-      const outletBeverageEntries = await prisma.beverageCostEntry.findMany({
-        where: {
-          outletId: parseInt(outletId),
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
+      const outletBeverageWhere: any = {
+        outletId: parseInt(outletId),
+        date: {
+          gte: startDate,
+          lte: endDate,
         },
+      };
+      
+      if (numericPropertyId) {
+        outletBeverageWhere.propertyId = numericPropertyId;
+      }
+
+      const outletBeverageEntries = await prisma.beverageCostEntry.findMany({
+        where: outletBeverageWhere,
       });
 
       outletFoodCost = outletFoodEntries.reduce((sum, entry) => sum + entry.totalFoodCost, 0);
@@ -378,6 +451,19 @@ export async function getBudgetVsActualsReportAction(
     // Calculate actual cost percentages
     const foodActualCostPercentage = foodActualRevenue > 0 ? (foodActualCost / foodActualRevenue) * 100 : 0;
     const beverageActualCostPercentage = beverageActualRevenue > 0 ? (beverageActualCost / beverageActualRevenue) * 100 : 0;
+
+    // Fetch property info if needed
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      propertyInfo = await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: {
+          id: true,
+          name: true,
+          propertyCode: true,
+        },
+      });
+    }
 
     return {
       dateRange: { from: startDate, to: endDate },
@@ -452,6 +538,7 @@ export async function getBudgetVsActualsReportAction(
         beverageCostControl: beverageBudgetedCostPercentage > 0 ? (beverageActualCostPercentage / beverageBudgetedCostPercentage) * 100 : 0,
         overallPerformance: 75, // Placeholder calculation
       },
+      propertyInfo,
     };
   } catch (error) {
     console.error("Error generating budget vs actuals report:", error);
@@ -464,9 +551,24 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
   startDate: Date,
   endDate: Date,
   outletId?: string,
-  taxRate?: number // Optional tax rate (as percentage)
+  taxRate?: number, // Optional tax rate (as percentage)
+  propertyId?: number | string // Optional property filter
 ): Promise<any[]> {
   try {
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Monthly P&L Report Date Range Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      startDate,
+      endDate
+    });
+
     const whereClause: any = {
       date: {
         gte: startDate,
@@ -476,6 +578,11 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
 
     if (outletId) {
       whereClause.outletId = outletId;
+    }
+
+    // Add property filtering if specified
+    if (numericPropertyId) {
+      whereClause.propertyId = numericPropertyId;
     }
 
     const summaries = await prisma.dailyFinancialSummary.findMany({
@@ -507,7 +614,7 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
       const monthIndex = parseInt(month, 10) - 1; // Convert to 0-indexed
       const yearNum = parseInt(year);
       
-      const report = await getMonthlyProfitLossReportAction(yearNum, monthIndex, taxRate);
+      const report = await getMonthlyProfitLossReportAction(yearNum, monthIndex, taxRate, propertyId);
       reports.push(report);
     }
 
@@ -521,18 +628,39 @@ export async function getMonthlyProfitLossReportForDateRangeAction(
 export async function getDailyRevenueTrendsReportAction(
   startDate: Date,
   endDate: Date,
-  outletId?: string
+  outletId?: string,
+  propertyId?: number | string
 ): Promise<DailyRevenueTrendsReport> {
   try {
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Daily Revenue Trends Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      startDate,
+      endDate
+    });
+
     // Note: dailyFinancialSummary contains aggregated data for all outlets
     // outletId filtering is not available at this level since it's already aggregated
-    const summaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const financialSummariesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+    
+    if (numericPropertyId) {
+      financialSummariesWhere.propertyId = numericPropertyId;
+    }
+
+    const summaries = await prisma.dailyFinancialSummary.findMany({
+      where: financialSummariesWhere,
       orderBy: {
         date: "asc",
       },
@@ -657,6 +785,19 @@ export async function getDailyRevenueTrendsReportAction(
       return "stable";
     };
 
+    // Fetch property info if needed
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      propertyInfo = await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: {
+          id: true,
+          name: true,
+          propertyCode: true,
+        },
+      });
+    }
+
     return {
       dateRange: { from: startDate, to: endDate },
       outletName: outletId ? `Outlet ${outletId}` : 'All Outlets', // Note: filtering not supported at summary level
@@ -730,6 +871,7 @@ export async function getDailyRevenueTrendsReportAction(
           ...(revenueGrowthTrend < 0 ? ['Revenue trend is declining - review pricing and menu offerings'] : []),
         ],
       },
+      propertyInfo,
     };
   } catch (error) {
     console.error("Error generating daily revenue trends report:", error);
@@ -738,10 +880,23 @@ export async function getDailyRevenueTrendsReportAction(
 }
 
 export async function getRealTimeKPIDashboardAction(
-  outletId?: string
+  outletId?: string,
+  propertyId?: number | string
 ): Promise<any> {
   try {
-    console.log("Starting Real-Time KPI Dashboard generation", { outletId });
+    console.log("Starting Real-Time KPI Dashboard generation", { outletId, propertyId });
+    
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Real-Time KPI Dashboard Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId
+    });
     
     const today = new Date();
     const startOfToday = startOfYear(today);
@@ -751,37 +906,55 @@ export async function getRealTimeKPIDashboardAction(
     const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
     
-    const todaySummary = await prisma.dailyFinancialSummary.findFirst({
-      where: {
-        date: {
-          gte: todayStart,
-          lte: todayEnd,
-        },
+    const todayWhere: any = {
+      date: {
+        gte: todayStart,
+        lte: todayEnd,
       },
+    };
+    
+    if (numericPropertyId) {
+      todayWhere.propertyId = numericPropertyId;
+    }
+
+    const todaySummary = await prisma.dailyFinancialSummary.findFirst({
+      where: todayWhere,
     });
 
     // Get month-to-date summaries
     const startOfCurrentMonth = startOfMonth(today);
-    const monthlySummaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startOfCurrentMonth,
-          lte: today,
-        },
+    const monthlyWhere: any = {
+      date: {
+        gte: startOfCurrentMonth,
+        lte: today,
       },
+    };
+    
+    if (numericPropertyId) {
+      monthlyWhere.propertyId = numericPropertyId;
+    }
+
+    const monthlySummaries = await prisma.dailyFinancialSummary.findMany({
+      where: monthlyWhere,
       orderBy: { date: 'asc' },
     });
 
     // Get previous month data for comparison
     const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
     const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-    const lastMonthSummaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: lastMonth,
-          lte: endOfLastMonth,
-        },
+    const lastMonthWhere: any = {
+      date: {
+        gte: lastMonth,
+        lte: endOfLastMonth,
       },
+    };
+    
+    if (numericPropertyId) {
+      lastMonthWhere.propertyId = numericPropertyId;
+    }
+
+    const lastMonthSummaries = await prisma.dailyFinancialSummary.findMany({
+      where: lastMonthWhere,
     });
 
     // Calculate current period metrics
@@ -939,6 +1112,19 @@ export async function getRealTimeKPIDashboardAction(
       alertsCount: alerts.length
     });
 
+    // Fetch property info if needed
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      propertyInfo = await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: {
+          id: true,
+          name: true,
+          propertyCode: true,
+        },
+      });
+    }
+
     return {
       lastUpdated: new Date(),
       outletName,
@@ -969,6 +1155,7 @@ export async function getRealTimeKPIDashboardAction(
         revenueGrowth,
         costTrend,
       },
+      propertyInfo,
     };
   } catch (error) {
     console.error("Error generating real-time KPI dashboard:", error);
@@ -979,13 +1166,27 @@ export async function getRealTimeKPIDashboardAction(
 export async function getForecastingReportAction(
   historicalPeriod: { from: Date; to: Date },
   forecastPeriod: { from: Date; to: Date },
-  outletId?: string
+  outletId?: string,
+  propertyId?: number | string
 ): Promise<any> {
   try {
     console.log("Starting Forecasting Report generation", { 
       historicalPeriod, 
       forecastPeriod, 
-      outletId 
+      outletId,
+      propertyId 
+    });
+    
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Forecasting Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId
     });
     
     // Extract dates from the period objects
@@ -993,13 +1194,19 @@ export async function getForecastingReportAction(
     const endDate = historicalPeriod.to;
     
     // Get historical data for the specified period
-    const summaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const historicalWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+    
+    if (numericPropertyId) {
+      historicalWhere.propertyId = numericPropertyId;
+    }
+
+    const summaries = await prisma.dailyFinancialSummary.findMany({
+      where: historicalWhere,
       orderBy: {
         date: "asc",
       },
@@ -1201,6 +1408,19 @@ export async function getForecastingReportAction(
 
     const outletName = outletId ? `Outlet ${outletId}` : 'All Outlets';
 
+    // Fetch property info if needed
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      propertyInfo = await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: {
+          id: true,
+          name: true,
+          propertyCode: true,
+        },
+      });
+    }
+
     console.log("Forecasting Report calculation completed", {
       historicalDays: summaries.length,
       averageDailyRevenue,
@@ -1285,6 +1505,7 @@ export async function getForecastingReportAction(
       // Top-level properties expected by UI
       riskFactors,
       recommendations,
+      propertyInfo,
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -1299,7 +1520,8 @@ export async function getForecastingReportAction(
 
 export async function getYearOverYearReportAction(
   currentYear: number,
-  previousYear: number
+  previousYear: number,
+  propertyId?: number | string
 ): Promise<any> {
   try {
     console.log("Starting Year-over-Year report generation", { 
@@ -1337,6 +1559,20 @@ export async function getYearOverYearReportAction(
     
     console.log("Using years:", { validCurrentYear, validPreviousYear });
 
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Year-over-Year Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      validCurrentYear,
+      validPreviousYear
+    });
+
     console.log("Creating date ranges...");
     // Get data for both years using validated numbers
     const currentYearStart = startOfYear(new Date(validCurrentYear, 0));
@@ -1352,22 +1588,33 @@ export async function getYearOverYearReportAction(
     });
 
     console.log("Fetching financial summaries...");
+    
+    // Build where clauses with property filtering
+    const currentYearWhere: any = {
+      date: {
+        gte: currentYearStart,
+        lte: currentYearEnd,
+      },
+    };
+    
+    const previousYearWhere: any = {
+      date: {
+        gte: previousYearStart,
+        lte: previousYearEnd,
+      },
+    };
+    
+    if (numericPropertyId) {
+      currentYearWhere.propertyId = numericPropertyId;
+      previousYearWhere.propertyId = numericPropertyId;
+    }
+
     const [currentYearSummaries, previousYearSummaries] = await Promise.all([
       prisma.dailyFinancialSummary.findMany({
-        where: {
-          date: {
-            gte: currentYearStart,
-            lte: currentYearEnd,
-          },
-        },
+        where: currentYearWhere,
       }),
       prisma.dailyFinancialSummary.findMany({
-        where: {
-          date: {
-            gte: previousYearStart,
-            lte: previousYearEnd,
-          },
-        },
+        where: previousYearWhere,
       }),
     ]);
     
@@ -1898,6 +2145,19 @@ export async function getYearOverYearReportAction(
 
     console.log("Preparing comprehensive return data...");
     
+    // Fetch property info if needed
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      propertyInfo = await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: {
+          id: true,
+          name: true,
+          propertyCode: true,
+        },
+      });
+    }
+    
     return {
       currentYearData: {
         year: validCurrentYear,
@@ -1962,6 +2222,7 @@ export async function getYearOverYearReportAction(
         }
       },
       insights,
+      propertyInfo,
     };
   } catch (error) {
     console.error("Error generating year over year report:", error);

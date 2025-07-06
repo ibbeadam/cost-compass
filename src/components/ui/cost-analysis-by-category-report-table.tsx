@@ -38,7 +38,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 
 interface CostAnalysisByCategoryReportTableProps {
-  data: CostAnalysisByCategoryReport | null;
+  data: (CostAnalysisByCategoryReport & { propertyInfo?: { id: number; name: string; propertyCode: string } | null }) | null;
   outletId?: string;
   outletName?: string;
   isLoading?: boolean;
@@ -164,6 +164,20 @@ export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, 
     );
   }
 
+  const getPropertySuffix = () => {
+    if (data?.propertyInfo?.name) {
+      return ` - ${data.propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getDateRangeDisplay = () => {
+    if (!data?.dateRange?.from || !data?.dateRange?.to) {
+      return "";
+    }
+    return ` | ${format(data.dateRange.from, "MMM dd, yyyy")} - ${format(data.dateRange.to, "MMM dd, yyyy")}`;
+  };
+
   const renderCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
     return `$${formatNumber(value)}`;
@@ -190,38 +204,6 @@ export function CostAnalysisByCategoryReportTable({ data, outletId, outletName, 
 
   return (
     <div className="space-y-6">
-      {/* Header Section */}
-      <div className="text-center space-y-2">
-        <div className="flex items-center justify-center gap-2">
-          <h2 className="text-3xl font-bold text-foreground">
-            Cost Analysis by Category Report
-            {isOutletSpecific && (
-              <span className="block text-xl font-normal text-muted-foreground mt-1">
-                for {outletName}
-              </span>
-            )}
-          </h2>
-          <div className="flex items-center gap-1 text-green-600">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-xs font-medium">Live Data</span>
-          </div>
-        </div>
-        <div className="flex items-center justify-center gap-4 text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <Calendar className="h-4 w-4" />
-            <span>{safeFormatDate(data.dateRange.from)} - {safeFormatDate(data.dateRange.to)}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Building2 className="h-4 w-4" />
-            <span>{daysInRange} days</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <Activity className="h-4 w-4" />
-            <span>Generated at {format(new Date(), "HH:mm:ss")}</span>
-          </div>
-        </div>
-      </div>
-
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 

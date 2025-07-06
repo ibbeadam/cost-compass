@@ -144,28 +144,102 @@ export async function PUT(
 
     const body = await request.json();
     
-    // Update the property
-    const property = await updatePropertyAction(propertyId, body);
+    console.log("Property update request:", {
+      propertyId,
+      userId: user.id,
+      bodyKeys: Object.keys(body),
+      body: body
+    });
+    
+    // Try updating the property via server action first
+    let property;
+    try {
+      property = await updatePropertyAction(propertyId, body);
+      console.log("Server action update successful:", { 
+        propertyId: property.id, 
+        name: property.name 
+      });
+    } catch (actionError) {
+      console.error("Server action failed, trying direct database update:", actionError?.message);
+      
+      // Fallback to direct database update if server action fails
+      const { prisma } = await import("@/lib/prisma");
+      
+      // Clean the body data
+      const updateData = Object.fromEntries(
+        Object.entries(body).filter(([_, value]) => value !== undefined && value !== "")
+      );
+      
+      property = await prisma.property.update({
+        where: { id: propertyId },
+        data: {
+          ...updateData,
+          updatedAt: new Date()
+        },
+        include: {
+          owner: {
+            select: { id: true, name: true, email: true }
+          },
+          manager: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      });
+      
+      console.log("Direct database update successful:", { 
+        propertyId: property.id, 
+        name: property.name 
+      });
+    }
 
     return NextResponse.json({ property });
   } catch (error) {
-    console.error("Error updating property:", error);
+    console.error("Error updating property:", {
+      propertyId,
+      userId: user?.id,
+      error: error?.message || 'Unknown error',
+      stack: error?.stack,
+      errorType: error?.constructor?.name,
+      errorCode: error?.code
+    });
     
-    if (error instanceof Error && error.message.includes("not found")) {
-      return NextResponse.json({ error: "Property not found" }, { status: 404 });
-    }
-    
-    if (error instanceof Error && error.message.includes("already exists")) {
+    // Ensure we always return a valid JSON response
+    try {
+      if (error instanceof Error && error.message.includes("not found")) {
+        return NextResponse.json({ error: "Property not found" }, { status: 404 });
+      }
+      
+      if (error instanceof Error && error.message.includes("already exists")) {
+        return NextResponse.json(
+          { error: "Property code already exists" },
+          { status: 409 }
+        );
+      }
+      
+      // Check for specific error types
+      if (error?.code === 'P2002') {
+        return NextResponse.json(
+          { error: "Property code already exists" },
+          { status: 409 }
+        );
+      }
+      
+      if (error?.code === 'P2025') {
+        return NextResponse.json({ error: "Property not found" }, { status: 404 });
+      }
+      
       return NextResponse.json(
-        { error: "Property code already exists" },
-        { status: 409 }
+        { 
+          error: "Failed to update property", 
+          details: error?.message || 'Unknown error',
+          code: error?.code || 'UNKNOWN'
+        },
+        { status: 500 }
       );
+    } catch (responseError) {
+      console.error("Failed to create error response:", responseError);
+      return new Response('Internal Server Error', { status: 500 });
     }
-    
-    return NextResponse.json(
-      { error: "Failed to update property" },
-      { status: 500 }
-    );
   }
 }
 

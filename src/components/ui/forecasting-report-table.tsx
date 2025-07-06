@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 
 interface ForecastingReportTableProps {
-  data: ForecastingReport | null;
+  data: (ForecastingReport & { propertyInfo?: { id: number; name: string; propertyCode: string } | null }) | null;
 }
 
 export function ForecastingReportTable({ data }: ForecastingReportTableProps) {
@@ -55,10 +55,21 @@ export function ForecastingReportTable({ data }: ForecastingReportTableProps) {
     return "text-destructive";
   };
 
+  const getPropertySuffix = () => {
+    if (data?.propertyInfo?.name) {
+      return ` - ${data.propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getDateRangeDisplay = () => {
+    return ` | ${data.dateRange.from.toLocaleDateString()} - ${data.forecastPeriod.to.toLocaleDateString()}`;
+  };
+
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <h2 className="text-2xl font-bold text-foreground">Revenue & Cost Forecasting</h2>
+        <h2 className="text-2xl font-bold text-foreground">Revenue & Cost Forecasting{getPropertySuffix()}{getDateRangeDisplay()}</h2>
         <p className="text-muted-foreground">
           {data.outletName && `${data.outletName} • `}
           Historical: {data.dateRange.from.toLocaleDateString()} - {data.dateRange.to.toLocaleDateString()}

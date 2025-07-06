@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 
 interface YearOverYearReportTableProps {
-  data: YearOverYearReport | null;
+  data: (YearOverYearReport & { propertyInfo?: { id: number; name: string; propertyCode: string } | null }) | null;
 }
 
 export function YearOverYearReportTable({ data }: YearOverYearReportTableProps) {
@@ -40,6 +40,17 @@ export function YearOverYearReportTable({ data }: YearOverYearReportTableProps) 
       </p>
     );
   }
+
+  const getPropertySuffix = () => {
+    if (data?.propertyInfo?.name) {
+      return ` - ${data.propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getYearRangeDisplay = () => {
+    return ` | ${data.currentYearData.year} vs ${data.previousYearData.year}`;
+  };
 
   const renderCurrency = (value: number) => {
     return `$${formatNumber(value)}`;
@@ -81,13 +92,6 @@ export function YearOverYearReportTable({ data }: YearOverYearReportTableProps) 
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-foreground">Year-over-Year Performance Report</h2>
-        <p className="text-muted-foreground">
-          {data.currentYearData.year} vs {data.previousYearData.year} Comparison
-        </p>
-      </div>
-
       {/* High-Level Metrics Comparison */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>

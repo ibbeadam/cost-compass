@@ -24,13 +24,27 @@ import { Badge } from "@/components/ui/badge";
 import { DetailedFoodCostReportTable } from "./detailed-food-cost-report-table"; // Import for individual outlet reports
 
 interface CombinedFoodCostReportTableProps {
-  data: DetailedFoodCostReportResponse;
+  data: DetailedFoodCostReportResponse & { propertyInfo?: { id: number; name: string; propertyCode: string } | null };
 }
 
 export function CombinedFoodCostReportTable({
   data,
 }: CombinedFoodCostReportTableProps) {
-  const { overallSummaryReport, outletReports } = data;
+  const { overallSummaryReport, outletReports, propertyInfo } = data;
+
+  const getPropertySuffix = () => {
+    if (propertyInfo?.name) {
+      return ` - ${propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getDateRangeDisplay = () => {
+    if (!overallSummaryReport.dateRange?.from || !overallSummaryReport.dateRange?.to) {
+      return "";
+    }
+    return ` | ${formatDateFn(overallSummaryReport.dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(overallSummaryReport.dateRange.to, "MMM dd, yyyy")}`;
+  };
 
   const renderCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
@@ -63,12 +77,8 @@ export function CombinedFoodCostReportTable({
       <Card className="shadow-lg border-2 border-blue-200">
         <CardHeader className="bg-gradient-to-r from-blue-100 to-indigo-100 border-b">
           <CardTitle className="text-2xl font-bold text-blue-800">
-            Overall Summary - All Outlets
+            Overall Summary - All Outlets{getPropertySuffix()}
           </CardTitle>
-          <div className="text-sm text-blue-600">
-            {formatDateFn(overallSummaryReport.dateRange.from, "MMM dd, yyyy")}{" "}
-            - {formatDateFn(overallSummaryReport.dateRange.to, "MMM dd, yyyy")}
-          </div>
         </CardHeader>
         <CardContent className="p-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 min-w-0">

@@ -11,6 +11,7 @@ declare module "next-auth" {
       role: UserRole;
       department?: string;
       phoneNumber?: string;
+      profileImage?: string | null;
       permissions: string[];
       lastLoginAt?: string;
       twoFactorEnabled?: boolean;
@@ -32,6 +33,7 @@ declare module "next-auth" {
     role: UserRole;
     department?: string;
     phoneNumber?: string;
+    profileImage?: string | null;
     lastLoginAt?: string;
     twoFactorEnabled?: boolean;
     passwordExpired?: boolean;
@@ -51,6 +53,7 @@ declare module "next-auth/jwt" {
     role: UserRole;
     department?: string;
     phoneNumber?: string;
+    profileImage?: string | null;
     permissions: string[];
     lastLoginAt?: string;
     twoFactorEnabled?: boolean;

@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 
 interface RealTimeKPIDashboardProps {
-  data: RealTimeKPIDashboard | null;
+  data: (RealTimeKPIDashboard & { propertyInfo?: { id: number; name: string; propertyCode: string } | null }) | null;
 }
 
 export function RealTimeKPIDashboardComponent({ data }: RealTimeKPIDashboardProps) {
@@ -47,6 +47,17 @@ export function RealTimeKPIDashboardComponent({ data }: RealTimeKPIDashboardProp
 
   const renderPercentage = (value: number) => {
     return `${formatNumber(value)}%`;
+  };
+
+  const getPropertySuffix = () => {
+    if (data?.propertyInfo?.name) {
+      return ` - ${data.propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getCurrentDateTime = () => {
+    return ` | ${data.lastUpdated.toLocaleString()}`;
   };
 
   const getStatusIcon = (status: "excellent" | "good" | "warning" | "critical") => {
@@ -99,14 +110,6 @@ export function RealTimeKPIDashboardComponent({ data }: RealTimeKPIDashboardProp
 
   return (
     <div className="space-y-6">
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-foreground">Real-Time KPI Dashboard</h2>
-        <p className="text-muted-foreground">
-          {data.outletName && `${data.outletName} • `}
-          Last updated: {data.lastUpdated.toLocaleString()}
-        </p>
-      </div>
-
       {/* Revenue KPIs */}
       <Card>
         <CardHeader>

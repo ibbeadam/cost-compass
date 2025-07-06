@@ -49,6 +49,7 @@ export function UserNav() {
   const userEmail = user?.email || "No email provided";
 
   const userAvatar =
+    user?.profileImage ||
     user?.image ||
     `https://placehold.co/40x40.png?text=${userName
       .substring(0, 2)

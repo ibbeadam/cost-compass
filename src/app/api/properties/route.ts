@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
       country: body.country,
       timeZone: body.timeZone,
       currency: body.currency,
+      logoUrl: body.logoUrl,
       ownerId: body.ownerId || parseInt(session.user.id), // Default to current user as owner
       managerId: body.managerId,
     });

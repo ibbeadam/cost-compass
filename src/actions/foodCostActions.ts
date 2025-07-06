@@ -727,7 +727,8 @@ export async function getOutletsAction() {
 export async function getDetailedFoodCostReportAction(
   startDate: Date,
   endDate: Date,
-  outletId?: number | string
+  outletId?: number | string,
+  propertyId?: number | string
 ) {
   try {
     // Handle "all" or string outletId by converting to undefined
@@ -736,21 +737,55 @@ export async function getDetailedFoodCostReportAction(
       : typeof outletId === 'string' 
       ? Number(outletId) 
       : outletId;
+
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Food Cost Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      startDate,
+      endDate
+    });
       
-    const entries = await getFoodCostEntriesByDateRangeAction(startDate, endDate, numericOutletId);
+    const entries = await getFoodCostEntriesByDateRangeAction(startDate, endDate, numericOutletId, numericPropertyId?.toString());
     
-    // Get outlets for outlet names
-    const outlets = await prisma.outlet.findMany();
+    console.log('Food Cost Report Debug - Retrieved entries:', {
+      entriesCount: entries.length,
+      entryPropertyIds: entries.map(e => e.propertyId).filter((id, index, arr) => arr.indexOf(id) === index),
+      entryOutletIds: entries.map(e => e.outletId).filter((id, index, arr) => arr.indexOf(id) === index)
+    });
+    
+    // Get outlets for outlet names (filter by property if specified)
+    const outletsWhere: any = {};
+    if (numericPropertyId) {
+      outletsWhere.propertyId = numericPropertyId;
+    }
+    
+    const outlets = await prisma.outlet.findMany({
+      where: outletsWhere,
+    });
     const outletMap = new Map(outlets.map(o => [o.id, o.name]));
     
     // Get financial summaries for revenue and budget data
-    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const financialSummariesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+
+    // Add property filtering to financial summaries if specified
+    if (numericPropertyId) {
+      financialSummariesWhere.propertyId = numericPropertyId;
+    }
+
+    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
+      where: financialSummariesWhere,
     });
     
     // Group entries by outlet
@@ -902,10 +937,25 @@ export async function getDetailedFoodCostReportAction(
       variancePercentage: overallVariancePercentage,
       foodCostDetailsByItem: overallFoodCostDetailsByItem
     };
+
+    // Get property information for the report title
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      try {
+        const property = await prisma.property.findUnique({
+          where: { id: numericPropertyId },
+          select: { id: true, name: true, propertyCode: true }
+        });
+        propertyInfo = property;
+      } catch (error) {
+        console.error('Error fetching property info:', error);
+      }
+    }
     
     return {
       outletReports,
-      overallSummaryReport
+      overallSummaryReport,
+      propertyInfo
     };
   } catch (error) {
     console.error("Error fetching detailed food cost report:", error);
@@ -916,7 +966,8 @@ export async function getDetailedFoodCostReportAction(
 export async function getCostAnalysisByCategoryReportAction(
   startDate: Date,
   endDate: Date,
-  outletId?: number | string
+  outletId?: number | string,
+  propertyId?: number | string
 ) {
   try {
     // Handle "all" or string outletId by converting to undefined
@@ -926,16 +977,39 @@ export async function getCostAnalysisByCategoryReportAction(
       ? Number(outletId) 
       : outletId;
 
+    // Handle property filtering
+    const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
+      ? undefined 
+      : typeof propertyId === 'string' 
+      ? Number(propertyId) 
+      : propertyId;
+
+    console.log('Cost Analysis by Category Report Debug - Property filtering:', {
+      originalPropertyId: propertyId,
+      numericPropertyId,
+      startDate,
+      endDate
+    });
+
     // Fetch food cost details
+    const foodCostEntryWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+    
+    if (numericOutletId) {
+      foodCostEntryWhere.outletId = numericOutletId;
+    }
+    
+    if (numericPropertyId) {
+      foodCostEntryWhere.propertyId = numericPropertyId;
+    }
+
     const foodDetails = await prisma.foodCostDetail.findMany({
       where: {
-        foodCostEntry: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-          ...(numericOutletId && { outletId: numericOutletId }),
-        },
+        foodCostEntry: foodCostEntryWhere,
       },
       include: {
         category: true,
@@ -948,15 +1022,24 @@ export async function getCostAnalysisByCategoryReportAction(
     });
 
     // Fetch beverage cost details
+    const beverageCostEntryWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+    
+    if (numericOutletId) {
+      beverageCostEntryWhere.outletId = numericOutletId;
+    }
+    
+    if (numericPropertyId) {
+      beverageCostEntryWhere.propertyId = numericPropertyId;
+    }
+
     const beverageDetails = await prisma.beverageCostDetail.findMany({
       where: {
-        beverageCostEntry: {
-          date: {
-            gte: startDate,
-            lte: endDate,
-          },
-          ...(numericOutletId && { outletId: numericOutletId }),
-        },
+        beverageCostEntry: beverageCostEntryWhere,
       },
       include: {
         category: true,
@@ -969,13 +1052,19 @@ export async function getCostAnalysisByCategoryReportAction(
     });
 
     // Get daily financial summaries for revenue data and adjustments
-    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
-      where: {
-        date: {
-          gte: startDate,
-          lte: endDate,
-        },
+    const financialSummariesWhere: any = {
+      date: {
+        gte: startDate,
+        lte: endDate,
       },
+    };
+    
+    if (numericPropertyId) {
+      financialSummariesWhere.propertyId = numericPropertyId;
+    }
+
+    const financialSummaries = await prisma.dailyFinancialSummary.findMany({
+      where: financialSummariesWhere,
     });
 
     // Calculate totals from financial summaries
@@ -1102,6 +1191,19 @@ export async function getCostAnalysisByCategoryReportAction(
     const overallBeverageCostPercentage = totalBeverageRevenue > 0 ? (totalBeverageCost / totalBeverageRevenue) * 100 : 0;
     const overallCostPercentage = totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0;
 
+    // Fetch property info if needed
+    let propertyInfo = null;
+    if (numericPropertyId) {
+      propertyInfo = await prisma.property.findUnique({
+        where: { id: numericPropertyId },
+        select: {
+          id: true,
+          name: true,
+          propertyCode: true,
+        },
+      });
+    }
+
     return {
       dateRange: {
         from: startDate,
@@ -1132,6 +1234,7 @@ export async function getCostAnalysisByCategoryReportAction(
       topFoodCategories,
       beverageCategories: sortedBeverageCategories,
       topBeverageCategories,
+      propertyInfo,
     };
   } catch (error) {
     console.error("Error fetching cost analysis by category report:", error);

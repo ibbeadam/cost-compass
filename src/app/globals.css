@@ -114,3 +114,68 @@
     font-family: theme('fontFamily.code');
   }
 }
+
+@layer components {
+  /* Fix for Select dropdown scrolling on small screens and taskbar collision */
+  [data-radix-select-content],
+  [data-radix-popper-content-wrapper] [role="listbox"] {
+    max-height: 35vh !important;
+    overflow-y: auto !important;
+    /* Ensure enough space from screen edges */
+    margin-bottom: 10px !important;
+  }
+  
+  @media (min-width: 640px) {
+    [data-radix-select-content],
+    [data-radix-popper-content-wrapper] [role="listbox"] {
+      max-height: 40vh !important;
+    }
+  }
+  
+  @media (min-width: 768px) {
+    [data-radix-select-content],
+    [data-radix-popper-content-wrapper] [role="listbox"] {
+      max-height: 50vh !important;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    [data-radix-select-content],
+    [data-radix-popper-content-wrapper] [role="listbox"] {
+      max-height: 60vh !important;
+    }
+  }
+  
+  /* Ensure the viewport inside select content is scrollable */
+  [data-radix-select-viewport] {
+    max-height: inherit !important;
+    overflow: visible !important;
+  }
+  
+  /* Override any max-height restrictions from the component */
+  .select-dropdown-scrollable [data-radix-select-content] {
+    max-height: 35vh !important;
+    overflow-y: auto !important;
+  }
+  
+  /* Specific handling for dropdowns near the bottom of the screen */
+  [data-radix-select-content][data-side="top"] {
+    max-height: 35vh !important;
+    margin-top: 10px !important;
+  }
+  
+  /* Enhanced collision detection for reports dropdown */
+  .select-dropdown-scrollable [data-radix-select-content] {
+    /* Try to prevent going off-screen on laptops */
+    max-height: min(35vh, 400px) !important;
+    /* Enhanced positioning */
+    transform-origin: top !important;
+  }
+  
+  /* Laptop-specific optimizations */
+  @media (min-height: 600px) and (max-height: 900px) {
+    .select-dropdown-scrollable [data-radix-select-content] {
+      max-height: min(30vh, 350px) !important;
+    }
+  }
+}

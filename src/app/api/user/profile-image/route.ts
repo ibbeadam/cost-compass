@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
 import { getCurrentUser } from "@/lib/server-auth";
 import { updateUserAction } from "@/actions/prismaUserActions";
@@ -67,6 +67,18 @@ export async function POST(request: NextRequest) {
     // Update user profile with image path
     const imageUrl = `/uploads/profile-images/${filename}`;
     
+    // Delete old profile image if it exists
+    if (currentUser.profileImage) {
+      try {
+        const oldImagePath = join(process.cwd(), "public", currentUser.profileImage);
+        await unlink(oldImagePath);
+        console.log("Old profile image deleted:", oldImagePath);
+      } catch (deleteError) {
+        console.warn("Could not delete old profile image:", deleteError?.message);
+        // Don't fail the upload if we can't delete the old file
+      }
+    }
+    
     await updateUserAction(currentUser.id, {
       profileImage: imageUrl,
     });
@@ -109,6 +121,18 @@ export async function DELETE(request: NextRequest) {
         { error: "Authentication required" },
         { status: 401 }
       );
+    }
+
+    // Delete current profile image file if it exists
+    if (currentUser.profileImage) {
+      try {
+        const oldImagePath = join(process.cwd(), "public", currentUser.profileImage);
+        await unlink(oldImagePath);
+        console.log("Profile image file deleted:", oldImagePath);
+      } catch (deleteError) {
+        console.warn("Could not delete profile image file:", deleteError?.message);
+        // Don't fail the operation if we can't delete the file
+      }
     }
 
     // Remove profile image from user

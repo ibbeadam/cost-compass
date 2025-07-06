@@ -20,7 +20,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import React, { useState } from "react";
 
 interface MonthlyProfitLossReportTableProps {
-  data: MonthlyProfitLossReport | null;
+  data: (MonthlyProfitLossReport & { propertyInfo?: { id: number; name: string; propertyCode: string } | null }) | null;
 }
 
 const StatCard = ({
@@ -80,6 +80,20 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
     return <p className="text-center text-muted-foreground">Report data is incomplete. Please try generating the report again.</p>;
   }
 
+  const getPropertySuffix = () => {
+    if (data.propertyInfo?.name) {
+      return ` - ${data.propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getDateDisplay = () => {
+    if (data.monthYear) {
+      return ` | ${data.monthYear}`;
+    }
+    return "";
+  };
+
   const renderCurrency = (value: number | null | undefined) => {
     if (value == null) return "-";
     return `$${formatNumber(value)}`;
@@ -92,7 +106,6 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-foreground text-center">Monthly Profit/Loss Report for {data.monthYear}</h2>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -122,7 +135,7 @@ export function MonthlyProfitLossReportTable({ data }: MonthlyProfitLossReportTa
       {/* Detailed P&L Statement */}
       <Card className="w-full shadow-lg">
         <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
-          <CardTitle className="text-lg font-semibold text-gray-800">Profit & Loss Statement</CardTitle>
+          <CardTitle className="text-lg font-semibold text-gray-800">Profit & Loss Statement{getPropertySuffix()}</CardTitle>
         </CardHeader>
         <CardContent className="p-6">
           <div className="mb-8">

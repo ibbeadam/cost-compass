@@ -126,6 +126,7 @@ export const authOptions: NextAuthOptions = {
             role: user.role as UserRole,
             department: user.department,
             phoneNumber: user.phoneNumber,
+            profileImage: user.profileImage,
             lastLoginAt: user.lastLoginAt?.toISOString(),
             twoFactorEnabled: user.twoFactorEnabled || false,
             passwordExpired: false, // TODO: Implement password age checking
@@ -153,6 +154,7 @@ export const authOptions: NextAuthOptions = {
         token.role = user.role;
         token.department = user.department;
         token.phoneNumber = user.phoneNumber;
+        token.profileImage = user.profileImage;
         token.lastLoginAt = user.lastLoginAt;
         token.twoFactorEnabled = user.twoFactorEnabled;
         token.passwordExpired = user.passwordExpired;
@@ -167,6 +169,7 @@ export const authOptions: NextAuthOptions = {
           token.role = session.user.role;
           token.department = session.user.department;
           token.phoneNumber = session.user.phoneNumber;
+          token.profileImage = session.user.profileImage;
         }
       }
 
@@ -179,6 +182,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = token.role as UserRole;
         session.user.department = token.department as string;
         session.user.phoneNumber = token.phoneNumber as string;
+        session.user.profileImage = token.profileImage as string;
         session.user.permissions = token.permissions as string[] || [];
         session.user.lastLoginAt = token.lastLoginAt as string;
         session.user.twoFactorEnabled = token.twoFactorEnabled as boolean || false;

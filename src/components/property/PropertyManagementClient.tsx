@@ -16,7 +16,9 @@ import {
   Plus, 
   X,
   Users,
-  Store
+  Store,
+  Upload,
+  ImageIcon
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -60,12 +62,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { showToast } from "@/lib/toast";
-import { 
-  getPropertiesAction, 
-  createPropertyAction, 
-  updatePropertyAction, 
-  deletePropertyAction 
-} from "@/actions/propertyActions";
+// Using API routes instead of server actions for better auth handling
+// import { 
+//   getPropertiesAction, 
+//   createPropertyAction, 
+//   updatePropertyAction, 
+//   deletePropertyAction 
+// } from "@/actions/propertyActions";
 import { getAllUsersAction } from "@/actions/prismaUserActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -85,13 +88,18 @@ export default function PropertyManagementClient() {
   const fetchProperties = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [fetchedProperties, fetchedUsers] = await Promise.all([
-        getPropertiesAction(),
+      const [propertiesResponse, usersResponse] = await Promise.all([
+        fetch('/api/properties'),
         getAllUsersAction()
       ]);
       
-      setProperties(fetchedProperties);
-      setUsers(fetchedUsers);
+      if (!propertiesResponse.ok) {
+        throw new Error('Failed to fetch properties');
+      }
+      
+      const { properties } = await propertiesResponse.json();
+      setProperties(properties);
+      setUsers(usersResponse);
     } catch (error) {
       showToast.error((error as Error).message || "Could not load properties.");
     } finally {
@@ -115,7 +123,15 @@ export default function PropertyManagementClient() {
 
   const handleDelete = async (propertyId: number) => {
     try {
-      await deletePropertyAction(propertyId);
+      const response = await fetch(`/api/properties/${propertyId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete property');
+      }
+      
       fetchProperties();
       showToast.success("The property has been deleted successfully.");
     } catch (error) {
@@ -123,23 +139,316 @@ export default function PropertyManagementClient() {
     }
   };
 
-  const handleSubmit = async (formData: CreatePropertyData | UpdatePropertyData) => {
+  const handleSubmit = async (formData: CreatePropertyData | UpdatePropertyData, logoFile?: File | null) => {
     setIsSubmitting(true);
+    let property: Property | null = null;
+    let propertyCreated = false;
+    
+    // Clean up formData to remove undefined values
+    const cleanedFormData = Object.fromEntries(
+      Object.entries(formData).filter(([_, value]) => value !== undefined && value !== "")
+    );
+    
     try {
       if (editingProperty) {
-        await updatePropertyAction(editingProperty.id, formData as UpdatePropertyData);
-        showToast.success("Property has been updated successfully.");
+        // Update existing property
+        console.log("Updating property:", { 
+          id: editingProperty.id, 
+          originalFormData: formData,
+          cleanedFormData: cleanedFormData
+        });
+        
+        const response = await fetch(`/api/properties/${editingProperty.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(cleanedFormData),
+        });
+        
+        console.log("Update response:", { 
+          status: response.status, 
+          ok: response.ok 
+        });
+        
+        if (!response.ok) {
+          let errorData;
+          try {
+            errorData = await response.json();
+          } catch (jsonError) {
+            console.error("Failed to parse error response JSON:", jsonError);
+            const responseText = await response.text();
+            console.error("Raw response:", responseText);
+            throw new Error(`Server error (${response.status}): ${responseText || 'Unknown error'}`);
+          }
+          
+          console.error("Update failed:", {
+            status: response.status,
+            errorData: errorData
+          });
+          throw new Error(errorData.error || 'Failed to update property');
+        }
+        
+        let result;
+        try {
+          result = await response.json();
+        } catch (jsonError) {
+          console.error("Failed to parse success response JSON:", jsonError);
+          const responseText = await response.text();
+          console.error("Raw success response:", responseText);
+          throw new Error(`Server returned invalid JSON response: ${responseText}`);
+        }
+        
+        property = result.property;
+        propertyCreated = true;
+        
+        // Upload logo if there's a new file
+        if (logoFile) {
+          try {
+            await handleLogoUpload(property.id, logoFile);
+            // Refresh properties after successful logo upload
+            await fetchProperties();
+            // Update editingProperty with fresh data to show the logo in the edit form
+            if (editingProperty) {
+              const updatedProperties = await fetch('/api/properties').then(res => res.json());
+              const updatedProperty = updatedProperties.properties.find((p: Property) => p.id === editingProperty.id);
+              if (updatedProperty) {
+                setEditingProperty(updatedProperty);
+              }
+            }
+            showToast.success("Property and logo have been updated successfully.");
+          } catch (logoError) {
+            showToast.warning("Property was updated, but logo upload failed: " + (logoError as Error).message);
+          }
+        } else {
+          showToast.success("Property has been updated successfully.");
+        }
       } else {
-        await createPropertyAction(formData as CreatePropertyData);
-        showToast.success("Property has been created successfully.");
+        // Create new property
+        console.log("Creating property:", {
+          originalFormData: formData,
+          cleanedFormData: cleanedFormData
+        });
+        
+        const response = await fetch('/api/properties', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(cleanedFormData),
+        });
+        
+        if (!response.ok) {
+          let errorData;
+          try {
+            errorData = await response.json();
+          } catch (jsonError) {
+            console.error("Failed to parse create error response JSON:", jsonError);
+            const responseText = await response.text();
+            console.error("Raw create error response:", responseText);
+            throw new Error(`Server error (${response.status}): ${responseText || 'Unknown error'}`);
+          }
+          throw new Error(errorData.error || 'Failed to create property');
+        }
+        
+        let result;
+        try {
+          result = await response.json();
+        } catch (jsonError) {
+          console.error("Failed to parse create success response JSON:", jsonError);
+          const responseText = await response.text();
+          console.error("Raw create success response:", responseText);
+          throw new Error(`Server returned invalid JSON response: ${responseText}`);
+        }
+        
+        property = result.property;
+        propertyCreated = true;
+        
+        // Upload logo if there's a file
+        if (logoFile) {
+          try {
+            await handleLogoUpload(property.id, logoFile);
+            // Refresh properties after successful logo upload
+            await fetchProperties();
+            showToast.success("Property and logo have been created successfully.");
+          } catch (logoError) {
+            showToast.warning("Property was created, but logo upload failed: " + (logoError as Error).message);
+          }
+        } else {
+          showToast.success("Property has been created successfully.");
+        }
       }
+      
       setIsFormOpen(false);
       setEditingProperty(null);
       fetchProperties();
     } catch (error) {
-      showToast.error((error as Error).message || "Could not save property.");
+      if (propertyCreated && property) {
+        showToast.error("Property was saved but there was an issue with the logo upload: " + (error as Error).message);
+      } else {
+        const action = editingProperty ? "update" : "create";
+        showToast.error(`Failed to ${action} property: ` + (error as Error).message);
+      }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleLogoUpload = async (propertyId: number, file: File) => {
+    try {
+      // Validate file before upload
+      if (!file || !(file instanceof File)) {
+        throw new Error('Invalid file object provided');
+      }
+      
+      if (file.size === 0) {
+        throw new Error('File is empty');
+      }
+      
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('File size exceeds 5MB limit');
+      }
+      
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error(`File type ${file.type} not allowed. Allowed types: ${allowedTypes.join(', ')}`);
+      }
+      
+      console.log("Starting logo upload:", {
+        propertyId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        lastModified: file.lastModified
+      });
+      
+      const formData = new FormData();
+      formData.append('logo', file);
+      formData.append('propertyId', propertyId.toString());
+      
+      console.log("FormData created, entries:", Array.from(formData.entries()).map(([key, value]) => [key, value instanceof File ? `File: ${value.name}` : value]));
+
+      console.log("Making fetch request to /api/property/logo...");
+
+      let response;
+      try {
+        response = await fetch('/api/property/logo', {
+          method: 'POST',
+          body: formData,
+        });
+        console.log("Fetch completed successfully");
+      } catch (fetchError) {
+        console.error("Fetch request failed:", {
+          error: fetchError.message,
+          stack: fetchError.stack,
+          type: fetchError.constructor.name
+        });
+        throw new Error(`Network error: ${fetchError.message}`);
+      }
+
+      console.log("Received response object:", response);
+      console.log("Response constructor:", response.constructor.name);
+      console.log("Response type:", typeof response);
+      
+      // Try to extract all possible information from the response
+      const responseInfo = {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        redirected: response.redirected,
+        type: response.type,
+        url: response.url,
+        headers: {},
+        headersIterable: response.headers ? 'yes' : 'no'
+      };
+
+      // Safely extract headers
+      try {
+        responseInfo.headers = Object.fromEntries(response.headers.entries());
+      } catch (headerError) {
+        console.error("Failed to read headers:", headerError);
+        responseInfo.headers = { error: 'Failed to read headers' };
+      }
+
+      console.log("Logo upload response details:", responseInfo);
+
+      if (!response.ok) {
+        let errorData;
+        let responseText = '';
+        
+        try {
+          console.log("Attempting to read response.text()...");
+          
+          // Check if response has a body to read
+          if (!response.body) {
+            console.warn("Response has no body");
+            responseText = '';
+          } else {
+            console.log("Response body exists, reading text...");
+            responseText = await response.text();
+          }
+          
+          console.log("Raw error response text:", {
+            text: responseText,
+            length: responseText.length,
+            trimmed: responseText.trim(),
+            type: typeof responseText
+          });
+          
+          // Try to parse as JSON
+          if (responseText.trim()) {
+            console.log("Attempting to parse response as JSON...");
+            errorData = JSON.parse(responseText);
+            console.log("Parsed error data:", errorData);
+          } else {
+            console.log("Response text is empty, creating default error");
+            errorData = { error: 'Empty response from server' };
+          }
+        } catch (jsonError) {
+          console.error("Failed to parse logo error response JSON:", {
+            error: jsonError.message,
+            responseText: responseText,
+            responseLength: responseText.length
+          });
+          throw new Error(`Server error (${response.status}): ${responseText || 'Empty response'}`);
+        }
+        
+        console.error("Logo upload failed - Full analysis:", {
+          responseInfo: responseInfo,
+          errorData: errorData,
+          responseText: responseText,
+          errorDataType: typeof errorData,
+          errorDataKeys: errorData ? Object.keys(errorData) : 'No keys'
+        });
+        
+        const errorMessage = errorData?.error || errorData?.details || errorData?.message || 'Failed to upload logo';
+        throw new Error(errorMessage);
+      }
+
+      let result;
+      let responseText = '';
+      
+      try {
+        responseText = await response.text();
+        console.log("Raw success response text:", responseText);
+        
+        if (responseText.trim()) {
+          result = JSON.parse(responseText);
+        } else {
+          throw new Error('Empty success response from server');
+        }
+      } catch (jsonError) {
+        console.error("Failed to parse logo success response JSON:", jsonError);
+        console.error("Raw logo success response:", responseText);
+        throw new Error(`Server returned invalid JSON response: ${responseText || 'Empty response'}`);
+      }
+
+      console.log("Logo upload successful:", result.logoUrl);
+      return result.logoUrl;
+    } catch (error) {
+      console.error('Error uploading logo:', error);
+      // Don't show toast here - let the caller handle the error display
+      throw error;
     }
   };
 
@@ -287,6 +596,7 @@ export default function PropertyManagementClient() {
               <Table className="min-w-[1000px]">
                 <TableHeader className="bg-muted/50">
                   <TableRow>
+                    <TableHead className="font-headline">Logo</TableHead>
                     <TableHead className="font-headline">Property</TableHead>
                     <TableHead className="font-headline">Code</TableHead>
                     <TableHead className="font-headline">Type</TableHead>
@@ -301,6 +611,21 @@ export default function PropertyManagementClient() {
                 <TableBody>
                   {currentItems.map((property) => (
                     <TableRow key={property.id} className="hover:bg-muted/30">
+                      <TableCell>
+                        <div className="flex items-center justify-center">
+                          {property.logoUrl ? (
+                            <img
+                              src={property.logoUrl}
+                              alt={`${property.name} logo`}
+                              className="w-8 h-8 object-cover rounded border"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 bg-muted rounded border flex items-center justify-center">
+                              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           <Building className="h-4 w-4 text-muted-foreground" />
@@ -443,7 +768,7 @@ export default function PropertyManagementClient() {
         onOpenChange={setIsFormOpen}
         property={editingProperty}
         users={users}
-        onSubmit={handleSubmit}
+        onSubmit={(formData, logoFile) => handleSubmit(formData, logoFile)}
         isSubmitting={isSubmitting}
       />
     </div>
@@ -455,7 +780,7 @@ interface PropertyFormDialogProps {
   onOpenChange: (open: boolean) => void;
   property: Property | null;
   users: User[];
-  onSubmit: (data: CreatePropertyData | UpdatePropertyData) => Promise<void>;
+  onSubmit: (data: CreatePropertyData | UpdatePropertyData, logoFile?: File | null) => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -470,9 +795,12 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
     country: "",
     timeZone: "UTC",
     currency: "USD",
+    logoUrl: "",
     ownerId: undefined,
     managerId: undefined,
   });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   useEffect(() => {
     if (property) {
@@ -486,9 +814,11 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
         country: property.country || "",
         timeZone: property.timeZone || "UTC",
         currency: property.currency || "USD",
+        logoUrl: property.logoUrl || "",
         ownerId: property.ownerId || undefined,
         managerId: property.managerId || undefined,
       });
+      setLogoPreview(property.logoUrl || null);
     } else {
       setFormData({
         name: "",
@@ -500,15 +830,36 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
         country: "",
         timeZone: "UTC",
         currency: "USD",
+        logoUrl: "",
         ownerId: undefined,
         managerId: undefined,
       });
+      setLogoPreview(null);
     }
+    setLogoFile(null);
   }, [property]);
+
+  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLogoFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setLogoPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    setFormData({ ...formData, logoUrl: "" });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    await onSubmit(formData, logoFile);
   };
 
   const propertyOwners = users.filter(user => 
@@ -600,6 +951,75 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
                   <SelectItem value="CAD">CAD (C$)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          {/* Logo Upload Section */}
+          <div className="space-y-2">
+            <Label>Property Logo</Label>
+            <div className="flex items-start gap-4">
+              {/* Logo Preview */}
+              <div className="flex-shrink-0">
+                {logoPreview ? (
+                  <div className="relative">
+                    <img
+                      src={logoPreview}
+                      alt="Property logo preview"
+                      className="w-20 h-20 object-cover rounded-lg border-2 border-muted"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute -top-2 -right-2 h-6 w-6"
+                      onClick={handleRemoveLogo}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 border-2 border-dashed border-muted-foreground/25 rounded-lg flex items-center justify-center bg-muted/20">
+                    <ImageIcon className="h-8 w-8 text-muted-foreground/50" />
+                  </div>
+                )}
+              </div>
+              
+              {/* Upload Controls */}
+              <div className="flex-1 space-y-2">
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="relative"
+                    disabled={isSubmitting}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {logoPreview ? 'Change Logo' : 'Upload Logo'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/jpg,image/png,image/webp"
+                      onChange={handleLogoFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={isSubmitting}
+                    />
+                  </Button>
+                  {logoPreview && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveLogo}
+                      disabled={isSubmitting}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Accepted formats: JPEG, PNG, WebP. Max size: 5MB.
+                </p>
+              </div>
             </div>
           </div>
 

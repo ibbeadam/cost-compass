@@ -143,6 +143,7 @@ export async function createPropertyAction(data: CreatePropertyData): Promise<Pr
         country: data.country,
         timeZone: data.timeZone || "UTC",
         currency: data.currency || "USD",
+        logoUrl: data.logoUrl,
         ownerId: data.ownerId,
         managerId: data.managerId,
       },
@@ -168,6 +169,7 @@ export async function createPropertyAction(data: CreatePropertyData): Promise<Pr
           name: property.name,
           propertyCode: property.propertyCode,
           propertyType: property.propertyType,
+          logoUrl: property.logoUrl,
           ownerId: property.ownerId,
           managerId: property.managerId,
         },
@@ -179,7 +181,10 @@ export async function createPropertyAction(data: CreatePropertyData): Promise<Pr
     return property;
   } catch (error) {
     console.error("Error creating property:", error);
-    throw new Error("Failed to create property");
+    if ((error as Error).message === "Property code already exists") {
+      throw new Error("Property code already exists. Please use a different code.");
+    }
+    throw new Error("Failed to create property: " + (error as Error).message);
   }
 }
 
@@ -188,9 +193,13 @@ export async function createPropertyAction(data: CreatePropertyData): Promise<Pr
  */
 export async function updatePropertyAction(id: number, data: UpdatePropertyData): Promise<Property> {
   try {
+    console.log("updatePropertyAction called:", { id, dataKeys: Object.keys(data) });
+    
     // Get current user and existing property data for audit logging
     const { getCurrentUser } = await import("@/lib/server-auth");
     const currentUser = await getCurrentUser();
+    
+    console.log("Current user:", currentUser ? { id: currentUser.id, email: currentUser.email, role: currentUser.role } : "null");
 
     // Get existing property data before update
     const existingProperty = await prisma.property.findUnique({
@@ -200,6 +209,7 @@ export async function updatePropertyAction(id: number, data: UpdatePropertyData)
         name: true,
         propertyCode: true,
         propertyType: true,
+        logoUrl: true,
         ownerId: true,
         managerId: true,
         isActive: true,
@@ -224,6 +234,8 @@ export async function updatePropertyAction(id: number, data: UpdatePropertyData)
       }
     }
 
+    console.log("Updating property with data:", { id, data });
+    
     const property = await prisma.property.update({
       where: { id },
       data: {
@@ -239,6 +251,8 @@ export async function updatePropertyAction(id: number, data: UpdatePropertyData)
         }
       }
     });
+    
+    console.log("Property updated successfully:", { id: property.id, name: property.name });
 
     // Create audit log
     if (currentUser) {
@@ -251,6 +265,7 @@ export async function updatePropertyAction(id: number, data: UpdatePropertyData)
           name: existingProperty.name,
           propertyCode: existingProperty.propertyCode,
           propertyType: existingProperty.propertyType,
+          logoUrl: existingProperty.logoUrl,
           ownerId: existingProperty.ownerId,
           managerId: existingProperty.managerId,
           isActive: existingProperty.isActive,
@@ -259,6 +274,7 @@ export async function updatePropertyAction(id: number, data: UpdatePropertyData)
           name: property.name,
           propertyCode: property.propertyCode,
           propertyType: property.propertyType,
+          logoUrl: property.logoUrl,
           ownerId: property.ownerId,
           managerId: property.managerId,
           isActive: property.isActive,
@@ -271,7 +287,13 @@ export async function updatePropertyAction(id: number, data: UpdatePropertyData)
     return property;
   } catch (error) {
     console.error("Error updating property:", error);
-    throw new Error("Failed to update property");
+    if ((error as Error).message === "Property not found") {
+      throw new Error("Property not found. It may have been deleted.");
+    }
+    if ((error as Error).message === "Property code already exists") {
+      throw new Error("Property code already exists. Please use a different code.");
+    }
+    throw new Error("Failed to update property: " + (error as Error).message);
   }
 }
 
@@ -352,7 +374,10 @@ export async function deletePropertyAction(id: number): Promise<void> {
     revalidatePath('/dashboard/properties');
   } catch (error) {
     console.error("Error deleting property:", error);
-    throw new Error("Failed to delete property");
+    if ((error as Error).message === "Property not found") {
+      throw new Error("Property not found. It may have already been deleted.");
+    }
+    throw new Error("Failed to delete property: " + (error as Error).message);
   }
 }
 

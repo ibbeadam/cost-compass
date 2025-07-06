@@ -69,6 +69,7 @@ export interface Property {
   country?: string | null;
   timeZone?: string | null;
   currency: string;
+  logoUrl?: string | null;
   isActive: boolean;
   
   // Property Ownership and Management
@@ -638,6 +639,7 @@ export interface CreatePropertyData {
   country?: string;
   timeZone?: string;
   currency?: string;
+  logoUrl?: string;
   ownerId?: number;
   managerId?: number;
 }
@@ -652,6 +654,7 @@ export interface UpdatePropertyData {
   country?: string;
   timeZone?: string;
   currency?: string;
+  logoUrl?: string;
   ownerId?: number;
   managerId?: number;
   isActive?: boolean;

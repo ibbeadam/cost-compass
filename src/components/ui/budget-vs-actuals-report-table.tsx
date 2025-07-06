@@ -14,7 +14,7 @@ import { cn, formatNumber } from "@/lib/utils";
 import type { BudgetVsActualsReport } from "@/types";
 
 interface BudgetVsActualsReportTableProps {
-  reportData: BudgetVsActualsReport;
+  reportData: BudgetVsActualsReport & { propertyInfo?: { id: number; name: string; propertyCode: string } | null };
 }
 
 export function BudgetVsActualsReportTable({ reportData }: BudgetVsActualsReportTableProps) {
@@ -33,6 +33,17 @@ export function BudgetVsActualsReportTable({ reportData }: BudgetVsActualsReport
   const dailyBreakdown = reportData.dailyBreakdown || [];
   const dateRange = reportData.dateRange || { from: new Date(), to: new Date() };
   const outletName = reportData.outletName;
+
+  const getPropertySuffix = () => {
+    if (reportData.propertyInfo?.name) {
+      return ` - ${reportData.propertyInfo.name}`;
+    }
+    return " - All Properties";
+  };
+
+  const getDateRangeDisplay = () => {
+    return ` | ${format(dateRange.from, "MMM dd, yyyy")} - ${format(dateRange.to, "MMM dd, yyyy")}`;
+  };
   
   // Food budget data with defaults
   const foodBudget = reportData.foodBudget || {
@@ -147,19 +158,7 @@ export function BudgetVsActualsReportTable({ reportData }: BudgetVsActualsReport
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Budget vs. Actuals (F&B)</h2>
-          <p className="text-muted-foreground">
-            {safeFormatDate(dateRange.from)} - {safeFormatDate(dateRange.to)}
-            {outletName && (
-              <span className="ml-2 inline-flex items-center gap-1">
-                <Building className="h-4 w-4" />
-                {outletName}
-              </span>
-            )}
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-2">
           <Calendar className="h-5 w-5 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">

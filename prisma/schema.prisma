@@ -99,6 +99,7 @@ model Property {
   country                 String?
   timeZone                String?                 @map("time_zone")
   currency                String                  @default("USD")
+  logoUrl                 String?                 @map("logo_url")
   isActive                Boolean                 @default(true) @map("is_active")
   ownerId                 Int?                    @map("owner_id")
   managerId               Int?                    @map("manager_id")

@@ -21,11 +21,13 @@ import {
   FileText,
   Filter,
   Download,
+  Calendar,
   Info,
   RefreshCw,
   Clock,
   Play,
   Pause,
+  Building2,
 } from "lucide-react";
 import {
   getOutletsAction,
@@ -45,6 +47,12 @@ import {
   getRealTimeKPIDashboardAction,
   getForecastingReportAction,
 } from "@/actions/profitLossActions";
+import { getPropertyPerformanceComparisonReportAction, type PropertyPerformanceComparisonReport } from "@/actions/propertyPerformanceActions";
+import { getOutletEfficiencyProfitabilityReportAction, type OutletEfficiencyProfitabilityReport } from "@/actions/outletEfficiencyActions";
+import { getCategoryPerformanceTrendsReportAction, type CategoryPerformanceTrendsReport } from "@/actions/categoryTrendsActions";
+import { getUserActivityAuditReportAction, type UserActivityAuditReport } from "@/actions/userActivityAuditActions";
+import { getCostVarianceAnalysisReportAction, type CostVarianceAnalysisReport } from "@/actions/costVarianceActions";
+import { getPredictiveAnalyticsReportAction, type PredictiveAnalyticsReport } from "@/actions/predictiveAnalyticsActions";
 import type {
   Outlet,
   DailyFinancialSummary,
@@ -71,6 +79,12 @@ import { DailyRevenueTrendsReportTable } from "../../ui/daily-revenue-trends-rep
 import { YearOverYearReportTable } from "../../ui/year-over-year-report-table";
 import { RealTimeKPIDashboardComponent } from "../../ui/real-time-kpi-dashboard";
 import { ForecastingReportTable } from "../../ui/forecasting-report-table";
+import PropertyPerformanceComparisonReport from "./PropertyPerformanceComparisonReport";
+import OutletEfficiencyProfitabilityReport from "./OutletEfficiencyProfitabilityReport";
+import CategoryPerformanceTrendsReport from "./CategoryPerformanceTrendsReport";
+import UserActivityAuditReport from "./UserActivityAuditReport";
+import CostVarianceAnalysisReport from "./CostVarianceAnalysisReport";
+import PredictiveAnalyticsReport from "./PredictiveAnalyticsReport";
 import {
   Tooltip,
   TooltipContent,
@@ -99,6 +113,12 @@ const reportOptions: ReportOption[] = [
   { value: "year_over_year", label: "Year-over-Year Comparison" },
   { value: "real_time_kpi", label: "Real-Time KPI Dashboard" },
   { value: "forecasting_report", label: "Revenue & Cost Forecasting" },
+  { value: "property_performance_comparison", label: "Property Performance Comparison" },
+  { value: "outlet_efficiency_profitability", label: "Outlet Efficiency & Profitability" },
+  { value: "category_performance_trends", label: "Category Performance Trends" },
+  { value: "user_activity_audit", label: "User Activity & Audit Report" },
+  { value: "cost_variance_analysis", label: "Cost Variance Analysis Report" },
+  { value: "predictive_analytics", label: "Predictive Analytics & Forecasting Report" },
 ];
 
 export default function ReportsClient() {
@@ -125,6 +145,12 @@ export default function ReportsClient() {
     | YearOverYearReport
     | RealTimeKPIDashboard
     | ForecastingReport
+    | PropertyPerformanceComparisonReport
+    | OutletEfficiencyProfitabilityReport
+    | CategoryPerformanceTrendsReport
+    | UserActivityAuditReport
+    | CostVarianceAnalysisReport
+    | PredictiveAnalyticsReport
     | null
   >(null);
   const [isLoadingReport, setIsLoadingReport] = useState(false);
@@ -134,6 +160,49 @@ export default function ReportsClient() {
     null
   );
 
+  // Helper function to get property name for report title
+  const getPropertyDisplayName = () => {
+    if (user?.role !== "super_admin") {
+      // For non-super admin users, don't show property selector
+      return "";
+    }
+    
+    if (!selectedPropertyId || selectedPropertyId === "all") {
+      return " (All Properties)";
+    }
+    
+    const selectedProperty = properties.find(p => p.id.toString() === selectedPropertyId);
+    return selectedProperty ? ` (${selectedProperty.name})` : "";
+  };
+
+  // Helper function to get property name from report data
+  const getReportPropertyName = (reportData: any) => {
+    if (reportData?.propertyInfo?.name) {
+      return ` - ${reportData.propertyInfo.name}`;
+    }
+    if (user?.role === "super_admin") {
+      if (!selectedPropertyId || selectedPropertyId === "all") {
+        return " - All Properties";
+      } else {
+        // Super admin selected a specific property but propertyInfo is missing
+        const selectedProperty = properties.find(p => p.id.toString() === selectedPropertyId);
+        return selectedProperty ? ` - ${selectedProperty.name}` : " - Selected Property";
+      }
+    }
+    // For non-super admin users, show their assigned property if available
+    if (user?.propertyAccess && user.propertyAccess.length === 1) {
+      return ` - ${user.propertyAccess[0].property.name}`;
+    }
+    return "";
+  };
+
+  // Helper function to get formatted date range
+  const getDateRangeDisplay = () => {
+    if (!dateRange?.from || !dateRange?.to) {
+      return "";
+    }
+    return ` | ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+  };
 
   // Helper function to render currency
   const renderCurrency = (value: number | null | undefined) => {
@@ -171,10 +240,34 @@ export default function ReportsClient() {
       setIsFetchingOutlets(true);
       try {
         const fetchedOutletsFromDB = await getOutletsAction();
+        
+        // Filter outlets based on selected property
+        let filteredOutlets = fetchedOutletsFromDB;
+        
+        if (user?.role === "super_admin" && selectedPropertyId && selectedPropertyId !== "all") {
+          // For super admin with specific property selected, filter by property
+          const numericPropertyId = Number(selectedPropertyId);
+          filteredOutlets = fetchedOutletsFromDB.filter(outlet => outlet.propertyId === numericPropertyId);
+        } else if (user?.role !== "super_admin" && user?.propertyAccess) {
+          // For non-super admin users, filter by their assigned properties
+          const userPropertyIds = user.propertyAccess.map(access => access.propertyId);
+          filteredOutlets = fetchedOutletsFromDB.filter(outlet => 
+            outlet.propertyId && userPropertyIds.includes(outlet.propertyId)
+          );
+        }
+        
         setAllOutlets([
           { id: "all", name: "All Outlets" },
-          ...fetchedOutletsFromDB,
+          ...filteredOutlets,
         ]);
+        
+        // Reset outlet selection if current selection is no longer valid
+        if (selectedOutletId && selectedOutletId !== "all") {
+          const isOutletStillValid = filteredOutlets.some(outlet => outlet.id.toString() === selectedOutletId.toString());
+          if (!isOutletStillValid) {
+            setSelectedOutletId("all");
+          }
+        }
       } catch (error) {
         console.error("Error fetching outlets:", error);
         showToast.error((error as Error).message);
@@ -183,7 +276,7 @@ export default function ReportsClient() {
       }
     };
     fetchOutlets();
-  }, []);
+  }, [selectedPropertyId, user]);
 
   // Load properties for super admin users
   useEffect(() => {
@@ -225,7 +318,8 @@ export default function ReportsClient() {
         const data = await getDetailedFoodCostReportAction(
           dateRange.from,
           dateRange.to,
-          "all"
+          "all",
+          selectedPropertyId || "all"
         );
         console.log("Food report data received:", data);
         setReportData(data);
@@ -236,7 +330,8 @@ export default function ReportsClient() {
         const data = await getDetailedBeverageCostReportAction(
           dateRange.from,
           dateRange.to,
-          "all"
+          "all",
+          selectedPropertyId || "all"
         );
         console.log("Beverage report data received:", data);
         setReportData(data);
@@ -254,7 +349,8 @@ export default function ReportsClient() {
           dateRange.from,
           dateRange.to,
           undefined, // outletId - not used for this report
-          taxRate
+          taxRate,
+          selectedPropertyId || "all"
         );
         console.log("Monthly Profit/Loss Report data:", data);
         console.log("incomeItems:", data.incomeItems);
@@ -267,7 +363,8 @@ export default function ReportsClient() {
         const data = await getCostAnalysisByCategoryReportAction(
           dateRange.from,
           dateRange.to,
-          selectedOutletId
+          selectedOutletId,
+          selectedPropertyId
         );
         console.log("Cost Analysis by Category Report data:", data);
         console.log("dateRange:", data.dateRange);
@@ -277,7 +374,8 @@ export default function ReportsClient() {
         const data = await getBudgetVsActualsReportAction(
           dateRange.from,
           dateRange.to,
-          selectedOutletId
+          selectedOutletId,
+          selectedPropertyId
         );
         console.log("Budget vs. Actuals Report data:", data);
         console.log("Data structure check:", {
@@ -300,7 +398,8 @@ export default function ReportsClient() {
         const data = await getDailyRevenueTrendsReportAction(
           dateRange.from,
           dateRange.to,
-          selectedOutletId
+          selectedOutletId,
+          selectedPropertyId
         );
         console.log("Daily Revenue Trends Report data:", data);
         setReportData(data);
@@ -311,7 +410,8 @@ export default function ReportsClient() {
         const previousYear = currentYear - 1; // Calculate previous year
         const data = await getYearOverYearReportAction(
           currentYear,
-          previousYear
+          previousYear,
+          selectedPropertyId
         );
         console.log("Year-over-Year Report data:", data);
         setReportData(data);
@@ -319,8 +419,7 @@ export default function ReportsClient() {
         console.log("Calling getRealTimeKPIDashboardAction from client...");
         const data = await getRealTimeKPIDashboardAction(
           undefined, // Always use all outlets for real-time KPI dashboard
-          dateRange.from,
-          dateRange.to
+          selectedPropertyId
         );
         console.log("Real-Time KPI Dashboard data:", data);
         setReportData(data);
@@ -350,9 +449,69 @@ export default function ReportsClient() {
         const data = await getForecastingReportAction(
           { from: historicalStart, to: historicalEnd }, // Extended historical period
           { from: forecastStartDate, to: forecastEndDate }, // Forecast period
-          undefined // Always use all outlets for forecasting report
+          undefined, // Always use all outlets for forecasting report
+          selectedPropertyId
         );
         console.log("Forecasting Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "property_performance_comparison") {
+        console.log("Calling getPropertyPerformanceComparisonReportAction from client...");
+        const data = await getPropertyPerformanceComparisonReportAction(
+          dateRange.from,
+          dateRange.to,
+          selectedPropertyId
+        );
+        console.log("Property Performance Comparison Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "outlet_efficiency_profitability") {
+        console.log("Calling getOutletEfficiencyProfitabilityReportAction from client...");
+        const data = await getOutletEfficiencyProfitabilityReportAction(
+          dateRange.from,
+          dateRange.to,
+          selectedOutletId,
+          selectedPropertyId
+        );
+        console.log("Outlet Efficiency Profitability Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "category_performance_trends") {
+        console.log("Calling getCategoryPerformanceTrendsReportAction from client...");
+        const data = await getCategoryPerformanceTrendsReportAction(
+          dateRange.from,
+          dateRange.to,
+          selectedOutletId,
+          selectedPropertyId
+        );
+        console.log("Category Performance Trends Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "user_activity_audit") {
+        console.log("Calling getUserActivityAuditReportAction from client...");
+        const data = await getUserActivityAuditReportAction(
+          dateRange.from,
+          dateRange.to,
+          selectedPropertyId
+        );
+        console.log("User Activity & Audit Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "cost_variance_analysis") {
+        console.log("Calling getCostVarianceAnalysisReportAction from client...");
+        const data = await getCostVarianceAnalysisReportAction(
+          dateRange.from,
+          dateRange.to,
+          selectedOutletId,
+          selectedPropertyId
+        );
+        console.log("Cost Variance Analysis Report data:", data);
+        setReportData(data);
+      } else if (selectedReport === "predictive_analytics") {
+        console.log("Calling getPredictiveAnalyticsReportAction from client...");
+        const data = await getPredictiveAnalyticsReportAction(
+          dateRange.from,
+          dateRange.to,
+          30, // 30 days forecast
+          selectedOutletId,
+          selectedPropertyId
+        );
+        console.log("Predictive Analytics & Forecasting Report data:", data);
         setReportData(data);
       } else {
         // Fallback for other reports not yet implemented
@@ -725,7 +884,7 @@ export default function ReportsClient() {
       "foodCategories" in reportData
     ) {
       const categoryReport = reportData as CostAnalysisByCategoryReport;
-      const selectedOutlet = allOutlets.find((o) => o.id === selectedOutletId);
+      const selectedOutlet = allOutlets.find((o) => o.id.toString() === selectedOutletId.toString());
       const isOutletSpecific =
         selectedOutletId && selectedOutletId !== "all" && selectedOutlet;
 
@@ -2087,7 +2246,7 @@ export default function ReportsClient() {
       "foodCategories" in reportData
     ) {
       const categoryReport = reportData as CostAnalysisByCategoryReport;
-      const selectedOutlet = allOutlets.find((o) => o.id === selectedOutletId);
+      const selectedOutlet = allOutlets.find((o) => o.id.toString() === selectedOutletId.toString());
       const isOutletSpecific =
         selectedOutletId && selectedOutletId !== "all" && selectedOutlet;
 
@@ -3282,6 +3441,11 @@ export default function ReportsClient() {
     showToast.success("Report successfully exported to PDF.");
   };
 
+  const daysInRange =
+    dateRange?.from && dateRange?.to
+      ? Math.ceil((dateRange.to.getTime() - dateRange.from.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      : 0;
+
   return (
     <div className="flex flex-col gap-6 w-full text-[clamp(0.65rem,0.7vw+0.5rem,1rem)]">
       {/* Report Options */}
@@ -3291,39 +3455,46 @@ export default function ReportsClient() {
             Report Options
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex-1 min-w-[200px]">
-            <label
-              htmlFor="report-select"
-              className="block text-sm font-medium text-foreground mb-1"
-            >
-              Report Type
-            </label>
-            <Select value={selectedReport} onValueChange={setSelectedReport}>
-              <SelectTrigger
-                id="report-select"
-                className="w-full text-base md:text-sm"
-              >
-                <SelectValue placeholder="Select a report" />
-              </SelectTrigger>
-              <SelectContent>
-                {reportOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex-1 min-w-[200px]">
-            <div className="flex items-center gap-1 mb-1">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="min-w-[200px] select-dropdown-scrollable">
               <label
-                htmlFor="date-range-picker"
-                className="block text-sm font-medium text-foreground"
+                htmlFor="report-select"
+                className="block text-sm font-medium text-foreground mb-1"
               >
-                Date Range
+                Report Type
               </label>
+              <Select value={selectedReport} onValueChange={setSelectedReport}>
+                <SelectTrigger
+                  id="report-select"
+                  className="w-full text-base md:text-sm"
+                >
+                  <SelectValue placeholder="Select a report" />
+                </SelectTrigger>
+                <SelectContent 
+                  side="bottom" 
+                  sideOffset={5}
+                  align="start"
+                  avoidCollisions={true}
+                  collisionPadding={40}
+                >
+                  {reportOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="min-w-[200px]">
+              <div className="flex items-center gap-1 mb-1">
+                <label
+                  htmlFor="date-range-picker"
+                  className="block text-sm font-medium text-foreground"
+                >
+                  Date Range
+                </label>
               {selectedReport === "forecasting_report" && (
                 <TooltipProvider>
                   <Tooltip>
@@ -3344,9 +3515,48 @@ export default function ReportsClient() {
             {dateRange && (
               <DateRangePicker date={dateRange} setDate={setDateRange} />
             )}
+            </div>
+
+            {/* Property Selector - Show for super admin users */}
+            {user?.role === "super_admin" && properties.length > 0 && (
+              <div className="min-w-[200px] select-dropdown-scrollable">
+                <label
+                  htmlFor="property-select"
+                  className="block text-sm font-medium text-foreground mb-1"
+                >
+                  Property Filter
+                </label>
+                <Select
+                  value={selectedPropertyId}
+                  onValueChange={setSelectedPropertyId}
+                  disabled={isLoadingProperties}
+                >
+                  <SelectTrigger
+                    id="property-select"
+                    className="w-full text-base md:text-sm"
+                  >
+                    <SelectValue placeholder="Select property" />
+                  </SelectTrigger>
+                  <SelectContent 
+                    side="bottom" 
+                    sideOffset={5}
+                    align="start"
+                    avoidCollisions={true}
+                    collisionPadding={20}
+                  >
+                    {properties.map((property) => (
+                      <SelectItem key={property.id} value={property.id.toString()}>
+                        {property.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
-          <div className="flex-1 min-w-[200px]">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="min-w-[200px] select-dropdown-scrollable">
             <div className="flex items-center gap-1 mb-1">
               <label
                 htmlFor="outlet-select"
@@ -3392,7 +3602,13 @@ export default function ReportsClient() {
               >
                 <SelectValue placeholder="All Outlets" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent 
+                side="bottom" 
+                sideOffset={5}
+                align="start"
+                avoidCollisions={true}
+                collisionPadding={20}
+              >
                 {allOutlets.map((outlet) => (
                   <SelectItem key={outlet.id} value={outlet.id}>
                     {outlet.name}
@@ -3425,23 +3641,26 @@ export default function ReportsClient() {
             </div>
           )}
 
-          <Button
-            onClick={handleGenerateReport}
-            className="w-full md:w-auto"
-            disabled={isLoadingReport}
-          >
-            {isLoadingReport ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Generating...
-              </>
-            ) : (
-              <>
-                <Filter className="mr-2 h-4 w-4" />
-                Apply Filters
-              </>
-            )}
-          </Button>
+            <div className="min-w-[200px] flex items-end">
+              <Button
+                onClick={handleGenerateReport}
+                className="w-full"
+                disabled={isLoadingReport}
+              >
+              {isLoadingReport ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Filter className="mr-2 h-4 w-4" />
+                  Apply Filters
+                </>
+              )}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -3590,6 +3809,39 @@ export default function ReportsClient() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Report Title Section */}
+          {reportData && (
+            <div className="mb-6 pb-4 border-b border-border">
+              <h2 className="text-2xl font-bold text-foreground mb-1">
+                {reportOptions.find(opt => opt.value === selectedReport)?.label || 'Report'}
+                {getReportPropertyName(reportData)}
+              </h2>
+              <div className="flex items-center gap-2 text-muted-foreground">
+              <Calendar className="h-4 w-4" />
+              <p className="text-md">
+                {getDateRangeDisplay().replace(' | ', '')}
+              </p>
+              {selectedOutletId && selectedOutletId !== "all" ? (
+                <div className="flex items-center gap-1">
+                  <Building2 className="h-4 w-4" />
+                  <span>
+                    {allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name || "Selected Outlet"}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Building2 className="h-4 w-4" />
+                  <span>All Outlets</span>
+                </div>
+              )}
+              <div className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                <span>{daysInRange} days</span>
+              </div>
+              </div>
+            </div>
+          )}
+
           {isLoadingReport && (
             <p className="text-center text-muted-foreground">
               Generating report...
@@ -3644,7 +3896,7 @@ export default function ReportsClient() {
                   data={reportData as CostAnalysisByCategoryReport}
                   outletId={selectedOutletId}
                   outletName={
-                    allOutlets.find((o) => o.id === selectedOutletId)?.name
+                    allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name
                   }
                   isLoading={isLoadingReport}
                 />
@@ -3707,6 +3959,102 @@ export default function ReportsClient() {
               </div>
             )}
 
+          {/* Property Performance Comparison Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "property_performance_comparison" &&
+            "propertyData" in reportData && (
+              <div className="space-y-6">
+                <PropertyPerformanceComparisonReport
+                  data={reportData as PropertyPerformanceComparisonReport}
+                  outletName={
+                    selectedOutletId && selectedOutletId !== "all"
+                      ? allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+
+          {/* Outlet Efficiency & Profitability Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "outlet_efficiency_profitability" &&
+            "outletData" in reportData && (
+              <div className="space-y-6">
+                <OutletEfficiencyProfitabilityReport
+                  data={reportData as OutletEfficiencyProfitabilityReport}
+                  outletName={
+                    selectedOutletId && selectedOutletId !== "all"
+                      ? allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+
+          {/* Category Performance Trends Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "category_performance_trends" &&
+            "foodCategories" in reportData && (
+              <div className="space-y-6">
+                <CategoryPerformanceTrendsReport
+                  data={reportData as CategoryPerformanceTrendsReport}
+                  outletName={
+                    selectedOutletId && selectedOutletId !== "all"
+                      ? allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+
+          {/* User Activity & Audit Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "user_activity_audit" &&
+            "userData" in reportData && (
+              <div className="space-y-6">
+                <UserActivityAuditReport
+                  data={reportData as UserActivityAuditReport}
+                />
+              </div>
+            )}
+
+          {/* Cost Variance Analysis Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "cost_variance_analysis" &&
+            "categoryVariances" in reportData && (
+              <div className="space-y-6">
+                <CostVarianceAnalysisReport
+                  data={reportData as CostVarianceAnalysisReport}
+                  outletName={
+                    selectedOutletId && selectedOutletId !== "all"
+                      ? allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name
+                      : undefined
+                  }
+                />
+              </div>
+            )}
+
+          {/* Predictive Analytics & Forecasting Report */}
+          {!isLoadingReport &&
+            reportData &&
+            selectedReport === "predictive_analytics" &&
+            "categoryForecasts" in reportData && (
+              <div className="space-y-6">
+                <PredictiveAnalyticsReport
+                  data={reportData as PredictiveAnalyticsReport}
+                  outletName={
+                    selectedOutletId && selectedOutletId !== "all"
+                      ? allOutlets.find((o) => o.id.toString() === selectedOutletId.toString())?.name
+                      : undefined
+                  }
+                />
+              </div>
+            )}
 
           {/* Placeholder for reports without implemented components yet */}
           {!isLoadingReport &&
@@ -3720,7 +4068,13 @@ export default function ReportsClient() {
               "daily_revenue_trends",
               "year_over_year",
               "real_time_kpi",
-              "forecasting_report"
+              "forecasting_report",
+              "property_performance_comparison",
+              "outlet_efficiency_profitability",
+              "category_performance_trends",
+              "user_activity_audit",
+              "cost_variance_analysis",
+              "predictive_analytics",
             ].includes(selectedReport) && (
               <div className="border p-4 rounded-lg bg-secondary/10">
                 <h3 className="text-lg font-semibold mb-2">Report Output:</h3>

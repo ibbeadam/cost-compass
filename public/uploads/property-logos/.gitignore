@@ -1,0 +1,4 @@
+# Ignore all uploaded property logo files but keep the directory
+*
+!.gitignore
+!.gitkeep
