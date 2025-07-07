@@ -5086,8 +5086,8 @@ export default function ReportsClient() {
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
       );
     } else if (selectedReport === "user_activity_audit" && reportData) {
-      // User Activity & Audit Report PDF Export
-      const auditReport = reportData as any;
+      // User Activity & Audit Report PDF Export - ALL TABS
+      const auditReport = reportData as UserActivityAuditReport;
 
       // Create professional header
       const reportTitle = "User Activity & Audit Report";
@@ -5098,62 +5098,100 @@ export default function ReportsClient() {
       
       yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
-      // Summary
-      if (auditReport.summary) {
-        doc.setFontSize(14);
-        doc.text("Activity Summary", 14, yPos);
-        yPos += 10;
+      // Executive Summary
+      doc.setFontSize(16);
+      doc.text("Executive Summary", 14, yPos);
+      yPos += 10;
 
-        const summaryHeaders = [["Metric", "Value"]];
-        const summaryData = [
-          ["Total Users", (auditReport.summary.totalUsers || 0).toString()],
-          ["Active Users", (auditReport.summary.activeUsers || 0).toString()],
-          ["Total Actions", (auditReport.summary.totalActions || 0).toString()],
-          ["Avg Actions per User", formatNumber(auditReport.summary.avgActionsPerUser || 0)],
-          ["Most Active User", auditReport.summary.mostActiveUser || "N/A"],
-          ["Top Action", auditReport.summary.topAction || "N/A"]
-        ];
+      const summaryHeaders = [["Metric", "Value"]];
+      const summaryData = [
+        ["Total Users", auditReport.summary.totalUsers.toString()],
+        ["Active Users", auditReport.summary.activeUsers.toString()],
+        ["Total Actions", auditReport.summary.totalActions.toLocaleString()],
+        ["Avg Actions per User", auditReport.summary.avgActionsPerUser.toFixed(1)],
+        ["Peak Activity Day", `${auditReport.summary.peakActivityDay.actions} actions on ${formatDateFn(auditReport.summary.peakActivityDay.date, "MMM dd, yyyy")}`],
+        ["Most Active User", auditReport.summary.mostActiveUser.name],
+        ["Top Action", `${auditReport.summary.topAction.name} (${auditReport.summary.topAction.count.toLocaleString()} times)`],
+        ["Overall Risk Score", auditReport.riskAssessment.overallRiskScore.toFixed(1)]
+      ];
 
-        autoTable(doc, {
-          startY: yPos,
-          head: summaryHeaders,
-          body: summaryData,
-          theme: "grid",
-          headStyles: {
-            fillColor: [240, 240, 240],
-            textColor: [0, 0, 0],
-            fontStyle: "bold",
-          },
-          styles: { fontSize: 10, cellPadding: 2 },
-          columnStyles: { 1: { halign: "right" } },
-          margin: { bottom: 30 },
-          didDrawPage: function (data) {
-            yPos = data.cursor?.y || yPos;
-          },
-        });
-        yPos += 15;
+      autoTable(doc, {
+        startY: yPos,
+        head: summaryHeaders,
+        body: summaryData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Key Performance Indicators
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
       }
+      
+      doc.setFontSize(14);
+      doc.text("Key Performance Indicators", 14, yPos);
+      yPos += 10;
 
-      // User Activity Details
+      const kpiHeaders = [["Indicator", "Value", "Details"]];
+      const kpiData = [
+        ["Most Active User", auditReport.summary.mostActiveUser.name, `${auditReport.summary.mostActiveUser.actions.toLocaleString()} actions • ${auditReport.summary.mostActiveUser.email}`],
+        ["Top Action", auditReport.summary.topAction.name, `${auditReport.summary.topAction.count.toLocaleString()} occurrences (${auditReport.summary.topAction.percentage.toFixed(1)}%)`],
+        ["High Risk Users", auditReport.riskAssessment.highRiskUsers.length.toString(), "Users requiring immediate attention"],
+        ["Suspicious Activities", auditReport.riskAssessment.suspiciousActivities.length.toString(), "Activities flagged for review"]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: kpiHeaders,
+        body: kpiData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Tab 1: Users (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("User Activity Analysis", 14, yPos);
+      yPos += 10;
+
       if (auditReport.userData && auditReport.userData.length > 0) {
-        // Check if we need a new page
-        if (yPos + 40 > doc.internal.pageSize.height - 20) {
-          doc.addPage();
-          yPos = 20;
-        }
-        
-        doc.setFontSize(14);
-        doc.text("User Activity Details", 14, yPos);
-        yPos += 10;
-
-        const userHeaders = [["User", "Role", "Total Actions", "Daily Avg", "Last Active", "Risk Score"]];
-        const userData = auditReport.userData.slice(0, 20).map((user: any) => [
+        const userHeaders = [["User", "Role", "Total Actions", "Daily Avg", "Logins", "Last Active", "Trend", "Risk Level"]];
+        const userData = auditReport.userData.map((user: any) => [
           user.userName || "Unknown User",
           user.userRole || "N/A",
-          (user.totalActions || 0).toString(),
-          formatNumber(user.dailyAverage || 0),
-          user.lastActive ? new Date(user.lastActive).toLocaleDateString() : "N/A",
-          formatNumber(user.riskScore || 0)
+          user.totalActions.toLocaleString(),
+          user.dailyAverage.toFixed(1),
+          user.totalLogins.toString(),
+          formatDateFn(user.lastActive, "MMM dd, HH:mm"),
+          user.activityTrend || "Stable",
+          user.riskScore >= 70 ? "High Risk" : user.riskScore >= 40 ? "Medium Risk" : "Low Risk"
         ]);
 
         autoTable(doc, {
@@ -5166,18 +5204,417 @@ export default function ReportsClient() {
             textColor: [0, 0, 0],
             fontStyle: "bold",
           },
-          styles: { fontSize: 9, cellPadding: 1.5 },
+          styles: { fontSize: 8, cellPadding: 1.5 },
           columnStyles: {
             2: { halign: "right" },
             3: { halign: "right" },
-            5: { halign: "right" },
+            4: { halign: "right" },
           },
           margin: { bottom: 30 },
           didDrawPage: function (data) {
             yPos = data.cursor?.y || yPos;
           },
         });
+        yPos += 15;
       }
+
+      // Tab 2: Activity Timeline (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Daily Activity Timeline", 14, yPos);
+      yPos += 10;
+
+      if (auditReport.dailyActivity && auditReport.dailyActivity.length > 0) {
+        const timelineHeaders = [["Date", "Total Actions", "Unique Users", "Avg Actions/User"]];
+        const timelineData = auditReport.dailyActivity.map((day: any) => [
+          formatDateFn(day.date, "MMM dd, yyyy"),
+          day.totalActions.toLocaleString(),
+          day.uniqueUsers.toString(),
+          day.averageActionsPerUser.toFixed(1)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: timelineHeaders,
+          body: timelineData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 3: Actions Analysis (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Action Analysis", 14, yPos);
+      yPos += 10;
+
+      // Top Actions
+      if (auditReport.actionAnalytics?.totalActions && auditReport.actionAnalytics.totalActions.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Top Actions:", 14, yPos);
+        yPos += 8;
+
+        const actionHeaders = [["Action", "Count", "Percentage", "Unique Users"]];
+        const actionData = auditReport.actionAnalytics.totalActions.slice(0, 15).map((action: any) => [
+          action.action || "Unknown Action",
+          action.count.toLocaleString(),
+          `${action.percentage.toFixed(1)}%`,
+          action.uniqueUsers.toString()
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: actionHeaders,
+          body: actionData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Resource Activity
+      if (auditReport.actionAnalytics?.resourceActivity && auditReport.actionAnalytics.resourceActivity.length > 0) {
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Resource Activity:", 14, yPos);
+        yPos += 8;
+
+        const resourceHeaders = [["Resource", "Count", "Percentage", "Unique Users", "Top Users"]];
+        const resourceData = auditReport.actionAnalytics.resourceActivity.slice(0, 10).map((resource: any) => [
+          resource.resource || "Unknown Resource",
+          resource.count.toLocaleString(),
+          `${resource.percentage.toFixed(1)}%`,
+          resource.uniqueUsers.toString(),
+          (resource.topUsers || []).slice(0, 2).join(", ")
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: resourceHeaders,
+          body: resourceData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 4: Security Analysis (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Security Analysis", 14, yPos);
+      yPos += 10;
+
+      // High Risk Users
+      if (auditReport.riskAssessment.highRiskUsers && auditReport.riskAssessment.highRiskUsers.length > 0) {
+        doc.setFontSize(12);
+        doc.text("High Risk Users:", 14, yPos);
+        yPos += 6;
+        
+        auditReport.riskAssessment.highRiskUsers.forEach((user: string, index: number) => {
+          doc.setFontSize(10);
+          doc.text(`• ${user}`, 20, yPos);
+          yPos += 5;
+        });
+        yPos += 5;
+      } else {
+        doc.setFontSize(12);
+        doc.text("High Risk Users: None identified", 14, yPos);
+        yPos += 10;
+      }
+
+      // Suspicious Activities
+      if (auditReport.riskAssessment.suspiciousActivities && auditReport.riskAssessment.suspiciousActivities.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Suspicious Activities:", 14, yPos);
+        yPos += 8;
+
+        const suspiciousHeaders = [["User", "Activity", "Risk Level", "Timestamp"]];
+        const suspiciousData = auditReport.riskAssessment.suspiciousActivities.slice(0, 10).map((activity: any) => [
+          activity.userName || "Unknown User",
+          (activity.activity || "Unknown Activity").substring(0, 40) + "...",
+          activity.riskLevel || "Unknown",
+          formatDateFn(activity.timestamp, "MMM dd, HH:mm")
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: suspiciousHeaders,
+          body: suspiciousData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Login Analytics
+      if (yPos + 30 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(12);
+      doc.text("Login Analytics:", 14, yPos);
+      yPos += 8;
+
+      const loginHeaders = [["Metric", "Value"]];
+      const successRate = auditReport.loginAnalytics.totalLogins > 0 
+        ? ((auditReport.loginAnalytics.totalLogins - auditReport.loginAnalytics.loginFailures) / auditReport.loginAnalytics.totalLogins * 100).toFixed(1)
+        : "N/A";
+      
+      const loginData = [
+        ["Total Logins", auditReport.loginAnalytics.totalLogins.toLocaleString()],
+        ["Unique Users", auditReport.loginAnalytics.uniqueLoginUsers.toString()],
+        ["Login Failures", auditReport.loginAnalytics.loginFailures.toString()],
+        ["Success Rate", `${successRate}%`]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: loginHeaders,
+        body: loginData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Tab 5: Insights (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("User Activity Insights", 14, yPos);
+      yPos += 10;
+
+      // User Activity Insights
+      const usersWithInsights = auditReport.userData.filter(user => user.unusualActivity && user.unusualActivity.length > 0);
+      for (const user of usersWithInsights.slice(0, 5)) {
+        if (yPos + 30 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text(`${user.userName} - Activity Insights:`, 14, yPos);
+        yPos += 6;
+        
+        doc.setFontSize(10);
+        doc.text(`Risk Score: ${user.riskScore.toFixed(1)} | Total Actions: ${user.totalActions.toLocaleString()} | Trend: ${user.activityTrend}`, 14, yPos);
+        yPos += 6;
+
+        // Top Actions
+        if (user.actionBreakdown && user.actionBreakdown.length > 0) {
+          doc.text("Top Actions:", 14, yPos);
+          yPos += 4;
+          
+          user.actionBreakdown.slice(0, 3).forEach((action: any, index: number) => {
+            doc.text(`  • ${action.action}: ${action.count} (${action.percentage.toFixed(1)}%)`, 18, yPos);
+            yPos += 4;
+          });
+          yPos += 2;
+        }
+
+        // Unusual Activity
+        if (user.unusualActivity && user.unusualActivity.length > 0) {
+          doc.text("Unusual Activity:", 14, yPos);
+          yPos += 4;
+          
+          user.unusualActivity.slice(0, 3).forEach((activity: string, index: number) => {
+            const splitText = doc.splitTextToSize(`  • ${activity}`, 170);
+            doc.text(splitText, 18, yPos);
+            yPos += splitText.length * 4;
+          });
+          yPos += 2;
+        }
+
+        // Recent Activity Sample
+        if (user.recentActivity && user.recentActivity.length > 0) {
+          doc.text("Recent Activity Sample:", 14, yPos);
+          yPos += 4;
+          
+          user.recentActivity.slice(0, 2).forEach((activity: any, index: number) => {
+            doc.text(`  • ${activity.action} on ${activity.resource} (${formatDateFn(activity.timestamp, "MMM dd, HH:mm")})`, 18, yPos);
+            yPos += 4;
+            if (activity.ipAddress) {
+              doc.text(`    IP: ${activity.ipAddress}`, 22, yPos);
+              yPos += 4;
+            }
+          });
+        }
+        yPos += 8;
+      }
+
+      // Tab 6: Recommendations (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Security Recommendations", 14, yPos);
+      yPos += 10;
+
+      // Security Recommendations
+      if (auditReport.riskAssessment.recommendations && auditReport.riskAssessment.recommendations.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Security Recommendations:", 14, yPos);
+        yPos += 6;
+        
+        auditReport.riskAssessment.recommendations.forEach((recommendation: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${recommendation}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 10;
+      }
+
+      // System Health Summary
+      if (yPos + 30 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(12);
+      doc.text("System Health Summary:", 14, yPos);
+      yPos += 8;
+
+      const healthHeaders = [["Metric", "Status", "Details"]];
+      const riskLevel = auditReport.riskAssessment.overallRiskScore >= 70 ? "High Risk" : 
+                       auditReport.riskAssessment.overallRiskScore >= 40 ? "Medium Risk" : "Low Risk";
+      
+      const healthData = [
+        ["Overall Risk Level", riskLevel, `Score: ${auditReport.riskAssessment.overallRiskScore.toFixed(1)}/100`],
+        ["Active Users", `${auditReport.summary.activeUsers}/${auditReport.summary.totalUsers}`, "User engagement"],
+        ["Login Success Rate", `${successRate}%`, "Authentication health"],
+        ["High Risk Users", auditReport.riskAssessment.highRiskUsers.length.toString(), "Requiring attention"],
+        ["Suspicious Activities", auditReport.riskAssessment.suspiciousActivities.length.toString(), "Flagged for review"]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: healthHeaders,
+        body: healthData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Action Items
+      if (yPos + 20 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(12);
+      doc.text("Action Items:", 14, yPos);
+      yPos += 6;
+
+      const actionItems = [
+        `Review high-risk users (${auditReport.riskAssessment.highRiskUsers.length})`,
+        `Investigate suspicious activities (${auditReport.riskAssessment.suspiciousActivities.length})`,
+        `Monitor login failures (${auditReport.loginAnalytics.loginFailures})`
+      ];
+
+      actionItems.forEach((item: string, index: number) => {
+        doc.setFontSize(10);
+        doc.text(`• ${item}`, 20, yPos);
+        yPos += 5;
+      });
 
       // Add footer to all pages before saving
       const totalPagesAudit = doc.internal.getNumberOfPages();
@@ -5187,7 +5624,7 @@ export default function ReportsClient() {
       }
 
       doc.save(
-        `User_Activity_Audit_${formatDateFn(
+        `User_Activity_Audit_ALL_TABS_${formatDateFn(
           dateRange.from,
           "yyyyMMdd"
         )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
