@@ -82,6 +82,8 @@ export default function PropertyManagementClient() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [viewingProperty, setViewingProperty] = useState<Property | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -119,6 +121,11 @@ export default function PropertyManagementClient() {
   const handleEdit = (property: Property) => {
     setEditingProperty(property);
     setIsFormOpen(true);
+  };
+
+  const handleView = (property: Property) => {
+    setViewingProperty(property);
+    setIsViewDialogOpen(true);
   };
 
   const handleDelete = async (propertyId: number) => {
@@ -677,6 +684,15 @@ export default function PropertyManagementClient() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => handleView(property)}
+                            className="h-8 w-8 hover:text-blue-600"
+                            title="View Property Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleEdit(property)}
                             className="h-8 w-8 hover:text-primary"
                             title="Edit Property"
@@ -770,6 +786,13 @@ export default function PropertyManagementClient() {
         users={users}
         onSubmit={(formData, logoFile) => handleSubmit(formData, logoFile)}
         isSubmitting={isSubmitting}
+      />
+      
+      <PropertyViewDialog
+        open={isViewDialogOpen}
+        onOpenChange={setIsViewDialogOpen}
+        property={viewingProperty}
+        users={users}
       />
     </div>
   );
@@ -1124,6 +1147,208 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
             </Button>
           </div>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface PropertyViewDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  property: Property | null;
+  users: User[];
+}
+
+function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyViewDialogProps) {
+  if (!property) return null;
+
+  const owner = property.ownerId ? users.find(u => u.id === property.ownerId) : null;
+  const manager = property.managerId ? users.find(u => u.id === property.managerId) : null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-headline text-xl flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Property Details
+          </DialogTitle>
+          <DialogDescription>
+            View complete information for {property.name}
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-6">
+          {/* Header Section with Logo */}
+          <div className="flex items-start gap-4 p-4 bg-muted/20 rounded-lg">
+            <div className="flex-shrink-0">
+              {property.logoUrl ? (
+                <img
+                  src={property.logoUrl}
+                  alt={`${property.name} logo`}
+                  className="w-16 h-16 object-cover rounded-lg border-2 border-muted"
+                />
+              ) : (
+                <div className="w-16 h-16 bg-muted rounded-lg border-2 border-muted flex items-center justify-center">
+                  <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-semibold mb-2">{property.name}</h3>
+              <div className="flex flex-wrap items-center gap-4">
+                <Badge variant={getPropertyTypeBadgeVariant(property.propertyType)} className="flex items-center gap-1">
+                  {getPropertyTypeDisplayName(property.propertyType)}
+                </Badge>
+                <Badge variant={property.isActive ? "default" : "secondary"}>
+                  {property.isActive ? "Active" : "Inactive"}
+                </Badge>
+                <span className="text-sm text-muted-foreground font-mono">
+                  {property.propertyCode}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Basic Information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="font-semibold text-lg flex items-center gap-2">
+                <Building className="h-4 w-4" />
+                Basic Information
+              </h4>
+              <div className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Property Name:</span>
+                  <span className="font-medium">{property.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Property Code:</span>
+                  <span className="font-mono">{property.propertyCode}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Type:</span>
+                  <span className="font-medium">{getPropertyTypeDisplayName(property.propertyType)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Currency:</span>
+                  <span className="font-medium">{property.currency || 'USD'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Time Zone:</span>
+                  <span className="font-medium">{property.timeZone || 'UTC'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status:</span>
+                  <Badge variant={property.isActive ? "default" : "secondary"}>
+                    {property.isActive ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Created:</span>
+                  <span className="font-medium">
+                    {property.createdAt instanceof Date ? format(property.createdAt, "MMM d, yyyy 'at' h:mm a") : "Unknown"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="font-semibold text-lg flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Location & Management
+              </h4>
+              <div className="space-y-3">
+                {property.address && (
+                  <div>
+                    <span className="text-muted-foreground block mb-1">Address:</span>
+                    <span className="font-medium">{property.address}</span>
+                  </div>
+                )}
+                {(property.city || property.state) && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">City/State:</span>
+                    <span className="font-medium">
+                      {property.city ? `${property.city}${property.state ? `, ${property.state}` : ''}` : property.state}
+                    </span>
+                  </div>
+                )}
+                {property.country && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Country:</span>
+                    <span className="font-medium">{property.country}</span>
+                  </div>
+                )}
+                <div className="pt-2 border-t">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Owner:</span>
+                    <span className="font-medium">
+                      {owner ? (owner.name || owner.email) : 'No owner assigned'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Manager:</span>
+                  <span className="font-medium">
+                    {manager ? (manager.name || manager.email) : 'No manager assigned'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Outlets Information */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-lg flex items-center gap-2">
+              <Store className="h-4 w-4" />
+              Outlets
+            </h4>
+            <div className="p-4 bg-muted/20 rounded-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Total Outlets:</span>
+                <div className="flex items-center gap-2">
+                  <Store className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-semibold text-lg">{property._count?.outlets || 0}</span>
+                </div>
+              </div>
+              {(property._count?.outlets || 0) > 0 ? (
+                <p className="text-sm text-muted-foreground mt-2">
+                  This property has {property._count?.outlets} outlet{(property._count?.outlets || 0) !== 1 ? 's' : ''} assigned to it.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No outlets are currently assigned to this property.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Additional Details */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-lg flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              System Information
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Property ID:</span>
+                <span className="font-mono">{property.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Last Updated:</span>
+                <span className="font-medium">
+                  {property.updatedAt instanceof Date ? format(property.updatedAt, "MMM d, yyyy") : "Unknown"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-4">
+          <Button onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
