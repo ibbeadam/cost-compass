@@ -1978,185 +1978,1252 @@ export default function ReportsClient() {
 
       showToast.success("Report successfully exported to Excel.");
     } else if (selectedReport === "property_performance_comparison" && reportData) {
-      // Property Performance Comparison Excel Export
-      const propertyReport = reportData as any;
+      // Property Performance Comparison Excel Export - ALL TABS
+      const propertyReport = reportData as PropertyPerformanceComparisonReport;
       const propertyHeader = getPropertyHeaderData();
       
-      ws_data.push([`${propertyHeader.propertyName} - Property Performance Comparison Report`]);
-      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
-      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
-      ws_data.push([]);
+      const wb = XLSX.utils.book_new();
       
-      if (propertyReport.properties && propertyReport.properties.length > 0) {
-        ws_data.push(["Property Performance Summary"]);
-        ws_data.push(["Property", "Total Revenue", "Total Costs", "Net Profit", "Profit Margin"]);
-        propertyReport.properties.forEach((property: any) => {
-          ws_data.push([
-            property.name || "Unknown Property",
+      // Tab 1: Executive Summary
+      const summaryData: any[][] = [];
+      summaryData.push([`${propertyHeader.propertyName} - Property Performance Comparison Report`]);
+      summaryData.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      summaryData.push([`Generated: ${propertyHeader.generatedAt}`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Executive Summary"]);
+      summaryData.push(["Metric", "Value"]);
+      summaryData.push(["Total Properties", propertyReport.summary.totalProperties]);
+      summaryData.push(["Top Performing Property", propertyReport.summary.topPerformingProperty.name]);
+      summaryData.push(["Lowest Performing Property", propertyReport.summary.lowestPerformingProperty.name]);
+      summaryData.push(["Average Performance Score", formatNumber(propertyReport.summary.averagePerformanceScore)]);
+      summaryData.push(["Total Portfolio Revenue", formatNumber(propertyReport.summary.totalPortfolioRevenue)]);
+      summaryData.push(["Total Portfolio Costs", formatNumber(propertyReport.summary.totalPortfolioCosts)]);
+      summaryData.push(["Portfolio Profit Margin", `${formatNumber(propertyReport.summary.portfolioProfitMargin)}%`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Key Performance Indicators"]);
+      if (propertyReport.kpiComparison) {
+        summaryData.push(["KPI", "Best Property", "Value", "Worst Property", "Value"]);
+        summaryData.push(["Revenue per Sq Ft", 
+          propertyReport.kpiComparison.revenuePerSqFt.best.propertyName, 
+          formatNumber(propertyReport.kpiComparison.revenuePerSqFt.best.value),
+          propertyReport.kpiComparison.revenuePerSqFt.worst.propertyName,
+          formatNumber(propertyReport.kpiComparison.revenuePerSqFt.worst.value)]);
+        summaryData.push(["Cost per Sq Ft", 
+          propertyReport.kpiComparison.costPerSqFt.best.propertyName, 
+          formatNumber(propertyReport.kpiComparison.costPerSqFt.best.value),
+          propertyReport.kpiComparison.costPerSqFt.worst.propertyName,
+          formatNumber(propertyReport.kpiComparison.costPerSqFt.worst.value)]);
+        summaryData.push(["Occupancy Rate", 
+          propertyReport.kpiComparison.occupancyRate.best.propertyName, 
+          `${formatNumber(propertyReport.kpiComparison.occupancyRate.best.value)}%`,
+          propertyReport.kpiComparison.occupancyRate.worst.propertyName,
+          `${formatNumber(propertyReport.kpiComparison.occupancyRate.worst.value)}%`]);
+      }
+      
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Executive Summary");
+      
+      // Tab 2: Property Performance Details
+      const propertyData: any[][] = [];
+      propertyData.push(["Property Performance Details"]);
+      propertyData.push([]);
+      propertyData.push(["Property", "Revenue", "Costs", "Net Profit", "Profit Margin %", "Performance Score", "Rank"]);
+      
+      if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
+        propertyReport.propertyData.forEach((property: any) => {
+          propertyData.push([
+            property.propertyName || "Unknown Property",
             formatNumber(property.totalRevenue || 0),
             formatNumber(property.totalCosts || 0),
-            formatNumber((property.totalRevenue || 0) - (property.totalCosts || 0)),
-            formatNumber(property.profitMargin || 0)
+            formatNumber(property.netProfit || 0),
+            formatNumber(property.profitMargin || 0),
+            formatNumber(property.performanceScore || 0),
+            property.rank || "N/A"
           ]);
         });
       }
       
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Property Performance");
-      XLSX.writeFile(wb, `Property_Performance_Comparison_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      const propertyWs = XLSX.utils.aoa_to_sheet(propertyData);
+      XLSX.utils.book_append_sheet(wb, propertyWs, "Property Performance");
       
-      showToast.success("Report successfully exported to Excel.");
+      // Tab 3: Revenue Analysis
+      const revenueData: any[][] = [];
+      revenueData.push(["Revenue Analysis by Property"]);
+      revenueData.push([]);
+      revenueData.push(["Property", "Food Revenue", "Beverage Revenue", "Other Revenue", "Total Revenue", "Growth %"]);
+      
+      if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
+        propertyReport.propertyData.forEach((property: any) => {
+          revenueData.push([
+            property.propertyName || "Unknown Property",
+            formatNumber(property.foodRevenue || 0),
+            formatNumber(property.beverageRevenue || 0),
+            formatNumber(property.otherRevenue || 0),
+            formatNumber(property.totalRevenue || 0),
+            formatNumber(property.revenueGrowth || 0)
+          ]);
+        });
+      }
+      
+      const revenueWs = XLSX.utils.aoa_to_sheet(revenueData);
+      XLSX.utils.book_append_sheet(wb, revenueWs, "Revenue Analysis");
+      
+      // Tab 4: Cost Analysis
+      const costData: any[][] = [];
+      costData.push(["Cost Analysis by Property"]);
+      costData.push([]);
+      costData.push(["Property", "Food Costs", "Beverage Costs", "Operating Costs", "Total Costs", "Cost Efficiency"]);
+      
+      if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
+        propertyReport.propertyData.forEach((property: any) => {
+          costData.push([
+            property.propertyName || "Unknown Property",
+            formatNumber(property.foodCosts || 0),
+            formatNumber(property.beverageCosts || 0),
+            formatNumber(property.operatingCosts || 0),
+            formatNumber(property.totalCosts || 0),
+            formatNumber(property.costEfficiency || 0)
+          ]);
+        });
+      }
+      
+      const costWs = XLSX.utils.aoa_to_sheet(costData);
+      XLSX.utils.book_append_sheet(wb, costWs, "Cost Analysis");
+      
+      // Tab 5: Efficiency Metrics
+      const efficiencyData: any[][] = [];
+      efficiencyData.push(["Property Efficiency Metrics"]);
+      efficiencyData.push([]);
+      efficiencyData.push(["Property", "Revenue per Sq Ft", "Cost per Sq Ft", "Occupancy Rate %", "Operational Efficiency", "Customer Satisfaction"]);
+      
+      if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
+        propertyReport.propertyData.forEach((property: any) => {
+          efficiencyData.push([
+            property.propertyName || "Unknown Property",
+            formatNumber(property.revenuePerSqFt || 0),
+            formatNumber(property.costPerSqFt || 0),
+            formatNumber(property.occupancyRate || 0),
+            formatNumber(property.operationalEfficiency || 0),
+            formatNumber(property.customerSatisfaction || 0)
+          ]);
+        });
+      }
+      
+      const efficiencyWs = XLSX.utils.aoa_to_sheet(efficiencyData);
+      XLSX.utils.book_append_sheet(wb, efficiencyWs, "Efficiency Metrics");
+      
+      // Tab 6: Benchmarking & Insights
+      const insightsData: any[][] = [];
+      insightsData.push(["Benchmarking & Strategic Insights"]);
+      insightsData.push([]);
+      
+      insightsData.push(["Portfolio Benchmarks"]);
+      if (propertyReport.benchmarks) {
+        insightsData.push(["Metric", "Portfolio Average", "Industry Benchmark", "Performance Gap"]);
+        insightsData.push(["Profit Margin", `${formatNumber(propertyReport.benchmarks.portfolioAverage.profitMargin)}%`, 
+          `${formatNumber(propertyReport.benchmarks.industryBenchmark.profitMargin)}%`,
+          `${formatNumber(propertyReport.benchmarks.performanceGap.profitMargin)}%`]);
+        insightsData.push(["Revenue Growth", `${formatNumber(propertyReport.benchmarks.portfolioAverage.revenueGrowth)}%`, 
+          `${formatNumber(propertyReport.benchmarks.industryBenchmark.revenueGrowth)}%`,
+          `${formatNumber(propertyReport.benchmarks.performanceGap.revenueGrowth)}%`]);
+        insightsData.push(["Cost Efficiency", formatNumber(propertyReport.benchmarks.portfolioAverage.costEfficiency), 
+          formatNumber(propertyReport.benchmarks.industryBenchmark.costEfficiency),
+          formatNumber(propertyReport.benchmarks.performanceGap.costEfficiency)]);
+      }
+      
+      insightsData.push([]);
+      insightsData.push(["Key Insights & Recommendations"]);
+      if (propertyReport.insights?.recommendations) {
+        propertyReport.insights.recommendations.forEach((rec: string, index: number) => {
+          insightsData.push([`${index + 1}. ${rec}`]);
+        });
+      }
+      
+      const insightsWs = XLSX.utils.aoa_to_sheet(insightsData);
+      XLSX.utils.book_append_sheet(wb, insightsWs, "Benchmarking & Insights");
+      
+      XLSX.writeFile(wb, `Property_Performance_Comparison_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Property Performance Comparison Report (All Tabs) successfully exported to Excel.");
     } else if (selectedReport === "outlet_efficiency_profitability" && reportData) {
-      // Outlet Efficiency & Profitability Excel Export
-      const outletReport = reportData as any;
+      // Outlet Efficiency & Profitability Excel Export - ALL TABS
+      const outletReport = reportData as OutletEfficiencyProfitabilityReport;
       const propertyHeader = getPropertyHeaderData();
       
-      ws_data.push([`${propertyHeader.propertyName} - Outlet Efficiency & Profitability Report`]);
-      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
-      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
-      ws_data.push([]);
+      const wb = XLSX.utils.book_new();
       
-      if (outletReport.outlets && outletReport.outlets.length > 0) {
-        ws_data.push(["Outlet Efficiency Summary"]);
-        ws_data.push(["Outlet", "Revenue per Sq Ft", "Cost Efficiency", "Profit Margin", "Performance Score"]);
-        outletReport.outlets.forEach((outlet: any) => {
-          ws_data.push([
-            outlet.name || "Unknown Outlet",
-            formatNumber(outlet.revenuePerSqFt || 0),
-            formatNumber(outlet.costEfficiency || 0),
+      // Tab 1: Executive Summary
+      const summaryData: any[][] = [];
+      summaryData.push([`${propertyHeader.propertyName} - Outlet Efficiency & Profitability Report`]);
+      summaryData.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      summaryData.push([`Generated: ${propertyHeader.generatedAt}`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Executive Summary"]);
+      summaryData.push(["Metric", "Value"]);
+      summaryData.push(["Total Outlets", outletReport.summary.totalOutlets]);
+      summaryData.push(["Average Efficiency Score", formatNumber(outletReport.summary.averageEfficiencyScore)]);
+      summaryData.push(["Top Performing Outlet", outletReport.summary.topPerformingOutlet.name]);
+      summaryData.push(["Most Profitable Outlet", outletReport.summary.mostProfitableOutlet.name]);
+      summaryData.push(["Total Portfolio Revenue", formatNumber(outletReport.summary.totalPortfolioRevenue)]);
+      summaryData.push(["Total Portfolio Costs", formatNumber(outletReport.summary.totalPortfolioCosts)]);
+      summaryData.push(["Portfolio Profit Margin", `${formatNumber(outletReport.summary.portfolioProfitMargin)}%`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Performance Distribution"]);
+      if (outletReport.performanceDistribution) {
+        summaryData.push(["Performance Level", "Number of Outlets", "Percentage"]);
+        summaryData.push(["High Performers", outletReport.performanceDistribution.highPerformers, 
+          `${formatNumber((outletReport.performanceDistribution.highPerformers / outletReport.summary.totalOutlets) * 100)}%`]);
+        summaryData.push(["Average Performers", outletReport.performanceDistribution.averagePerformers,
+          `${formatNumber((outletReport.performanceDistribution.averagePerformers / outletReport.summary.totalOutlets) * 100)}%`]);
+        summaryData.push(["Low Performers", outletReport.performanceDistribution.lowPerformers,
+          `${formatNumber((outletReport.performanceDistribution.lowPerformers / outletReport.summary.totalOutlets) * 100)}%`]);
+      }
+      
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Executive Summary");
+      
+      // Tab 2: Outlet Performance Details
+      const outletData: any[][] = [];
+      outletData.push(["Outlet Performance Details"]);
+      outletData.push([]);
+      outletData.push(["Outlet", "Revenue", "Costs", "Net Profit", "Profit Margin %", "Efficiency Score", "Performance Rating"]);
+      
+      if (outletReport.outletData && outletReport.outletData.length > 0) {
+        outletReport.outletData.forEach((outlet: any) => {
+          outletData.push([
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.totalRevenue || 0),
+            formatNumber(outlet.totalCosts || 0),
+            formatNumber(outlet.netProfit || 0),
             formatNumber(outlet.profitMargin || 0),
-            formatNumber(outlet.performanceScore || 0)
+            formatNumber(outlet.efficiencyScore || 0),
+            outlet.performanceRating || "N/A"
           ]);
         });
       }
       
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Outlet Efficiency");
-      XLSX.writeFile(wb, `Outlet_Efficiency_Profitability_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      const outletWs = XLSX.utils.aoa_to_sheet(outletData);
+      XLSX.utils.book_append_sheet(wb, outletWs, "Outlet Performance");
       
-      showToast.success("Report successfully exported to Excel.");
+      // Tab 3: Revenue Ranking
+      const revenueData: any[][] = [];
+      revenueData.push(["Revenue Ranking"]);
+      revenueData.push([]);
+      revenueData.push(["Rank", "Outlet", "Total Revenue", "Food Revenue", "Beverage Revenue", "Revenue Growth %"]);
+      
+      if (outletReport.rankings?.byRevenue && outletReport.rankings.byRevenue.length > 0) {
+        outletReport.rankings.byRevenue.forEach((outlet: any, index: number) => {
+          revenueData.push([
+            index + 1,
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.totalRevenue || 0),
+            formatNumber(outlet.foodRevenue || 0),
+            formatNumber(outlet.beverageRevenue || 0),
+            formatNumber(outlet.revenueGrowth || 0)
+          ]);
+        });
+      }
+      
+      const revenueWs = XLSX.utils.aoa_to_sheet(revenueData);
+      XLSX.utils.book_append_sheet(wb, revenueWs, "Revenue Ranking");
+      
+      // Tab 4: Profit Ranking
+      const profitData: any[][] = [];
+      profitData.push(["Profit Ranking"]);
+      profitData.push([]);
+      profitData.push(["Rank", "Outlet", "Net Profit", "Profit Margin %", "Profit Growth %"]);
+      
+      if (outletReport.rankings?.byProfit && outletReport.rankings.byProfit.length > 0) {
+        outletReport.rankings.byProfit.forEach((outlet: any, index: number) => {
+          profitData.push([
+            index + 1,
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.totalProfit || 0),
+            formatNumber(outlet.profitMargin || 0),
+            formatNumber(outlet.profitGrowth || 0)
+          ]);
+        });
+      }
+      
+      const profitWs = XLSX.utils.aoa_to_sheet(profitData);
+      XLSX.utils.book_append_sheet(wb, profitWs, "Profit Ranking");
+      
+      // Tab 5: Efficiency Ranking
+      const efficiencyData: any[][] = [];
+      efficiencyData.push(["Efficiency Ranking"]);
+      efficiencyData.push([]);
+      efficiencyData.push(["Rank", "Outlet", "Revenue-Cost Ratio", "Performance Rating", "Efficiency Trend"]);
+      
+      if (outletReport.rankings?.byEfficiency && outletReport.rankings.byEfficiency.length > 0) {
+        outletReport.rankings.byEfficiency.forEach((outlet: any, index: number) => {
+          efficiencyData.push([
+            index + 1,
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.revenueToCostRatio || 0),
+            outlet.performanceRating || "N/A",
+            outlet.efficiencyTrend || "Stable"
+          ]);
+        });
+      }
+      
+      const efficiencyWs = XLSX.utils.aoa_to_sheet(efficiencyData);
+      XLSX.utils.book_append_sheet(wb, efficiencyWs, "Efficiency Ranking");
+      
+      // Tab 6: Insights & Recommendations
+      const insightsData: any[][] = [];
+      insightsData.push(["Performance Insights & Recommendations"]);
+      insightsData.push([]);
+      
+      if (outletReport.insights?.topPerformers && outletReport.insights.topPerformers.length > 0) {
+        insightsData.push(["Top Performers"]);
+        insightsData.push(["Outlet", "Strength", "Score"]);
+        outletReport.insights.topPerformers.slice(0, 5).forEach((performer: any) => {
+          insightsData.push([
+            performer.outletName || "N/A",
+            performer.strength || "High Performance",
+            formatNumber(performer.score || 0)
+          ]);
+        });
+        insightsData.push([]);
+      }
+      
+      if (outletReport.insights?.recommendations && outletReport.insights.recommendations.length > 0) {
+        insightsData.push(["Key Recommendations"]);
+        outletReport.insights.recommendations.slice(0, 10).forEach((recommendation: string, index: number) => {
+          insightsData.push([`${index + 1}. ${recommendation}`]);
+        });
+      }
+      
+      const insightsWs = XLSX.utils.aoa_to_sheet(insightsData);
+      XLSX.utils.book_append_sheet(wb, insightsWs, "Insights & Recommendations");
+      
+      XLSX.writeFile(wb, `Outlet_Efficiency_Profitability_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Outlet Efficiency & Profitability Report (All Tabs) successfully exported to Excel.");
     } else if (selectedReport === "category_performance_trends" && reportData) {
-      // Category Performance Trends Excel Export
-      const categoryTrendsReport = reportData as any;
+      // Category Performance Trends Excel Export - ALL TABS
+      const categoryTrendsReport = reportData as CategoryPerformanceTrendsReport;
       const propertyHeader = getPropertyHeaderData();
       
-      ws_data.push([`${propertyHeader.propertyName} - Category Performance Trends Report`]);
-      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
-      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
-      ws_data.push([]);
+      const wb = XLSX.utils.book_new();
       
-      if (categoryTrendsReport.categoryTrends && categoryTrendsReport.categoryTrends.length > 0) {
-        ws_data.push(["Category Performance Trends"]);
-        ws_data.push(["Category", "Current Performance", "Trend Direction", "Growth Rate", "Performance Score"]);
-        categoryTrendsReport.categoryTrends.forEach((trend: any) => {
-          ws_data.push([
-            trend.categoryName || "Unknown Category",
-            formatNumber(trend.currentPerformance || 0),
-            trend.trendDirection || "Stable",
-            formatNumber(trend.growthRate || 0),
-            formatNumber(trend.performanceScore || 0)
+      // Tab 1: Overview Summary
+      const summaryData: any[][] = [];
+      summaryData.push([`${propertyHeader.propertyName} - Category Performance Trends Report`]);
+      summaryData.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      summaryData.push([`Generated: ${propertyHeader.generatedAt}`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Overview Summary"]);
+      summaryData.push(["Metric", "Value"]);
+      summaryData.push(["Total Categories", categoryTrendsReport.summary.totalCategories]);
+      summaryData.push(["Food Categories", categoryTrendsReport.summary.foodCategories]);
+      summaryData.push(["Beverage Categories", categoryTrendsReport.summary.beverageCategories]);
+      summaryData.push(["Total Cost", formatNumber(categoryTrendsReport.summary.totalCost)]);
+      summaryData.push(["Average Daily Cost", formatNumber(categoryTrendsReport.summary.averageDailyCost)]);
+      summaryData.push(["Most Expensive Category", categoryTrendsReport.summary.mostExpensiveCategory.name]);
+      summaryData.push(["Fastest Growing Category", categoryTrendsReport.summary.fastestGrowingCategory.name]);
+      summaryData.push([]);
+      
+      summaryData.push(["Food vs Beverage Analysis"]);
+      summaryData.push(["Category", "Total Cost", "Percentage", "Growth %"]);
+      summaryData.push(["Food Total", formatNumber(categoryTrendsReport.foodVsBeverage.foodTotal), 
+        `${formatNumber(categoryTrendsReport.foodVsBeverage.foodPercentage)}%`, 
+        `${formatNumber(categoryTrendsReport.foodVsBeverage.foodGrowth)}%`]);
+      summaryData.push(["Beverage Total", formatNumber(categoryTrendsReport.foodVsBeverage.beverageTotal), 
+        `${formatNumber(categoryTrendsReport.foodVsBeverage.beveragePercentage)}%`, 
+        `${formatNumber(categoryTrendsReport.foodVsBeverage.beverageGrowth)}%`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Period Comparison"]);
+      summaryData.push(["Period", "Total Cost", "Category Count", "Growth %"]);
+      summaryData.push(["Previous Period", formatNumber(categoryTrendsReport.periodComparison.previousPeriod.totalCost), 
+        categoryTrendsReport.periodComparison.previousPeriod.categoryCount, "Base"]);
+      summaryData.push(["Current Period", formatNumber(categoryTrendsReport.periodComparison.currentPeriod.totalCost), 
+        categoryTrendsReport.periodComparison.currentPeriod.categoryCount, 
+        `${formatNumber(categoryTrendsReport.periodComparison.growth.totalCostGrowth)}%`]);
+      
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Overview Summary");
+      
+      // Tab 2: Food Categories
+      const foodData: any[][] = [];
+      foodData.push(["Food Category Performance"]);
+      foodData.push([]);
+      foodData.push(["Category", "Total Cost", "Daily Avg", "% of Total", "Trend", "Growth %", "Volatility %", "Rank"]);
+      
+      if (categoryTrendsReport.foodCategories && categoryTrendsReport.foodCategories.length > 0) {
+        categoryTrendsReport.foodCategories.forEach((category: any) => {
+          foodData.push([
+            category.categoryName || "Unknown Category",
+            formatNumber(category.totalCost || 0),
+            formatNumber(category.averageDailyCost || 0),
+            `${formatNumber(category.percentageOfTotalCost || 0)}%`,
+            category.trendDirection || "Stable",
+            `${formatNumber(category.trendPercentage || 0)}%`,
+            `${formatNumber(category.volatility || 0)}%`,
+            category.rankByCost || 0
           ]);
         });
       }
       
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Category Trends");
-      XLSX.writeFile(wb, `Category_Performance_Trends_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      const foodWs = XLSX.utils.aoa_to_sheet(foodData);
+      XLSX.utils.book_append_sheet(wb, foodWs, "Food Categories");
       
-      showToast.success("Report successfully exported to Excel.");
+      // Tab 3: Beverage Categories
+      const beverageData: any[][] = [];
+      beverageData.push(["Beverage Category Performance"]);
+      beverageData.push([]);
+      beverageData.push(["Category", "Total Cost", "Daily Avg", "% of Total", "Trend", "Growth %", "Volatility %", "Rank"]);
+      
+      if (categoryTrendsReport.beverageCategories && categoryTrendsReport.beverageCategories.length > 0) {
+        categoryTrendsReport.beverageCategories.forEach((category: any) => {
+          beverageData.push([
+            category.categoryName || "Unknown Category",
+            formatNumber(category.totalCost || 0),
+            formatNumber(category.averageDailyCost || 0),
+            `${formatNumber(category.percentageOfTotalCost || 0)}%`,
+            category.trendDirection || "Stable",
+            `${formatNumber(category.trendPercentage || 0)}%`,
+            `${formatNumber(category.volatility || 0)}%`,
+            category.rankByCost || 0
+          ]);
+        });
+      }
+      
+      const beverageWs = XLSX.utils.aoa_to_sheet(beverageData);
+      XLSX.utils.book_append_sheet(wb, beverageWs, "Beverage Categories");
+      
+      // Tab 4: Trend Analysis
+      const trendData: any[][] = [];
+      trendData.push(["Detailed Trend Analysis"]);
+      trendData.push([]);
+      trendData.push(["Category", "Type", "Highest Cost", "Lowest Cost", "Volatility %", "Seasonal Pattern", "Growth Rank"]);
+      
+      const allCategories = [...(categoryTrendsReport.foodCategories || []), ...(categoryTrendsReport.beverageCategories || [])];
+      if (allCategories.length > 0) {
+        allCategories.forEach((category: any) => {
+          trendData.push([
+            category.categoryName || "Unknown Category",
+            category.categoryType || "Unknown",
+            formatNumber(category.highestCostDay?.cost || 0),
+            formatNumber(category.lowestCostDay?.cost || 0),
+            `${formatNumber(category.volatility || 0)}%`,
+            category.seasonalPattern?.patternType || "No Pattern",
+            category.rankByGrowth || 0
+          ]);
+        });
+      }
+      
+      const trendWs = XLSX.utils.aoa_to_sheet(trendData);
+      XLSX.utils.book_append_sheet(wb, trendWs, "Trend Analysis");
+      
+      // Tab 5: Outlet Breakdown
+      const outletData: any[][] = [];
+      outletData.push(["Outlet Breakdown Analysis"]);
+      outletData.push([]);
+      
+      const topCategories = allCategories.filter(cat => cat.outletBreakdown && cat.outletBreakdown.length > 0).slice(0, 5);
+      for (const category of topCategories) {
+        outletData.push([`${category.categoryName} - Outlet Distribution`]);
+        outletData.push(["Outlet", "Total Cost", "% of Category", "Trend"]);
+        
+        (category.outletBreakdown || []).forEach((outlet: any) => {
+          outletData.push([
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.totalCost || 0),
+            `${formatNumber(outlet.percentage || 0)}%`,
+            outlet.trend || "Stable"
+          ]);
+        });
+        outletData.push([]);
+      }
+      
+      const outletWs = XLSX.utils.aoa_to_sheet(outletData);
+      XLSX.utils.book_append_sheet(wb, outletWs, "Outlet Breakdown");
+      
+      // Tab 6: Insights
+      const insightsData: any[][] = [];
+      insightsData.push(["Key Insights & Recommendations"]);
+      insightsData.push([]);
+      
+      if (categoryTrendsReport.insights?.trendingUp && categoryTrendsReport.insights.trendingUp.length > 0) {
+        insightsData.push(["Categories Trending Up (Cost Increases)"]);
+        categoryTrendsReport.insights.trendingUp.forEach((category: string) => {
+          insightsData.push([`• ${category}`]);
+        });
+        insightsData.push([]);
+      }
+      
+      if (categoryTrendsReport.insights?.trendingDown && categoryTrendsReport.insights.trendingDown.length > 0) {
+        insightsData.push(["Categories Trending Down (Cost Decreases)"]);
+        categoryTrendsReport.insights.trendingDown.forEach((category: string) => {
+          insightsData.push([`• ${category}`]);
+        });
+        insightsData.push([]);
+      }
+      
+      if (categoryTrendsReport.insights?.volatileCategories && categoryTrendsReport.insights.volatileCategories.length > 0) {
+        insightsData.push(["Volatile Categories (High Price Fluctuation)"]);
+        categoryTrendsReport.insights.volatileCategories.forEach((category: string) => {
+          insightsData.push([`• ${category}`]);
+        });
+        insightsData.push([]);
+      }
+      
+      if (categoryTrendsReport.insights?.recommendations && categoryTrendsReport.insights.recommendations.length > 0) {
+        insightsData.push(["Strategic Recommendations"]);
+        categoryTrendsReport.insights.recommendations.forEach((rec: string, index: number) => {
+          insightsData.push([`${index + 1}. ${rec}`]);
+        });
+      }
+      
+      const insightsWs = XLSX.utils.aoa_to_sheet(insightsData);
+      XLSX.utils.book_append_sheet(wb, insightsWs, "Insights & Recommendations");
+      
+      XLSX.writeFile(wb, `Category_Performance_Trends_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Category Performance Trends Report (All Tabs) successfully exported to Excel.");
     } else if (selectedReport === "user_activity_audit" && reportData) {
-      // User Activity & Audit Excel Export
-      const auditReport = reportData as any;
+      // User Activity & Audit Excel Export - ALL TABS
+      const auditReport = reportData as UserActivityAuditReport;
       const propertyHeader = getPropertyHeaderData();
       
-      ws_data.push([`${propertyHeader.propertyName} - User Activity & Audit Report`]);
-      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
-      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
-      ws_data.push([]);
+      const wb = XLSX.utils.book_new();
       
-      if (auditReport.activities && auditReport.activities.length > 0) {
-        ws_data.push(["User Activity Log"]);
-        ws_data.push(["User", "Action", "Module", "Timestamp", "IP Address"]);
-        auditReport.activities.forEach((activity: any) => {
-          ws_data.push([
-            activity.userName || "Unknown User",
-            activity.action || "Unknown Action",
-            activity.module || "Unknown Module",
-            activity.timestamp ? new Date(activity.timestamp).toLocaleString() : "N/A",
-            activity.ipAddress || "N/A"
+      // Tab 1: Executive Summary
+      const summaryData: any[][] = [];
+      summaryData.push([`${propertyHeader.propertyName} - User Activity & Audit Report`]);
+      summaryData.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      summaryData.push([`Generated: ${propertyHeader.generatedAt}`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Executive Summary"]);
+      summaryData.push(["Metric", "Value"]);
+      summaryData.push(["Total Users", auditReport.summary.totalUsers]);
+      summaryData.push(["Active Users", auditReport.summary.activeUsers]);
+      summaryData.push(["Total Actions", auditReport.summary.totalActions.toLocaleString()]);
+      summaryData.push(["Avg Actions per User", auditReport.summary.avgActionsPerUser.toFixed(1)]);
+      summaryData.push(["Peak Activity Day", `${auditReport.summary.peakActivityDay.actions} actions on ${formatDateFn(auditReport.summary.peakActivityDay.date, "MMM dd, yyyy")}`]);
+      summaryData.push(["Most Active User", auditReport.summary.mostActiveUser.name]);
+      summaryData.push(["Top Action", `${auditReport.summary.topAction.name} (${auditReport.summary.topAction.count.toLocaleString()} times)`]);
+      summaryData.push(["Overall Risk Score", `${auditReport.riskAssessment.overallRiskScore.toFixed(1)}/100`]);
+      summaryData.push(["High Risk Users", auditReport.riskAssessment.highRiskUsers.length]);
+      summaryData.push([]);
+      
+      summaryData.push(["Login Analytics"]);
+      summaryData.push(["Total Logins", auditReport.loginAnalytics.totalLogins.toLocaleString()]);
+      summaryData.push(["Unique Login Users", auditReport.loginAnalytics.uniqueLoginUsers]);
+      summaryData.push(["Login Failures", auditReport.loginAnalytics.loginFailures]);
+      const successRate = auditReport.loginAnalytics.totalLogins > 0 
+        ? ((auditReport.loginAnalytics.totalLogins - auditReport.loginAnalytics.loginFailures) / auditReport.loginAnalytics.totalLogins) * 100
+        : 0;
+      summaryData.push(["Login Success Rate", `${successRate.toFixed(2)}%`]);
+      
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Executive Summary");
+      
+      // Tab 2: User Activity Analysis
+      const userActivityData: any[][] = [];
+      userActivityData.push(["User Activity Analysis"]);
+      userActivityData.push([]);
+      userActivityData.push(["User", "Email", "Role", "Total Actions", "Daily Avg", "Total Logins", "Last Active", "Activity Trend", "Risk Score"]);
+      
+      if (auditReport.userData && auditReport.userData.length > 0) {
+        auditReport.userData.forEach((user: any) => {
+          userActivityData.push([
+            user.userName || "Unknown User",
+            user.userEmail || "N/A",
+            user.userRole || "Unknown",
+            user.totalActions.toLocaleString(),
+            user.dailyAverage.toFixed(1),
+            user.totalLogins,
+            formatDateFn(user.lastActive, "MMM dd, yyyy HH:mm"),
+            user.activityTrend || "Stable",
+            user.riskScore.toFixed(1)
           ]);
         });
       }
       
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Activity Audit");
-      XLSX.writeFile(wb, `User_Activity_Audit_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      const userActivityWs = XLSX.utils.aoa_to_sheet(userActivityData);
+      XLSX.utils.book_append_sheet(wb, userActivityWs, "User Activity Analysis");
       
-      showToast.success("Report successfully exported to Excel.");
+      // Tab 3: Daily Activity Timeline
+      const timelineData: any[][] = [];
+      timelineData.push(["Daily Activity Timeline"]);
+      timelineData.push([]);
+      timelineData.push(["Date", "Total Actions", "Unique Users", "Avg Actions per User"]);
+      
+      if (auditReport.dailyActivity && auditReport.dailyActivity.length > 0) {
+        auditReport.dailyActivity.forEach((day: any) => {
+          timelineData.push([
+            formatDateFn(day.date, "MMM dd, yyyy"),
+            day.totalActions.toLocaleString(),
+            day.uniqueUsers,
+            day.averageActionsPerUser.toFixed(1)
+          ]);
+        });
+      }
+      
+      const timelineWs = XLSX.utils.aoa_to_sheet(timelineData);
+      XLSX.utils.book_append_sheet(wb, timelineWs, "Daily Activity Timeline");
+      
+      // Tab 4: Actions Analysis
+      const actionsData: any[][] = [];
+      actionsData.push(["Actions Analysis"]);
+      actionsData.push([]);
+      
+      actionsData.push(["Top Actions"]);
+      actionsData.push(["Action", "Count", "Percentage", "Unique Users"]);
+      if (auditReport.actionAnalytics?.totalActions && auditReport.actionAnalytics.totalActions.length > 0) {
+        auditReport.actionAnalytics.totalActions.slice(0, 20).forEach((action: any) => {
+          actionsData.push([
+            action.action || "Unknown Action",
+            action.count.toLocaleString(),
+            `${(action.percentage || 0).toFixed(2)}%`,
+            action.uniqueUsers
+          ]);
+        });
+      }
+      
+      actionsData.push([]);
+      actionsData.push(["Resource Activity"]);
+      actionsData.push(["Resource", "Count", "Percentage", "Unique Users", "Top Users"]);
+      if (auditReport.actionAnalytics?.resourceActivity && auditReport.actionAnalytics.resourceActivity.length > 0) {
+        auditReport.actionAnalytics.resourceActivity.slice(0, 20).forEach((resource: any) => {
+          actionsData.push([
+            resource.resource || "Unknown Resource",
+            resource.count.toLocaleString(),
+            `${(resource.percentage || 0).toFixed(2)}%`,
+            resource.uniqueUsers,
+            (resource.topUsers || []).slice(0, 3).join(", ")
+          ]);
+        });
+      }
+      
+      const actionsWs = XLSX.utils.aoa_to_sheet(actionsData);
+      XLSX.utils.book_append_sheet(wb, actionsWs, "Actions Analysis");
+      
+      // Tab 5: Security Analysis
+      const securityData: any[][] = [];
+      securityData.push(["Security Analysis"]);
+      securityData.push([]);
+      
+      securityData.push(["High Risk Users"]);
+      if (auditReport.riskAssessment?.highRiskUsers && auditReport.riskAssessment.highRiskUsers.length > 0) {
+        auditReport.riskAssessment.highRiskUsers.forEach((user: string) => {
+          securityData.push([`⚠️ ${user}`]);
+        });
+      } else {
+        securityData.push(["No high-risk users identified"]);
+      }
+      
+      securityData.push([]);
+      securityData.push(["Suspicious Activities"]);
+      securityData.push(["User", "Activity", "Risk Level", "Timestamp"]);
+      if (auditReport.riskAssessment?.suspiciousActivities && auditReport.riskAssessment.suspiciousActivities.length > 0) {
+        auditReport.riskAssessment.suspiciousActivities.forEach((activity: any) => {
+          securityData.push([
+            activity.userName || "Unknown User",
+            activity.activity || "Unknown Activity",
+            activity.riskLevel || "Medium",
+            formatDateFn(activity.timestamp, "MMM dd, yyyy HH:mm")
+          ]);
+        });
+      } else {
+        securityData.push(["No suspicious activities detected"]);
+      }
+      
+      securityData.push([]);
+      securityData.push(["Login Analytics Details"]);
+      securityData.push(["Metric", "Value"]);
+      securityData.push(["Total Logins", auditReport.loginAnalytics.totalLogins.toLocaleString()]);
+      securityData.push(["Unique Users", auditReport.loginAnalytics.uniqueLoginUsers]);
+      securityData.push(["Login Failures", auditReport.loginAnalytics.loginFailures]);
+      securityData.push(["Success Rate", `${successRate.toFixed(2)}%`]);
+      
+      const securityWs = XLSX.utils.aoa_to_sheet(securityData);
+      XLSX.utils.book_append_sheet(wb, securityWs, "Security Analysis");
+      
+      // Tab 6: User Insights
+      const insightsData: any[][] = [];
+      insightsData.push(["User Activity Insights"]);
+      insightsData.push([]);
+      
+      const usersWithUnusualActivity = auditReport.userData?.filter(user => user.unusualActivity && user.unusualActivity.length > 0) || [];
+      if (usersWithUnusualActivity.length > 0) {
+        for (const user of usersWithUnusualActivity) {
+          insightsData.push([`${user.userName} - Activity Insights`]);
+          insightsData.push([]);
+          
+          insightsData.push(["Action Breakdown"]);
+          insightsData.push(["Action", "Count", "Percentage"]);
+          if (user.actionBreakdown && user.actionBreakdown.length > 0) {
+            user.actionBreakdown.slice(0, 10).forEach((action: any) => {
+              insightsData.push([
+                action.action || "Unknown Action",
+                action.count,
+                `${(action.percentage || 0).toFixed(2)}%`
+              ]);
+            });
+          }
+          
+          insightsData.push([]);
+          insightsData.push(["Resource Access"]);
+          insightsData.push(["Resource", "Count", "Percentage"]);
+          if (user.resourceBreakdown && user.resourceBreakdown.length > 0) {
+            user.resourceBreakdown.slice(0, 10).forEach((resource: any) => {
+              insightsData.push([
+                resource.resource || "Unknown Resource",
+                resource.count,
+                `${(resource.percentage || 0).toFixed(2)}%`
+              ]);
+            });
+          }
+          
+          if (user.unusualActivity && user.unusualActivity.length > 0) {
+            insightsData.push([]);
+            insightsData.push(["Unusual Activity Detected"]);
+            user.unusualActivity.forEach((activity: string) => {
+              insightsData.push([`⚠️ ${activity}`]);
+            });
+          }
+          
+          insightsData.push([]);
+          insightsData.push(["Recent Activity Sample"]);
+          insightsData.push(["Action", "Resource", "Timestamp", "IP Address"]);
+          if (user.recentActivity && user.recentActivity.length > 0) {
+            user.recentActivity.slice(0, 5).forEach((activity: any) => {
+              insightsData.push([
+                activity.action || "Unknown Action",
+                activity.resource || "Unknown Resource",
+                formatDateFn(activity.timestamp, "MMM dd, yyyy HH:mm"),
+                activity.ipAddress || "N/A"
+              ]);
+            });
+          }
+          
+          insightsData.push([]);
+          insightsData.push([]);
+        }
+      }
+      
+      const insightsWs = XLSX.utils.aoa_to_sheet(insightsData);
+      XLSX.utils.book_append_sheet(wb, insightsWs, "User Insights");
+      
+      // Tab 7: Recommendations
+      const recommendationsData: any[][] = [];
+      recommendationsData.push(["Security Recommendations"]);
+      recommendationsData.push([]);
+      
+      if (auditReport.riskAssessment?.recommendations && auditReport.riskAssessment.recommendations.length > 0) {
+        recommendationsData.push(["Security Recommendations"]);
+        auditReport.riskAssessment.recommendations.forEach((rec: string, index: number) => {
+          recommendationsData.push([`${index + 1}. ${rec}`]);
+        });
+        recommendationsData.push([]);
+      }
+      
+      recommendationsData.push(["System Health Summary"]);
+      recommendationsData.push(["Metric", "Value", "Status"]);
+      const riskLevel = auditReport.riskAssessment.overallRiskScore >= 70 ? "High Risk" : 
+                      auditReport.riskAssessment.overallRiskScore >= 40 ? "Medium Risk" : "Low Risk";
+      recommendationsData.push(["Overall Risk Level", auditReport.riskAssessment.overallRiskScore.toFixed(1), riskLevel]);
+      recommendationsData.push(["Active Users", `${auditReport.summary.activeUsers}/${auditReport.summary.totalUsers}`, "Active"]);
+      recommendationsData.push(["Login Success Rate", `${successRate.toFixed(2)}%`, 
+        successRate >= 95 ? "Excellent" : successRate >= 90 ? "Good" : "Needs Attention"]);
+      
+      recommendationsData.push([]);
+      recommendationsData.push(["Action Items"]);
+      recommendationsData.push([`Review high-risk users (${auditReport.riskAssessment.highRiskUsers.length})`]);
+      recommendationsData.push([`Investigate suspicious activities (${auditReport.riskAssessment.suspiciousActivities?.length || 0})`]);
+      recommendationsData.push([`Monitor login failures (${auditReport.loginAnalytics.loginFailures})`]);
+      
+      const recommendationsWs = XLSX.utils.aoa_to_sheet(recommendationsData);
+      XLSX.utils.book_append_sheet(wb, recommendationsWs, "Recommendations");
+      
+      XLSX.writeFile(wb, `User_Activity_Audit_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("User Activity & Audit Report (All Tabs) successfully exported to Excel.");
     } else if (selectedReport === "cost_variance_analysis" && reportData) {
-      // Cost Variance Analysis Excel Export
-      const varianceReport = reportData as any;
+      // Cost Variance Analysis Excel Export - ALL TABS
+      const varianceReport = reportData as CostVarianceAnalysisReport;
       const propertyHeader = getPropertyHeaderData();
       
-      ws_data.push([`${propertyHeader.propertyName} - Cost Variance Analysis Report`]);
-      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
-      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
-      ws_data.push([]);
+      const wb = XLSX.utils.book_new();
       
-      if (varianceReport.variances && varianceReport.variances.length > 0) {
-        ws_data.push(["Cost Variance Analysis"]);
-        ws_data.push(["Category", "Budgeted Cost", "Actual Cost", "Variance", "Variance %"]);
-        varianceReport.variances.forEach((variance: any) => {
-          ws_data.push([
-            variance.category || "Unknown Category",
+      // Tab 1: Executive Summary
+      const summaryData: any[][] = [];
+      summaryData.push([`${propertyHeader.propertyName} - Cost Variance Analysis Report`]);
+      summaryData.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      summaryData.push([`Generated: ${propertyHeader.generatedAt}`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Executive Summary"]);
+      summaryData.push(["Metric", "Value"]);
+      summaryData.push(["Total Categories Analyzed", varianceReport.summary.totalCategoriesAnalyzed]);
+      summaryData.push(["Total Budget", formatNumber(varianceReport.summary.totalBudget)]);
+      summaryData.push(["Total Actual Cost", formatNumber(varianceReport.summary.totalActualCost)]);
+      summaryData.push(["Overall Variance", formatNumber(varianceReport.summary.overallVariance)]);
+      summaryData.push(["Overall Variance %", `${formatNumber(varianceReport.summary.overallVariancePercentage)}%`]);
+      summaryData.push(["Categories Over Budget", varianceReport.summary.categoriesOverBudget]);
+      summaryData.push(["Categories Under Budget", varianceReport.summary.categoriesUnderBudget]);
+      summaryData.push(["Largest Variance Category", varianceReport.summary.largestVarianceCategory.name]);
+      summaryData.push(["Budget Adherence Score", `${formatNumber(varianceReport.summary.budgetAdherenceScore)}%`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Variance Distribution"]);
+      if (varianceReport.varianceDistribution) {
+        summaryData.push(["Variance Range", "Number of Categories", "Percentage"]);
+        summaryData.push(["Significant Over (+20%)", varianceReport.varianceDistribution.significantlyOver, 
+          `${formatNumber((varianceReport.varianceDistribution.significantlyOver / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
+        summaryData.push(["Moderately Over (+5% to +20%)", varianceReport.varianceDistribution.moderatelyOver,
+          `${formatNumber((varianceReport.varianceDistribution.moderatelyOver / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
+        summaryData.push(["On Budget (-5% to +5%)", varianceReport.varianceDistribution.onBudget,
+          `${formatNumber((varianceReport.varianceDistribution.onBudget / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
+        summaryData.push(["Under Budget (<-5%)", varianceReport.varianceDistribution.underBudget,
+          `${formatNumber((varianceReport.varianceDistribution.underBudget / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
+      }
+      
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Executive Summary");
+      
+      // Tab 2: Category Variances
+      const categoryData: any[][] = [];
+      categoryData.push(["Category Variance Analysis"]);
+      categoryData.push([]);
+      categoryData.push(["Category", "Budgeted Cost", "Actual Cost", "Variance", "Variance %", "Status", "Impact Level"]);
+      
+      if (varianceReport.categoryVariances && varianceReport.categoryVariances.length > 0) {
+        varianceReport.categoryVariances.forEach((variance: any) => {
+          const varianceStatus = variance.variancePercentage > 20 ? "Significantly Over" :
+                                variance.variancePercentage > 5 ? "Moderately Over" :
+                                variance.variancePercentage < -5 ? "Under Budget" : "On Budget";
+          const impactLevel = Math.abs(variance.variancePercentage) > 20 ? "High" :
+                            Math.abs(variance.variancePercentage) > 10 ? "Medium" : "Low";
+          
+          categoryData.push([
+            variance.categoryName || "Unknown Category",
             formatNumber(variance.budgetedCost || 0),
             formatNumber(variance.actualCost || 0),
             formatNumber(variance.variance || 0),
-            formatNumber(variance.variancePercentage || 0)
+            `${formatNumber(variance.variancePercentage || 0)}%`,
+            varianceStatus,
+            impactLevel
           ]);
         });
       }
       
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Cost Variance");
-      XLSX.writeFile(wb, `Cost_Variance_Analysis_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      const categoryWs = XLSX.utils.aoa_to_sheet(categoryData);
+      XLSX.utils.book_append_sheet(wb, categoryWs, "Category Variances");
       
-      showToast.success("Report successfully exported to Excel.");
+      // Tab 3: Outlet Performance
+      const outletData: any[][] = [];
+      outletData.push(["Outlet Performance Analysis"]);
+      outletData.push([]);
+      outletData.push(["Outlet", "Budget", "Actual Cost", "Variance", "Variance %", "Performance Rating"]);
+      
+      if (varianceReport.outletPerformance && varianceReport.outletPerformance.length > 0) {
+        varianceReport.outletPerformance.forEach((outlet: any) => {
+          const rating = outlet.variancePercentage <= 5 ? "Excellent" :
+                        outlet.variancePercentage <= 15 ? "Good" :
+                        outlet.variancePercentage <= 25 ? "Fair" : "Poor";
+          
+          outletData.push([
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.budgetedCost || 0),
+            formatNumber(outlet.actualCost || 0),
+            formatNumber(outlet.variance || 0),
+            `${formatNumber(outlet.variancePercentage || 0)}%`,
+            rating
+          ]);
+        });
+      }
+      
+      const outletWs = XLSX.utils.aoa_to_sheet(outletData);
+      XLSX.utils.book_append_sheet(wb, outletWs, "Outlet Performance");
+      
+      // Tab 4: Trend Analysis
+      const trendData: any[][] = [];
+      trendData.push(["Cost Variance Trend Analysis"]);
+      trendData.push([]);
+      
+      if (varianceReport.trendAnalysis?.monthlyTrends && varianceReport.trendAnalysis.monthlyTrends.length > 0) {
+        trendData.push(["Monthly Variance Trends"]);
+        trendData.push(["Month", "Budget", "Actual", "Variance", "Variance %", "Trend"]);
+        varianceReport.trendAnalysis.monthlyTrends.forEach((trend: any) => {
+          trendData.push([
+            trend.month || "Unknown Month",
+            formatNumber(trend.budget || 0),
+            formatNumber(trend.actual || 0),
+            formatNumber(trend.variance || 0),
+            `${formatNumber(trend.variancePercentage || 0)}%`,
+            trend.trend || "Stable"
+          ]);
+        });
+        trendData.push([]);
+      }
+      
+      if (varianceReport.trendAnalysis?.categoryTrends && varianceReport.trendAnalysis.categoryTrends.length > 0) {
+        trendData.push(["Category Trend Patterns"]);
+        trendData.push(["Category", "Trend Direction", "Improvement Rate", "Volatility", "Seasonality"]);
+        varianceReport.trendAnalysis.categoryTrends.forEach((trend: any) => {
+          trendData.push([
+            trend.categoryName || "Unknown Category",
+            trend.trendDirection || "Stable",
+            `${formatNumber(trend.improvementRate || 0)}%`,
+            trend.volatility || "Low",
+            trend.seasonality || "None"
+          ]);
+        });
+      }
+      
+      const trendWs = XLSX.utils.aoa_to_sheet(trendData);
+      XLSX.utils.book_append_sheet(wb, trendWs, "Trend Analysis");
+      
+      // Tab 5: Root Cause Analysis
+      const rootCauseData: any[][] = [];
+      rootCauseData.push(["Root Cause Analysis"]);
+      rootCauseData.push([]);
+      
+      if (varianceReport.rootCauseAnalysis?.topVarianceCauses && varianceReport.rootCauseAnalysis.topVarianceCauses.length > 0) {
+        rootCauseData.push(["Top Variance Causes"]);
+        rootCauseData.push(["Cause", "Frequency", "Impact Score", "Categories Affected"]);
+        varianceReport.rootCauseAnalysis.topVarianceCauses.forEach((cause: any) => {
+          rootCauseData.push([
+            cause.cause || "Unknown Cause",
+            cause.frequency || 0,
+            formatNumber(cause.impactScore || 0),
+            (cause.categoriesAffected || []).join(", ")
+          ]);
+        });
+        rootCauseData.push([]);
+      }
+      
+      if (varianceReport.rootCauseAnalysis?.correctionOpportunities && varianceReport.rootCauseAnalysis.correctionOpportunities.length > 0) {
+        rootCauseData.push(["Correction Opportunities"]);
+        rootCauseData.push(["Opportunity", "Potential Savings", "Implementation Difficulty", "Expected Timeline"]);
+        varianceReport.rootCauseAnalysis.correctionOpportunities.forEach((opportunity: any) => {
+          rootCauseData.push([
+            opportunity.opportunity || "Unknown Opportunity",
+            formatNumber(opportunity.potentialSavings || 0),
+            opportunity.implementationDifficulty || "Medium",
+            opportunity.expectedTimeline || "Unknown"
+          ]);
+        });
+      }
+      
+      const rootCauseWs = XLSX.utils.aoa_to_sheet(rootCauseData);
+      XLSX.utils.book_append_sheet(wb, rootCauseWs, "Root Cause Analysis");
+      
+      // Tab 6: Action Plan & Recommendations
+      const actionPlanData: any[][] = [];
+      actionPlanData.push(["Action Plan & Recommendations"]);
+      actionPlanData.push([]);
+      
+      if (varianceReport.actionPlan?.immediateActions && varianceReport.actionPlan.immediateActions.length > 0) {
+        actionPlanData.push(["Immediate Actions (Next 30 days)"]);
+        varianceReport.actionPlan.immediateActions.forEach((action: string, index: number) => {
+          actionPlanData.push([`${index + 1}. ${action}`]);
+        });
+        actionPlanData.push([]);
+      }
+      
+      if (varianceReport.actionPlan?.shortTermActions && varianceReport.actionPlan.shortTermActions.length > 0) {
+        actionPlanData.push(["Short-term Actions (Next 90 days)"]);
+        varianceReport.actionPlan.shortTermActions.forEach((action: string, index: number) => {
+          actionPlanData.push([`${index + 1}. ${action}`]);
+        });
+        actionPlanData.push([]);
+      }
+      
+      if (varianceReport.actionPlan?.longTermActions && varianceReport.actionPlan.longTermActions.length > 0) {
+        actionPlanData.push(["Long-term Actions (Next 6-12 months)"]);
+        varianceReport.actionPlan.longTermActions.forEach((action: string, index: number) => {
+          actionPlanData.push([`${index + 1}. ${action}`]);
+        });
+        actionPlanData.push([]);
+      }
+      
+      if (varianceReport.recommendations && varianceReport.recommendations.length > 0) {
+        actionPlanData.push(["Strategic Recommendations"]);
+        varianceReport.recommendations.forEach((rec: string, index: number) => {
+          actionPlanData.push([`${index + 1}. ${rec}`]);
+        });
+      }
+      
+      const actionPlanWs = XLSX.utils.aoa_to_sheet(actionPlanData);
+      XLSX.utils.book_append_sheet(wb, actionPlanWs, "Action Plan & Recommendations");
+      
+      XLSX.writeFile(wb, `Cost_Variance_Analysis_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Cost Variance Analysis Report (All Tabs) successfully exported to Excel.");
     } else if (selectedReport === "predictive_analytics" && reportData) {
-      // Predictive Analytics Excel Export
-      const predictiveReport = reportData as any;
+      // Predictive Analytics Excel Export - ALL TABS
+      const predictiveReport = reportData as PredictiveAnalyticsReport;
       const propertyHeader = getPropertyHeaderData();
       
-      ws_data.push([`${propertyHeader.propertyName} - Predictive Analytics & Forecasting Report`]);
-      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
-      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
-      ws_data.push([]);
+      const wb = XLSX.utils.book_new();
       
-      if (predictiveReport.predictions && predictiveReport.predictions.length > 0) {
-        ws_data.push(["Predictive Analytics Summary"]);
-        ws_data.push(["Metric", "Current Value", "Predicted Value", "Confidence", "Trend"]);
-        predictiveReport.predictions.forEach((prediction: any) => {
-          ws_data.push([
-            prediction.metric || "Unknown Metric",
-            formatNumber(prediction.currentValue || 0),
-            formatNumber(prediction.predictedValue || 0),
-            formatNumber(prediction.confidence || 0),
-            prediction.trend || "Stable"
+      // Tab 1: Executive Summary
+      const summaryData: any[][] = [];
+      summaryData.push([`${propertyHeader.propertyName} - Predictive Analytics & Forecasting Report`]);
+      summaryData.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "yyyyMMdd")}`]);
+      summaryData.push([`Generated: ${propertyHeader.generatedAt}`]);
+      summaryData.push([]);
+      
+      summaryData.push(["Executive Summary"]);
+      summaryData.push(["Metric", "Value"]);
+      summaryData.push(["Total Categories Analyzed", predictiveReport.summary.totalCategoriesAnalyzed]);
+      summaryData.push(["Forecast Period", `${predictiveReport.summary.forecastPeriodDays} days`]);
+      summaryData.push(["Overall Confidence Score", `${formatNumber(predictiveReport.summary.overallConfidenceScore)}%`]);
+      summaryData.push(["Predicted Total Cost", formatNumber(predictiveReport.summary.predictedTotalCost)]);
+      summaryData.push(["Expected Cost Change", `${formatNumber(predictiveReport.summary.expectedCostChange)}%`]);
+      summaryData.push(["High Confidence Predictions", predictiveReport.summary.highConfidencePredictions]);
+      summaryData.push(["Risk Level", predictiveReport.summary.riskLevel || "Medium"]);
+      summaryData.push([]);
+      
+      summaryData.push(["Key Forecast Highlights"]);
+      if (predictiveReport.keyInsights?.costTrends) {
+        summaryData.push(["Cost Trend Direction", predictiveReport.keyInsights.costTrends.direction]);
+        summaryData.push(["Expected Monthly Change", `${formatNumber(predictiveReport.keyInsights.costTrends.monthlyChangePercent)}%`]);
+        summaryData.push(["Seasonal Impact", predictiveReport.keyInsights.costTrends.seasonalImpact || "Minimal"]);
+      }
+      
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, summaryWs, "Executive Summary");
+      
+      // Tab 2: Category Forecasts
+      const categoryData: any[][] = [];
+      categoryData.push(["Category Forecast Analysis"]);
+      categoryData.push([]);
+      categoryData.push(["Category", "Current Cost", "Predicted Cost", "Change %", "Confidence %", "Trend", "Risk Level"]);
+      
+      if (predictiveReport.categoryForecasts && predictiveReport.categoryForecasts.length > 0) {
+        predictiveReport.categoryForecasts.forEach((forecast: any) => {
+          categoryData.push([
+            forecast.categoryName || "Unknown Category",
+            formatNumber(forecast.currentCost || 0),
+            formatNumber(forecast.predictedCost || 0),
+            `${formatNumber(forecast.changePercentage || 0)}%`,
+            `${formatNumber(forecast.confidenceLevel || 0)}%`,
+            forecast.trend || "Stable",
+            forecast.riskLevel || "Medium"
           ]);
         });
       }
       
-      const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.aoa_to_sheet(ws_data);
-      XLSX.utils.book_append_sheet(wb, ws, "Predictive Analytics");
-      XLSX.writeFile(wb, `Predictive_Analytics_Forecasting_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      const categoryWs = XLSX.utils.aoa_to_sheet(categoryData);
+      XLSX.utils.book_append_sheet(wb, categoryWs, "Category Forecasts");
       
-      showToast.success("Report successfully exported to Excel.");
+      // Tab 3: Revenue Predictions
+      const revenueData: any[][] = [];
+      revenueData.push(["Revenue Prediction Analysis"]);
+      revenueData.push([]);
+      
+      if (predictiveReport.revenuePredictions?.overallRevenue) {
+        revenueData.push(["Overall Revenue Forecast"]);
+        revenueData.push(["Metric", "Current Period", "Predicted Period", "Change %", "Confidence %"]);
+        revenueData.push(["Total Revenue", 
+          formatNumber(predictiveReport.revenuePredictions.overallRevenue.current),
+          formatNumber(predictiveReport.revenuePredictions.overallRevenue.predicted),
+          `${formatNumber(predictiveReport.revenuePredictions.overallRevenue.changePercent)}%`,
+          `${formatNumber(predictiveReport.revenuePredictions.overallRevenue.confidence)}%`]);
+        revenueData.push([]);
+      }
+      
+      if (predictiveReport.revenuePredictions?.outletRevenue && predictiveReport.revenuePredictions.outletRevenue.length > 0) {
+        revenueData.push(["Outlet Revenue Forecasts"]);
+        revenueData.push(["Outlet", "Current Revenue", "Predicted Revenue", "Change %", "Growth Trend"]);
+        predictiveReport.revenuePredictions.outletRevenue.forEach((outlet: any) => {
+          revenueData.push([
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.currentRevenue || 0),
+            formatNumber(outlet.predictedRevenue || 0),
+            `${formatNumber(outlet.changePercent || 0)}%`,
+            outlet.growthTrend || "Stable"
+          ]);
+        });
+      }
+      
+      const revenueWs = XLSX.utils.aoa_to_sheet(revenueData);
+      XLSX.utils.book_append_sheet(wb, revenueWs, "Revenue Predictions");
+      
+      // Tab 4: Market Analysis
+      const marketData: any[][] = [];
+      marketData.push(["Market Trends & External Factors"]);
+      marketData.push([]);
+      
+      if (predictiveReport.marketAnalysis?.economicFactors) {
+        marketData.push(["Economic Factors Impact"]);
+        marketData.push(["Factor", "Current Trend", "Impact Level", "Expected Duration"]);
+        if (predictiveReport.marketAnalysis.economicFactors.inflation) {
+          marketData.push(["Inflation Rate", 
+            `${formatNumber(predictiveReport.marketAnalysis.economicFactors.inflation.rate)}%`,
+            predictiveReport.marketAnalysis.economicFactors.inflation.impact,
+            predictiveReport.marketAnalysis.economicFactors.inflation.duration]);
+        }
+        if (predictiveReport.marketAnalysis.economicFactors.supplyChain) {
+          marketData.push(["Supply Chain", 
+            predictiveReport.marketAnalysis.economicFactors.supplyChain.status,
+            predictiveReport.marketAnalysis.economicFactors.supplyChain.impact,
+            predictiveReport.marketAnalysis.economicFactors.supplyChain.duration]);
+        }
+        marketData.push([]);
+      }
+      
+      if (predictiveReport.marketAnalysis?.seasonalPatterns && predictiveReport.marketAnalysis.seasonalPatterns.length > 0) {
+        marketData.push(["Seasonal Patterns"]);
+        marketData.push(["Pattern", "Impact Period", "Cost Effect %", "Revenue Effect %"]);
+        predictiveReport.marketAnalysis.seasonalPatterns.forEach((pattern: any) => {
+          marketData.push([
+            pattern.patternName || "Unknown Pattern",
+            pattern.impactPeriod || "Unknown",
+            `${formatNumber(pattern.costEffect || 0)}%`,
+            `${formatNumber(pattern.revenueEffect || 0)}%`
+          ]);
+        });
+      }
+      
+      const marketWs = XLSX.utils.aoa_to_sheet(marketData);
+      XLSX.utils.book_append_sheet(wb, marketWs, "Market Analysis");
+      
+      // Tab 5: Risk Assessment
+      const riskData: any[][] = [];
+      riskData.push(["Risk Assessment & Scenario Analysis"]);
+      riskData.push([]);
+      
+      if (predictiveReport.riskAssessment?.overallRiskScore) {
+        riskData.push(["Overall Risk Assessment"]);
+        riskData.push(["Risk Score", `${formatNumber(predictiveReport.riskAssessment.overallRiskScore)}/100`]);
+        riskData.push([]);
+      }
+      
+      if (predictiveReport.riskAssessment?.riskFactors && predictiveReport.riskAssessment.riskFactors.length > 0) {
+        riskData.push(["Risk Factors"]);
+        riskData.push(["Risk Factor", "Probability %", "Potential Impact", "Mitigation Strategy"]);
+        predictiveReport.riskAssessment.riskFactors.forEach((risk: any) => {
+          riskData.push([
+            risk.factor || "Unknown Risk",
+            `${risk.probability || 0}%`,
+            risk.potentialImpact || "Medium",
+            risk.mitigation || "Standard procedures"
+          ]);
+        });
+        riskData.push([]);
+      }
+      
+      if (predictiveReport.riskAssessment?.scenarios && predictiveReport.riskAssessment.scenarios.length > 0) {
+        riskData.push(["Scenario Analysis"]);
+        riskData.push(["Scenario", "Probability %", "Revenue Impact %", "Cost Impact %", "Net Effect"]);
+        predictiveReport.riskAssessment.scenarios.forEach((scenario: any) => {
+          riskData.push([
+            scenario.name || "Unknown Scenario",
+            `${scenario.probability || 0}%`,
+            `${formatNumber(scenario.revenueImpact || 0)}%`,
+            `${formatNumber(scenario.costImpact || 0)}%`,
+            scenario.netEffect || "Neutral"
+          ]);
+        });
+      }
+      
+      const riskWs = XLSX.utils.aoa_to_sheet(riskData);
+      XLSX.utils.book_append_sheet(wb, riskWs, "Risk Assessment");
+      
+      // Tab 6: Strategic Insights
+      const strategicData: any[][] = [];
+      strategicData.push(["Strategic Insights & Recommendations"]);
+      strategicData.push([]);
+      
+      if (predictiveReport.recommendations?.shortTerm && predictiveReport.recommendations.shortTerm.length > 0) {
+        strategicData.push(["Short-term Recommendations (30 days)"]);
+        predictiveReport.recommendations.shortTerm.forEach((rec: string, index: number) => {
+          strategicData.push([`${index + 1}. ${rec}`]);
+        });
+        strategicData.push([]);
+      }
+      
+      if (predictiveReport.recommendations?.mediumTerm && predictiveReport.recommendations.mediumTerm.length > 0) {
+        strategicData.push(["Medium-term Recommendations (3 months)"]);
+        predictiveReport.recommendations.mediumTerm.forEach((rec: string, index: number) => {
+          strategicData.push([`${index + 1}. ${rec}`]);
+        });
+        strategicData.push([]);
+      }
+      
+      if (predictiveReport.recommendations?.longTerm && predictiveReport.recommendations.longTerm.length > 0) {
+        strategicData.push(["Long-term Recommendations (6-12 months)"]);
+        predictiveReport.recommendations.longTerm.forEach((rec: string, index: number) => {
+          strategicData.push([`${index + 1}. ${rec}`]);
+        });
+        strategicData.push([]);
+      }
+      
+      if (predictiveReport.actionableInsights && predictiveReport.actionableInsights.length > 0) {
+        strategicData.push(["Actionable Insights"]);
+        strategicData.push(["Priority", "Category", "Insight", "Expected Impact", "Timeframe"]);
+        predictiveReport.actionableInsights.slice(0, 10).forEach((insight: any) => {
+          strategicData.push([
+            insight.priority || "Medium",
+            insight.category || "General",
+            (insight.insight || "").substring(0, 100) + "...",
+            insight.expectedImpact || "Medium",
+            insight.timeframe || "3 months"
+          ]);
+        });
+      }
+      
+      const strategicWs = XLSX.utils.aoa_to_sheet(strategicData);
+      XLSX.utils.book_append_sheet(wb, strategicWs, "Strategic Insights");
+      
+      // Tab 7: Model Performance
+      const modelData: any[][] = [];
+      modelData.push(["Model Performance Metrics"]);
+      modelData.push([]);
+      
+      if (predictiveReport.modelPerformance && predictiveReport.modelPerformance.length > 0) {
+        modelData.push(["Model Performance Summary"]);
+        modelData.push(["Model Type", "Accuracy %", "MAE", "RMSE", "Last Updated", "Performance Rating"]);
+        predictiveReport.modelPerformance.forEach((model: any) => {
+          const rating = model.accuracy >= 80 ? "Excellent" : 
+                        model.accuracy >= 70 ? "Good" : 
+                        model.accuracy >= 60 ? "Fair" : "Poor";
+          
+          modelData.push([
+            model.modelType || "Unknown Model",
+            `${(model.accuracy || 0).toFixed(1)}%`,
+            (model.meanAbsoluteError || 0).toFixed(2),
+            (model.rootMeanSquareError || 0).toFixed(2),
+            formatDateFn(model.lastUpdated || new Date(), "MMM dd, yyyy"),
+            rating
+          ]);
+        });
+        modelData.push([]);
+      }
+      
+      modelData.push(["Model Improvement Recommendations"]);
+      const improvements = [
+        "Data Quality Enhancement: Increase data collection frequency for better accuracy",
+        "Advanced Algorithms: Consider implementing machine learning models for complex patterns",
+        "External Factors: Incorporate external market data and economic indicators",
+        "Real-time Updates: Implement continuous model retraining for dynamic environments",
+        "Cross-validation: Enhance model validation with multiple testing scenarios"
+      ];
+      
+      improvements.forEach((improvement: string, index: number) => {
+        modelData.push([`${index + 1}. ${improvement}`]);
+      });
+      
+      const modelWs = XLSX.utils.aoa_to_sheet(modelData);
+      XLSX.utils.book_append_sheet(wb, modelWs, "Model Performance");
+      
+      XLSX.writeFile(wb, `Predictive_Analytics_Forecasting_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Predictive Analytics & Forecasting Report (All Tabs) successfully exported to Excel.");
     }
   };
 
