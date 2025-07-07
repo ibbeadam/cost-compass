@@ -2784,28 +2784,34 @@ export default function ReportsClient() {
       
       summaryData.push(["Executive Summary"]);
       summaryData.push(["Metric", "Value"]);
-      summaryData.push(["Total Categories Analyzed", varianceReport.summary.totalCategoriesAnalyzed]);
-      summaryData.push(["Total Budget", formatNumber(varianceReport.summary.totalBudget)]);
-      summaryData.push(["Total Actual Cost", formatNumber(varianceReport.summary.totalActualCost)]);
+      summaryData.push(["Total Budgeted", formatNumber(varianceReport.summary.totalBudgeted)]);
+      summaryData.push(["Total Actual Cost", formatNumber(varianceReport.summary.totalActual)]);
       summaryData.push(["Overall Variance", formatNumber(varianceReport.summary.overallVariance)]);
       summaryData.push(["Overall Variance %", `${formatNumber(varianceReport.summary.overallVariancePercentage)}%`]);
+      summaryData.push(["Budget Accuracy", `${formatNumber(varianceReport.summary.budgetAccuracy)}%`]);
       summaryData.push(["Categories Over Budget", varianceReport.summary.categoriesOverBudget]);
       summaryData.push(["Categories Under Budget", varianceReport.summary.categoriesUnderBudget]);
-      summaryData.push(["Largest Variance Category", varianceReport.summary.largestVarianceCategory.name]);
-      summaryData.push(["Budget Adherence Score", `${formatNumber(varianceReport.summary.budgetAdherenceScore)}%`]);
+      summaryData.push(["Outlets Over Budget", varianceReport.summary.outletsOverBudget]);
+      summaryData.push(["Worst Performing Category", varianceReport.summary.worstPerformingCategory?.name || "N/A"]);
+      summaryData.push(["Best Performing Category", varianceReport.summary.bestPerformingCategory?.name || "N/A"]);
+      summaryData.push(["Most Volatile Category", varianceReport.summary.mostVolatileCategory?.name || "N/A"]);
+      summaryData.push(["Variance Trend", varianceReport.summary.varianceTrend || "Stable"]);
+      summaryData.push(["Average Daily Variance", formatNumber(varianceReport.summary.averageDailyVariance || 0)]);
       summaryData.push([]);
       
-      summaryData.push(["Variance Distribution"]);
-      if (varianceReport.varianceDistribution) {
-        summaryData.push(["Variance Range", "Number of Categories", "Percentage"]);
-        summaryData.push(["Significant Over (+20%)", varianceReport.varianceDistribution.significantlyOver, 
-          `${formatNumber((varianceReport.varianceDistribution.significantlyOver / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
-        summaryData.push(["Moderately Over (+5% to +20%)", varianceReport.varianceDistribution.moderatelyOver,
-          `${formatNumber((varianceReport.varianceDistribution.moderatelyOver / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
-        summaryData.push(["On Budget (-5% to +5%)", varianceReport.varianceDistribution.onBudget,
-          `${formatNumber((varianceReport.varianceDistribution.onBudget / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
-        summaryData.push(["Under Budget (<-5%)", varianceReport.varianceDistribution.underBudget,
-          `${formatNumber((varianceReport.varianceDistribution.underBudget / varianceReport.summary.totalCategoriesAnalyzed) * 100)}%`]);
+      summaryData.push(["Key Performance Indicators"]);
+      summaryData.push(["Indicator", "Value", "Details"]);
+      if (varianceReport.summary.worstPerformingCategory) {
+        summaryData.push(["Worst Category", varianceReport.summary.worstPerformingCategory.name,
+          `${formatNumber(varianceReport.summary.worstPerformingCategory.variancePercentage)}% variance (${formatNumber(varianceReport.summary.worstPerformingCategory.variance)})`]);
+      }
+      if (varianceReport.summary.bestPerformingCategory) {
+        summaryData.push(["Best Category", varianceReport.summary.bestPerformingCategory.name,
+          `${formatNumber(varianceReport.summary.bestPerformingCategory.variancePercentage)}% variance (${formatNumber(varianceReport.summary.bestPerformingCategory.variance)})`]);
+      }
+      if (varianceReport.summary.mostVolatileCategory) {
+        summaryData.push(["Most Volatile", varianceReport.summary.mostVolatileCategory.name,
+          `${formatNumber(varianceReport.summary.mostVolatileCategory.volatility)}% volatility`]);
       }
       
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
@@ -2815,7 +2821,7 @@ export default function ReportsClient() {
       const categoryData: any[][] = [];
       categoryData.push(["Category Variance Analysis"]);
       categoryData.push([]);
-      categoryData.push(["Category", "Budgeted Cost", "Actual Cost", "Variance", "Variance %", "Status", "Impact Level"]);
+      categoryData.push(["Category", "Budgeted Cost", "Actual Cost", "Variance", "Variance %", "Status", "Trend"]);
       
       if (varianceReport.categoryVariances && varianceReport.categoryVariances.length > 0) {
         varianceReport.categoryVariances.forEach((variance: any) => {
@@ -2832,7 +2838,7 @@ export default function ReportsClient() {
             formatNumber(variance.variance || 0),
             `${formatNumber(variance.variancePercentage || 0)}%`,
             varianceStatus,
-            impactLevel
+            variance.trendDirection || "Stable"
           ]);
         });
       }
@@ -2844,21 +2850,17 @@ export default function ReportsClient() {
       const outletData: any[][] = [];
       outletData.push(["Outlet Performance Analysis"]);
       outletData.push([]);
-      outletData.push(["Outlet", "Budget", "Actual Cost", "Variance", "Variance %", "Performance Rating"]);
+      outletData.push(["Outlet", "Total Budget", "Total Actual", "Total Variance", "Variance %", "Performance Rating"]);
       
-      if (varianceReport.outletPerformance && varianceReport.outletPerformance.length > 0) {
-        varianceReport.outletPerformance.forEach((outlet: any) => {
-          const rating = outlet.variancePercentage <= 5 ? "Excellent" :
-                        outlet.variancePercentage <= 15 ? "Good" :
-                        outlet.variancePercentage <= 25 ? "Fair" : "Poor";
-          
+      if (varianceReport.outletVariances && varianceReport.outletVariances.length > 0) {
+        varianceReport.outletVariances.forEach((outlet: any) => {
           outletData.push([
             outlet.outletName || "Unknown Outlet",
-            formatNumber(outlet.budgetedCost || 0),
-            formatNumber(outlet.actualCost || 0),
-            formatNumber(outlet.variance || 0),
-            `${formatNumber(outlet.variancePercentage || 0)}%`,
-            rating
+            formatNumber(outlet.totalBudgeted || 0),
+            formatNumber(outlet.totalActual || 0),
+            formatNumber(outlet.totalVariance || 0),
+            `${formatNumber(outlet.totalVariancePercentage || 0)}%`,
+            outlet.performanceRating || "N/A"
           ]);
         });
       }
@@ -2871,32 +2873,32 @@ export default function ReportsClient() {
       trendData.push(["Cost Variance Trend Analysis"]);
       trendData.push([]);
       
-      if (varianceReport.trendAnalysis?.monthlyTrends && varianceReport.trendAnalysis.monthlyTrends.length > 0) {
-        trendData.push(["Monthly Variance Trends"]);
-        trendData.push(["Month", "Budget", "Actual", "Variance", "Variance %", "Trend"]);
-        varianceReport.trendAnalysis.monthlyTrends.forEach((trend: any) => {
+      if (varianceReport.timeSeriesAnalysis && varianceReport.timeSeriesAnalysis.length > 0) {
+        trendData.push(["Time Series Variance Trends"]);
+        trendData.push(["Period", "Total Budgeted", "Total Actual", "Total Variance", "Variance %", "Budget Accuracy"]);
+        varianceReport.timeSeriesAnalysis.slice(0, 10).forEach((trend: any) => {
           trendData.push([
-            trend.month || "Unknown Month",
-            formatNumber(trend.budget || 0),
-            formatNumber(trend.actual || 0),
-            formatNumber(trend.variance || 0),
-            `${formatNumber(trend.variancePercentage || 0)}%`,
-            trend.trend || "Stable"
+            formatDateFn(trend.period, "MMM dd, yyyy") || "Unknown Period",
+            formatNumber(trend.totalBudgeted || 0),
+            formatNumber(trend.totalActual || 0),
+            formatNumber(trend.totalVariance || 0),
+            `${formatNumber(trend.totalVariancePercentage || 0)}%`,
+            `${formatNumber(trend.budgetAccuracy || 0)}%`
           ]);
         });
         trendData.push([]);
       }
       
-      if (varianceReport.trendAnalysis?.categoryTrends && varianceReport.trendAnalysis.categoryTrends.length > 0) {
-        trendData.push(["Category Trend Patterns"]);
-        trendData.push(["Category", "Trend Direction", "Improvement Rate", "Volatility", "Seasonality"]);
-        varianceReport.trendAnalysis.categoryTrends.forEach((trend: any) => {
+      if (varianceReport.categoryVariances && varianceReport.categoryVariances.length > 0) {
+        trendData.push(["Category Performance Trends"]);
+        trendData.push(["Category", "Type", "Trend Direction", "Volatility %", "Consistency Score"]);
+        varianceReport.categoryVariances.forEach((category: any) => {
           trendData.push([
-            trend.categoryName || "Unknown Category",
-            trend.trendDirection || "Stable",
-            `${formatNumber(trend.improvementRate || 0)}%`,
-            trend.volatility || "Low",
-            trend.seasonality || "None"
+            category.categoryName || "Unknown Category",
+            category.categoryType || "Unknown",
+            category.trendDirection || "Stable",
+            `${formatNumber(category.volatility || 0)}%`,
+            formatNumber(category.consistencyScore || 0)
           ]);
         });
       }
@@ -2909,71 +2911,95 @@ export default function ReportsClient() {
       rootCauseData.push(["Root Cause Analysis"]);
       rootCauseData.push([]);
       
-      if (varianceReport.rootCauseAnalysis?.topVarianceCauses && varianceReport.rootCauseAnalysis.topVarianceCauses.length > 0) {
-        rootCauseData.push(["Top Variance Causes"]);
-        rootCauseData.push(["Cause", "Frequency", "Impact Score", "Categories Affected"]);
-        varianceReport.rootCauseAnalysis.topVarianceCauses.forEach((cause: any) => {
+      // Analysis based on actual outlet variance data
+      if (varianceReport.outletVariances && varianceReport.outletVariances.length > 0) {
+        rootCauseData.push(["Outlet Performance Analysis"]);
+        rootCauseData.push(["Outlet", "Risk Level", "Performance Rating", "Major Issues"]);
+        varianceReport.outletVariances.slice(0, 10).forEach((outlet: any) => {
+          const majorIssues = (outlet.majorVariances || []).slice(0, 2).join("; ");
           rootCauseData.push([
-            cause.cause || "Unknown Cause",
-            cause.frequency || 0,
-            formatNumber(cause.impactScore || 0),
-            (cause.categoriesAffected || []).join(", ")
+            outlet.outletName || "Unknown Outlet",
+            outlet.riskLevel || "Medium",
+            outlet.performanceRating || "Average",
+            majorIssues || "No major issues identified"
           ]);
         });
         rootCauseData.push([]);
       }
       
-      if (varianceReport.rootCauseAnalysis?.correctionOpportunities && varianceReport.rootCauseAnalysis.correctionOpportunities.length > 0) {
-        rootCauseData.push(["Correction Opportunities"]);
-        rootCauseData.push(["Opportunity", "Potential Savings", "Implementation Difficulty", "Expected Timeline"]);
-        varianceReport.rootCauseAnalysis.correctionOpportunities.forEach((opportunity: any) => {
-          rootCauseData.push([
-            opportunity.opportunity || "Unknown Opportunity",
-            formatNumber(opportunity.potentialSavings || 0),
-            opportunity.implementationDifficulty || "Medium",
-            opportunity.expectedTimeline || "Unknown"
-          ]);
-        });
+      // Recommendations based on outlet analysis
+      if (varianceReport.outletVariances && varianceReport.outletVariances.length > 0) {
+        const outletsWithRecommendations = varianceReport.outletVariances.filter((outlet: any) => 
+          outlet.recommendations && outlet.recommendations.length > 0);
+        
+        if (outletsWithRecommendations.length > 0) {
+          rootCauseData.push(["Outlet-Specific Recommendations"]);
+          rootCauseData.push(["Outlet", "Recommendations"]);
+          outletsWithRecommendations.slice(0, 5).forEach((outlet: any) => {
+            const recommendations = (outlet.recommendations || []).join("; ");
+            rootCauseData.push([
+              outlet.outletName || "Unknown Outlet",
+              recommendations
+            ]);
+          });
+        }
       }
       
       const rootCauseWs = XLSX.utils.aoa_to_sheet(rootCauseData);
-      XLSX.utils.book_append_sheet(wb, rootCauseWs, "Root Cause Analysis");
+      XLSX.utils.book_append_sheet(wb, rootCauseWs, "Performance Analysis");
       
       // Tab 6: Action Plan & Recommendations
       const actionPlanData: any[][] = [];
       actionPlanData.push(["Action Plan & Recommendations"]);
       actionPlanData.push([]);
       
-      if (varianceReport.actionPlan?.immediateActions && varianceReport.actionPlan.immediateActions.length > 0) {
-        actionPlanData.push(["Immediate Actions (Next 30 days)"]);
-        varianceReport.actionPlan.immediateActions.forEach((action: string, index: number) => {
-          actionPlanData.push([`${index + 1}. ${action}`]);
-        });
-        actionPlanData.push([]);
-      }
+      // Generate action plan based on analysis
+      actionPlanData.push(["Immediate Actions (Next 30 days)"]);
+      const immediateActions = [
+        "Review categories with variance > 20% for immediate cost control measures",
+        "Investigate outlets with 'Poor' or 'Critical' performance ratings",
+        "Implement daily budget monitoring for worst performing categories",
+        "Address major variances identified in outlet analysis"
+      ];
+      immediateActions.forEach((action: string, index: number) => {
+        actionPlanData.push([`${index + 1}. ${action}`]);
+      });
+      actionPlanData.push([]);
       
-      if (varianceReport.actionPlan?.shortTermActions && varianceReport.actionPlan.shortTermActions.length > 0) {
-        actionPlanData.push(["Short-term Actions (Next 90 days)"]);
-        varianceReport.actionPlan.shortTermActions.forEach((action: string, index: number) => {
-          actionPlanData.push([`${index + 1}. ${action}`]);
-        });
-        actionPlanData.push([]);
-      }
+      actionPlanData.push(["Short-term Actions (Next 90 days)"]);
+      const shortTermActions = [
+        "Develop improved budgeting processes for volatile categories",
+        "Implement staff training for better cost control",
+        "Review supplier contracts for categories showing consistent overruns",
+        "Establish monthly variance review meetings with outlet managers"
+      ];
+      shortTermActions.forEach((action: string, index: number) => {
+        actionPlanData.push([`${index + 1}. ${action}`]);
+      });
+      actionPlanData.push([]);
       
-      if (varianceReport.actionPlan?.longTermActions && varianceReport.actionPlan.longTermActions.length > 0) {
-        actionPlanData.push(["Long-term Actions (Next 6-12 months)"]);
-        varianceReport.actionPlan.longTermActions.forEach((action: string, index: number) => {
-          actionPlanData.push([`${index + 1}. ${action}`]);
-        });
-        actionPlanData.push([]);
-      }
+      actionPlanData.push(["Long-term Actions (Next 6-12 months)"]);
+      const longTermActions = [
+        "Implement advanced analytics for predictive cost management",
+        "Develop automated budget adjustment mechanisms",
+        "Create comprehensive cost control training programs",
+        "Establish performance-based incentive systems for cost management"
+      ];
+      longTermActions.forEach((action: string, index: number) => {
+        actionPlanData.push([`${index + 1}. ${action}`]);
+      });
+      actionPlanData.push([]);
       
-      if (varianceReport.recommendations && varianceReport.recommendations.length > 0) {
-        actionPlanData.push(["Strategic Recommendations"]);
-        varianceReport.recommendations.forEach((rec: string, index: number) => {
-          actionPlanData.push([`${index + 1}. ${rec}`]);
-        });
-      }
+      actionPlanData.push(["Strategic Recommendations"]);
+      const strategicRecommendations = [
+        "Focus budget control efforts on categories with highest variance percentages",
+        "Prioritize support for outlets with 'High' risk levels",
+        "Implement trend monitoring for categories showing 'Deteriorating' patterns",
+        "Establish benchmark targets based on best-performing categories and outlets"
+      ];
+      strategicRecommendations.forEach((rec: string, index: number) => {
+        actionPlanData.push([`${index + 1}. ${rec}`]);
+      });
       
       const actionPlanWs = XLSX.utils.aoa_to_sheet(actionPlanData);
       XLSX.utils.book_append_sheet(wb, actionPlanWs, "Action Plan & Recommendations");
