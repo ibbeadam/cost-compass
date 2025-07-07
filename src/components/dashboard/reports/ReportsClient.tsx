@@ -490,7 +490,7 @@ export default function ReportsClient() {
     // Add logo on the right side (aligned with property details)
     if (propertyHeader.logoUrl) {
       const logoX = pageWidth - rightMargin - 40; // 40px width for logo
-      const logoY = propertyDetailsStartY - 5; // Align with property name
+      const logoY = propertyDetailsStartY - 15; // Move logo up for better positioning
       
       try {
         await addLogoToPDF(doc, propertyHeader.logoUrl, logoX, logoY, 40, 30);
@@ -1976,6 +1976,186 @@ export default function ReportsClient() {
         )}.xlsx`
       );
 
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "property_performance_comparison" && reportData) {
+      // Property Performance Comparison Excel Export
+      const propertyReport = reportData as any;
+      const propertyHeader = getPropertyHeaderData();
+      
+      ws_data.push([`${propertyHeader.propertyName} - Property Performance Comparison Report`]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]);
+      
+      if (propertyReport.properties && propertyReport.properties.length > 0) {
+        ws_data.push(["Property Performance Summary"]);
+        ws_data.push(["Property", "Total Revenue", "Total Costs", "Net Profit", "Profit Margin"]);
+        propertyReport.properties.forEach((property: any) => {
+          ws_data.push([
+            property.name || "Unknown Property",
+            formatNumber(property.totalRevenue || 0),
+            formatNumber(property.totalCosts || 0),
+            formatNumber((property.totalRevenue || 0) - (property.totalCosts || 0)),
+            formatNumber(property.profitMargin || 0)
+          ]);
+        });
+      }
+      
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Property Performance");
+      XLSX.writeFile(wb, `Property_Performance_Comparison_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "outlet_efficiency_profitability" && reportData) {
+      // Outlet Efficiency & Profitability Excel Export
+      const outletReport = reportData as any;
+      const propertyHeader = getPropertyHeaderData();
+      
+      ws_data.push([`${propertyHeader.propertyName} - Outlet Efficiency & Profitability Report`]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]);
+      
+      if (outletReport.outlets && outletReport.outlets.length > 0) {
+        ws_data.push(["Outlet Efficiency Summary"]);
+        ws_data.push(["Outlet", "Revenue per Sq Ft", "Cost Efficiency", "Profit Margin", "Performance Score"]);
+        outletReport.outlets.forEach((outlet: any) => {
+          ws_data.push([
+            outlet.name || "Unknown Outlet",
+            formatNumber(outlet.revenuePerSqFt || 0),
+            formatNumber(outlet.costEfficiency || 0),
+            formatNumber(outlet.profitMargin || 0),
+            formatNumber(outlet.performanceScore || 0)
+          ]);
+        });
+      }
+      
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Outlet Efficiency");
+      XLSX.writeFile(wb, `Outlet_Efficiency_Profitability_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "category_performance_trends" && reportData) {
+      // Category Performance Trends Excel Export
+      const categoryTrendsReport = reportData as any;
+      const propertyHeader = getPropertyHeaderData();
+      
+      ws_data.push([`${propertyHeader.propertyName} - Category Performance Trends Report`]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]);
+      
+      if (categoryTrendsReport.categoryTrends && categoryTrendsReport.categoryTrends.length > 0) {
+        ws_data.push(["Category Performance Trends"]);
+        ws_data.push(["Category", "Current Performance", "Trend Direction", "Growth Rate", "Performance Score"]);
+        categoryTrendsReport.categoryTrends.forEach((trend: any) => {
+          ws_data.push([
+            trend.categoryName || "Unknown Category",
+            formatNumber(trend.currentPerformance || 0),
+            trend.trendDirection || "Stable",
+            formatNumber(trend.growthRate || 0),
+            formatNumber(trend.performanceScore || 0)
+          ]);
+        });
+      }
+      
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Category Trends");
+      XLSX.writeFile(wb, `Category_Performance_Trends_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "user_activity_audit" && reportData) {
+      // User Activity & Audit Excel Export
+      const auditReport = reportData as any;
+      const propertyHeader = getPropertyHeaderData();
+      
+      ws_data.push([`${propertyHeader.propertyName} - User Activity & Audit Report`]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]);
+      
+      if (auditReport.activities && auditReport.activities.length > 0) {
+        ws_data.push(["User Activity Log"]);
+        ws_data.push(["User", "Action", "Module", "Timestamp", "IP Address"]);
+        auditReport.activities.forEach((activity: any) => {
+          ws_data.push([
+            activity.userName || "Unknown User",
+            activity.action || "Unknown Action",
+            activity.module || "Unknown Module",
+            activity.timestamp ? new Date(activity.timestamp).toLocaleString() : "N/A",
+            activity.ipAddress || "N/A"
+          ]);
+        });
+      }
+      
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Activity Audit");
+      XLSX.writeFile(wb, `User_Activity_Audit_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "cost_variance_analysis" && reportData) {
+      // Cost Variance Analysis Excel Export
+      const varianceReport = reportData as any;
+      const propertyHeader = getPropertyHeaderData();
+      
+      ws_data.push([`${propertyHeader.propertyName} - Cost Variance Analysis Report`]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]);
+      
+      if (varianceReport.variances && varianceReport.variances.length > 0) {
+        ws_data.push(["Cost Variance Analysis"]);
+        ws_data.push(["Category", "Budgeted Cost", "Actual Cost", "Variance", "Variance %"]);
+        varianceReport.variances.forEach((variance: any) => {
+          ws_data.push([
+            variance.category || "Unknown Category",
+            formatNumber(variance.budgetedCost || 0),
+            formatNumber(variance.actualCost || 0),
+            formatNumber(variance.variance || 0),
+            formatNumber(variance.variancePercentage || 0)
+          ]);
+        });
+      }
+      
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Cost Variance");
+      XLSX.writeFile(wb, `Cost_Variance_Analysis_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
+      showToast.success("Report successfully exported to Excel.");
+    } else if (selectedReport === "predictive_analytics" && reportData) {
+      // Predictive Analytics Excel Export
+      const predictiveReport = reportData as any;
+      const propertyHeader = getPropertyHeaderData();
+      
+      ws_data.push([`${propertyHeader.propertyName} - Predictive Analytics & Forecasting Report`]);
+      ws_data.push([`Date Range: ${formatDateFn(dateRange.from, "MMM dd, yyyy")} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]);
+      
+      if (predictiveReport.predictions && predictiveReport.predictions.length > 0) {
+        ws_data.push(["Predictive Analytics Summary"]);
+        ws_data.push(["Metric", "Current Value", "Predicted Value", "Confidence", "Trend"]);
+        predictiveReport.predictions.forEach((prediction: any) => {
+          ws_data.push([
+            prediction.metric || "Unknown Metric",
+            formatNumber(prediction.currentValue || 0),
+            formatNumber(prediction.predictedValue || 0),
+            formatNumber(prediction.confidence || 0),
+            prediction.trend || "Stable"
+          ]);
+        });
+      }
+      
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      XLSX.utils.book_append_sheet(wb, ws, "Predictive Analytics");
+      XLSX.writeFile(wb, `Predictive_Analytics_Forecasting_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
+      
       showToast.success("Report successfully exported to Excel.");
     }
   };
@@ -3617,12 +3797,84 @@ export default function ReportsClient() {
       // Forecasting Report PDF Export
       const forecastReport = reportData as any;
 
-      // Create professional header
-      const reportTitle = "Revenue & Cost Forecasting Report";
-      const dateRangeText = `${forecastReport.outletName} • Historical: ${forecastReport.dateRange.from.toLocaleDateString()} - ${forecastReport.dateRange.to.toLocaleDateString()}
-Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${forecastReport.forecastPeriod.to.toLocaleDateString()}`;
+      // Create custom header for forecasting report with proper positioning
+      const propertyHeader = getPropertyHeaderData();
+      let yPos = 20;
+      const pageWidth = doc.internal.pageSize.width;
+      const leftMargin = 14;
+      const rightMargin = 14;
+      const contentWidth = pageWidth - leftMargin - rightMargin;
       
-      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+      // 1. Report title (centered)
+      const reportTitle = "Revenue & Cost Forecasting Report";
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      const titleWidth = doc.getTextWidth(reportTitle);
+      const titleX = leftMargin + (contentWidth - titleWidth) / 2;
+      doc.text(reportTitle, titleX, yPos);
+      yPos += 10;
+      
+      // 2. Historical period (centered)
+      const historicalText = `${forecastReport.outletName} • Historical: ${forecastReport.dateRange.from.toLocaleDateString()} - ${forecastReport.dateRange.to.toLocaleDateString()}`;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      const historicalWidth = doc.getTextWidth(historicalText);
+      const historicalX = leftMargin + (contentWidth - historicalWidth) / 2;
+      doc.text(historicalText, historicalX, yPos);
+      yPos += 6;
+      
+      // 3. Forecast period (centered)
+      const forecastText = `Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${forecastReport.forecastPeriod.to.toLocaleDateString()}`;
+      const forecastWidth = doc.getTextWidth(forecastText);
+      const forecastX = leftMargin + (contentWidth - forecastWidth) / 2;
+      doc.text(forecastText, forecastX, yPos);
+      yPos += 15;
+      
+      // Store the starting Y position for property details
+      const propertyDetailsStartY = yPos;
+      
+      // 4. Property details on left, logo on right
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      
+      // Property Name (left side)
+      doc.text(propertyHeader.propertyName, leftMargin, yPos);
+      yPos += 6;
+      
+      // Property Code (left side)
+      if (propertyHeader.propertyCode) {
+        doc.setFont("helvetica", "normal");
+        doc.text(`Property Code: ${propertyHeader.propertyCode}`, leftMargin, yPos);
+        yPos += 6;
+      }
+      
+      // Full Address (left side)
+      const fullAddress = [
+        propertyHeader.address,
+        propertyHeader.city,
+        propertyHeader.state,
+        propertyHeader.country
+      ].filter(Boolean).join(", ");
+      
+      if (fullAddress) {
+        doc.setFont("helvetica", "normal");
+        doc.text(fullAddress, leftMargin, yPos);
+        yPos += 6;
+      }
+      
+      // Add logo on the right side (aligned with property details)
+      if (propertyHeader.logoUrl) {
+        const logoX = pageWidth - rightMargin - 40; // 40px width for logo
+        const logoY = propertyDetailsStartY - 15; // Move logo up for better positioning
+        
+        try {
+          await addLogoToPDF(doc, propertyHeader.logoUrl, logoX, logoY, 40, 30);
+        } catch (error) {
+          console.warn("Could not add logo to PDF:", error);
+        }
+      }
+      
+      yPos += 15; // Extra space before content
 
       // Historical Analysis
       doc.setFontSize(14);
@@ -3804,6 +4056,2289 @@ Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${
 
       doc.save(
         `Forecasting_Report_${formatDateFn(forecastReport.dateRange.from, "yyyyMMdd")}_to_${formatDateFn(forecastReport.dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "property_performance_comparison" && reportData) {
+      // Property Performance Comparison Report PDF Export
+      const propertyReport = reportData as any;
+
+      // Create professional header
+      const reportTitle = "Property Performance Comparison Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+
+      // Overall Summary
+      if (propertyReport.overallSummary) {
+        doc.setFontSize(14);
+        doc.text("Overall Summary", 14, yPos);
+        yPos += 10;
+
+        const summaryHeaders = [["Metric", "Value"]];
+        const summaryData = [
+          ["Total Properties", (propertyReport.overallSummary.totalProperties || 0).toString()],
+          ["Total Revenue", renderCurrency(propertyReport.overallSummary.totalRevenue || 0)],
+          ["Average Profit Margin", renderPercentage(propertyReport.overallSummary.avgProfitMargin || 0)],
+          ["Best Performing Property", propertyReport.overallSummary.bestPerformingProperty || "N/A"],
+          ["Total Outlets", (propertyReport.overallSummary.totalOutlets || 0).toString()]
+        ];
+
+        autoTable(doc, {
+          startY: yPos,
+          head: summaryHeaders,
+          body: summaryData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 10, cellPadding: 2 },
+          columnStyles: { 1: { halign: "right" } },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Property Data Details
+      if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Property Performance Details", 14, yPos);
+        yPos += 10;
+
+        const propertyHeaders = [["Property", "Revenue", "Cost", "Profit Margin", "Efficiency", "Outlets"]];
+        const propertyData = propertyReport.propertyData.map((property: any) => [
+          property.propertyName || "Unknown Property",
+          renderCurrency(property.totalRevenue || 0),
+          renderCurrency(property.totalCost || 0),
+          renderPercentage(property.profitMargin || 0),
+          renderPercentage(property.efficiency || 0),
+          (property.outletCount || 0).toString()
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: propertyHeaders,
+          body: propertyData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+            5: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Revenue Ranking (Tab 2)
+      if (propertyReport.rankings?.byRevenue && propertyReport.rankings.byRevenue.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Revenue Ranking", 14, yPos);
+        yPos += 10;
+
+        const revenueHeaders = [["Rank", "Property", "Revenue", "Growth", "Market Share"]];
+        const revenueData = propertyReport.rankings.byRevenue.map((property: any, index: number) => [
+          (index + 1).toString(),
+          property.propertyName || "Unknown Property",
+          renderCurrency(property.totalRevenue || 0),
+          renderPercentage(property.revenueGrowth || 0),
+          renderPercentage(property.marketShare || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: revenueHeaders,
+          body: revenueData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Profit Ranking (Tab 3)
+      if (propertyReport.rankings?.byProfitMargin && propertyReport.rankings.byProfitMargin.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Profit Ranking", 14, yPos);
+        yPos += 10;
+
+        const profitHeaders = [["Rank", "Property", "Profit Margin", "Net Profit", "Profit Growth"]];
+        const profitData = propertyReport.rankings.byProfitMargin.map((property: any, index: number) => [
+          (index + 1).toString(),
+          property.propertyName || "Unknown Property",
+          renderPercentage(property.profitMargin || 0),
+          renderCurrency(property.netProfit || 0),
+          renderPercentage(property.profitGrowth || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: profitHeaders,
+          body: profitData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Efficiency Ranking (Tab 4)
+      if (propertyReport.rankings?.byEfficiency && propertyReport.rankings.byEfficiency.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Efficiency Ranking", 14, yPos);
+        yPos += 10;
+
+        const efficiencyHeaders = [["Rank", "Property", "Efficiency", "Cost Control", "Revenue per Outlet"]];
+        const efficiencyData = propertyReport.rankings.byEfficiency.map((property: any, index: number) => [
+          (index + 1).toString(),
+          property.propertyName || "Unknown Property",
+          renderPercentage(property.efficiency || 0),
+          renderPercentage(property.costControl || 0),
+          renderCurrency(property.revenuePerOutlet || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: efficiencyHeaders,
+          body: efficiencyData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Cost Control Ranking (Tab 5)
+      if (propertyReport.rankings?.byCostControl && propertyReport.rankings.byCostControl.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Cost Control Ranking", 14, yPos);
+        yPos += 10;
+
+        const costControlHeaders = [["Rank", "Property", "Cost Control %", "Food Cost %", "Beverage Cost %"]];
+        const costControlData = propertyReport.rankings.byCostControl.map((property: any, index: number) => [
+          (index + 1).toString(),
+          property.propertyName || "Unknown Property",
+          renderPercentage(property.costControl || 0),
+          renderPercentage(property.avgFoodCostPct || 0),
+          renderPercentage(property.avgBeverageCostPct || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: costControlHeaders,
+          body: costControlData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+      }
+
+      // Add footer to all pages before saving
+      const totalPagesProperty = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesProperty; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
+      doc.save(
+        `Property_Performance_Comparison_${formatDateFn(
+          dateRange.from,
+          "yyyyMMdd"
+        )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "outlet_efficiency_profitability" && reportData) {
+      // Outlet Efficiency & Profitability Report PDF Export
+      const outletReport = reportData as any;
+
+      // Create professional header
+      const reportTitle = "Outlet Efficiency & Profitability Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+
+      // Summary
+      if (outletReport.summary) {
+        doc.setFontSize(14);
+        doc.text("Outlet Summary", 14, yPos);
+        yPos += 10;
+
+        const summaryHeaders = [["Metric", "Value"]];
+        const summaryData = [
+          ["Total Outlets", (outletReport.summary.totalOutlets || 0).toString()],
+          ["Active Outlets", (outletReport.summary.activeOutlets || 0).toString()],
+          ["Total Revenue", renderCurrency(outletReport.summary.totalRevenue || 0)],
+          ["Average Profit Margin", renderPercentage(outletReport.summary.avgProfitMargin || 0)],
+          ["Total Profit", renderCurrency(outletReport.summary.totalProfit || 0)],
+          ["Top Performing Outlet", outletReport.summary.topPerformingOutlet || "N/A"]
+        ];
+
+        autoTable(doc, {
+          startY: yPos,
+          head: summaryHeaders,
+          body: summaryData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 10, cellPadding: 2 },
+          columnStyles: { 1: { halign: "right" } },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Outlet Efficiency Details
+      if (outletReport.outletData && outletReport.outletData.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Outlet Efficiency Details", 14, yPos);
+        yPos += 10;
+
+        const efficiencyHeaders = [["Outlet", "Revenue", "Cost", "Profit Margin", "Efficiency Ratio", "Rating"]];
+        const efficiencyData = outletReport.outletData.map((outlet: any) => [
+          outlet.outletName || "Unknown Outlet",
+          renderCurrency(outlet.totalRevenue || 0),
+          renderCurrency(outlet.totalCost || 0),
+          renderPercentage(outlet.profitMargin || 0),
+          formatNumber(outlet.revenueToCostRatio || 0),
+          outlet.performanceRating || "N/A"
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: efficiencyHeaders,
+          body: efficiencyData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Revenue Ranking (Tab 2)
+      if (outletReport.rankings?.byRevenue && outletReport.rankings.byRevenue.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Revenue Ranking", 14, yPos);
+        yPos += 10;
+
+        const revenueHeaders = [["Rank", "Outlet", "Revenue", "Daily Avg", "Growth %"]];
+        const revenueData = outletReport.rankings.byRevenue.map((outlet: any, index: number) => [
+          (index + 1).toString(),
+          outlet.outletName || "Unknown Outlet",
+          renderCurrency(outlet.totalRevenue || 0),
+          renderCurrency(outlet.avgDailyRevenue || 0),
+          renderPercentage(outlet.revenueGrowth || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: revenueHeaders,
+          body: revenueData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Profit Ranking (Tab 3) & Efficiency Ranking (Tab 4) & Insights (Tab 5)
+      if (outletReport.rankings || outletReport.insights) {
+        // Profit Ranking
+        if (outletReport.rankings?.byProfit && outletReport.rankings.byProfit.length > 0) {
+          if (yPos + 40 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(14);
+          doc.text("Profit Ranking", 14, yPos);
+          yPos += 10;
+
+          const profitHeaders = [["Rank", "Outlet", "Profit Margin", "Net Profit", "Growth %"]];
+          const profitData = outletReport.rankings.byProfit.map((outlet: any, index: number) => [
+            (index + 1).toString(),
+            outlet.outletName || "Unknown Outlet",
+            renderPercentage(outlet.profitMargin || 0),
+            renderCurrency(outlet.totalProfit || 0),
+            renderPercentage(outlet.profitGrowth || 0)
+          ]);
+
+          autoTable(doc, {
+            startY: yPos,
+            head: profitHeaders,
+            body: profitData,
+            theme: "grid",
+            headStyles: {
+              fillColor: [240, 240, 240],
+              textColor: [0, 0, 0],
+              fontStyle: "bold",
+            },
+            styles: { fontSize: 9, cellPadding: 1.5 },
+            columnStyles: {
+              2: { halign: "right" },
+              3: { halign: "right" },
+              4: { halign: "right" },
+            },
+            margin: { bottom: 30 },
+            didDrawPage: function (data) {
+              yPos = data.cursor?.y || yPos;
+            },
+          });
+          yPos += 15;
+        }
+
+        // Efficiency Ranking
+        if (outletReport.rankings?.byEfficiency && outletReport.rankings.byEfficiency.length > 0) {
+          if (yPos + 40 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(14);
+          doc.text("Efficiency Ranking", 14, yPos);
+          yPos += 10;
+
+          const efficiencyHeaders = [["Rank", "Outlet", "Revenue-Cost Ratio", "Rating", "Trend"]];
+          const efficiencyData = outletReport.rankings.byEfficiency.map((outlet: any, index: number) => [
+            (index + 1).toString(),
+            outlet.outletName || "Unknown Outlet",
+            formatNumber(outlet.revenueToCostRatio || 0),
+            outlet.performanceRating || "N/A",
+            outlet.efficiencyTrend || "Stable"
+          ]);
+
+          autoTable(doc, {
+            startY: yPos,
+            head: efficiencyHeaders,
+            body: efficiencyData,
+            theme: "grid",
+            headStyles: {
+              fillColor: [240, 240, 240],
+              textColor: [0, 0, 0],
+              fontStyle: "bold",
+            },
+            styles: { fontSize: 9, cellPadding: 1.5 },
+            columnStyles: {
+              2: { halign: "right" },
+            },
+            margin: { bottom: 30 },
+            didDrawPage: function (data) {
+              yPos = data.cursor?.y || yPos;
+            },
+          });
+          yPos += 15;
+        }
+
+        // Insights Tab
+        if (outletReport.insights?.topPerformers || outletReport.insights?.recommendations) {
+          if (yPos + 40 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(14);
+          doc.text("Performance Insights & Recommendations", 14, yPos);
+          yPos += 10;
+
+          if (outletReport.insights.topPerformers && outletReport.insights.topPerformers.length > 0) {
+            doc.setFontSize(12);
+            doc.text("Top Performers:", 14, yPos);
+            yPos += 6;
+
+            const insightsHeaders = [["Outlet", "Strength", "Score"]];
+            const insightsData = outletReport.insights.topPerformers.slice(0, 5).map((performer: any) => [
+              performer.outletName || "N/A",
+              performer.strength || "High Performance",
+              formatNumber(performer.score || 0)
+            ]);
+
+            autoTable(doc, {
+              startY: yPos,
+              head: insightsHeaders,
+              body: insightsData,
+              theme: "grid",
+              styles: { fontSize: 9, cellPadding: 1.5 },
+              columnStyles: { 2: { halign: "right" } },
+              margin: { bottom: 30 },
+              didDrawPage: function (data) {
+                yPos = data.cursor?.y || yPos;
+              },
+            });
+            yPos += 10;
+          }
+
+          if (outletReport.insights.recommendations && outletReport.insights.recommendations.length > 0) {
+            doc.setFontSize(12);
+            doc.text("Key Recommendations:", 14, yPos);
+            yPos += 6;
+
+            outletReport.insights.recommendations.slice(0, 5).forEach((recommendation: string, index: number) => {
+              if (yPos + 10 > doc.internal.pageSize.height - 20) {
+                doc.addPage();
+                yPos = 20;
+              }
+              doc.setFontSize(10);
+              const recText = `${index + 1}. ${recommendation}`;
+              const splitText = doc.splitTextToSize(recText, 180);
+              doc.text(splitText, 14, yPos);
+              yPos += splitText.length * 5;
+            });
+          }
+        }
+      }
+
+      // Add footer to all pages before saving
+      const totalPagesOutlet = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesOutlet; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
+      doc.save(
+        `Outlet_Efficiency_Profitability_${formatDateFn(
+          dateRange.from,
+          "yyyyMMdd"
+        )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "category_performance_trends" && reportData) {
+      // Category Performance Trends Report PDF Export - ALL TABS
+      const categoryTrendsReport = reportData as CategoryPerformanceTrendsReport;
+
+      // Create professional header
+      const reportTitle = "Category Performance Trends Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+
+      // Tab 1: Overview - Summary
+      doc.setFontSize(16);
+      doc.text("Overview Summary", 14, yPos);
+      yPos += 10;
+
+      const summaryHeaders = [["Metric", "Value"]];
+      const summaryData = [
+        ["Total Categories", categoryTrendsReport.summary.totalCategories.toString()],
+        ["Food Categories", categoryTrendsReport.summary.foodCategories.toString()],
+        ["Beverage Categories", categoryTrendsReport.summary.beverageCategories.toString()],
+        ["Total Cost", renderCurrency(categoryTrendsReport.summary.totalCost)],
+        ["Average Daily Cost", renderCurrency(categoryTrendsReport.summary.averageDailyCost)],
+        ["Most Expensive Category", categoryTrendsReport.summary.mostExpensiveCategory.name],
+        ["Fastest Growing Category", categoryTrendsReport.summary.fastestGrowingCategory.name]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: summaryHeaders,
+        body: summaryData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Food vs Beverage Analysis
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text("Food vs Beverage Analysis", 14, yPos);
+      yPos += 10;
+
+      const fvbHeaders = [["Category", "Cost", "Percentage", "Growth"]];
+      const fvbData = [
+        ["Food Total", renderCurrency(categoryTrendsReport.foodVsBeverage.foodTotal), 
+         renderPercentage(categoryTrendsReport.foodVsBeverage.foodPercentage), 
+         renderPercentage(categoryTrendsReport.foodVsBeverage.foodGrowth)],
+        ["Beverage Total", renderCurrency(categoryTrendsReport.foodVsBeverage.beverageTotal), 
+         renderPercentage(categoryTrendsReport.foodVsBeverage.beveragePercentage), 
+         renderPercentage(categoryTrendsReport.foodVsBeverage.beverageGrowth)]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: fvbHeaders,
+        body: fvbData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Period Comparison
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text("Period Comparison", 14, yPos);
+      yPos += 10;
+
+      const periodHeaders = [["Period", "Total Cost", "Category Count", "Growth %"]];
+      const periodData = [
+        ["Previous Period", renderCurrency(categoryTrendsReport.periodComparison.previousPeriod.totalCost), 
+         categoryTrendsReport.periodComparison.previousPeriod.categoryCount.toString(), "Base"],
+        ["Current Period", renderCurrency(categoryTrendsReport.periodComparison.currentPeriod.totalCost), 
+         categoryTrendsReport.periodComparison.currentPeriod.categoryCount.toString(), 
+         renderPercentage(categoryTrendsReport.periodComparison.growth.totalCostGrowth)]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: periodHeaders,
+        body: periodData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Tab 2: Food Categories (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Food Category Performance", 14, yPos);
+      yPos += 10;
+
+      if (categoryTrendsReport.foodCategories && categoryTrendsReport.foodCategories.length > 0) {
+        const foodHeaders = [["Category", "Total Cost", "Daily Avg", "% of Total", "Trend", "Growth %", "Volatility", "Rank"]];
+        const foodData = categoryTrendsReport.foodCategories.map((category: any) => [
+          category.categoryName || "Unknown Category",
+          renderCurrency(category.totalCost || 0),
+          renderCurrency(category.averageDailyCost || 0),
+          renderPercentage(category.percentageOfTotalCost || 0),
+          category.trendDirection || "Stable",
+          renderPercentage(category.trendPercentage || 0),
+          renderPercentage(category.volatility || 0),
+          (category.rankByCost || 0).toString()
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: foodHeaders,
+          body: foodData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 8, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            5: { halign: "right" },
+            6: { halign: "right" },
+            7: { halign: "center" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 3: Beverage Categories (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Beverage Category Performance", 14, yPos);
+      yPos += 10;
+
+      if (categoryTrendsReport.beverageCategories && categoryTrendsReport.beverageCategories.length > 0) {
+        const beverageHeaders = [["Category", "Total Cost", "Daily Avg", "% of Total", "Trend", "Growth %", "Volatility", "Rank"]];
+        const beverageData = categoryTrendsReport.beverageCategories.map((category: any) => [
+          category.categoryName || "Unknown Category",
+          renderCurrency(category.totalCost || 0),
+          renderCurrency(category.averageDailyCost || 0),
+          renderPercentage(category.percentageOfTotalCost || 0),
+          category.trendDirection || "Stable",
+          renderPercentage(category.trendPercentage || 0),
+          renderPercentage(category.volatility || 0),
+          (category.rankByCost || 0).toString()
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: beverageHeaders,
+          body: beverageData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 8, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            5: { halign: "right" },
+            6: { halign: "right" },
+            7: { halign: "center" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 4: Trend Analysis (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Detailed Trend Analysis", 14, yPos);
+      yPos += 10;
+
+      const allCategories = [...(categoryTrendsReport.foodCategories || []), ...(categoryTrendsReport.beverageCategories || [])];
+      if (allCategories.length > 0) {
+        const trendHeaders = [["Category", "Type", "Highest Cost", "Lowest Cost", "Volatility", "Seasonal Pattern", "Growth Rank"]];
+        const trendData = allCategories.slice(0, 15).map((category: any) => [
+          category.categoryName || "Unknown Category",
+          category.categoryType || "Unknown",
+          renderCurrency(category.highestCostDay?.cost || 0),
+          renderCurrency(category.lowestCostDay?.cost || 0),
+          renderPercentage(category.volatility || 0),
+          category.seasonalPattern?.patternType || "No Pattern",
+          (category.rankByGrowth || 0).toString()
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: trendHeaders,
+          body: trendData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 8, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+            6: { halign: "center" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 5: Outlet Breakdown
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Outlet Breakdown Analysis", 14, yPos);
+      yPos += 10;
+
+      // Show outlet breakdown for top categories
+      const topCategories = allCategories.filter(cat => cat.outletBreakdown && cat.outletBreakdown.length > 0).slice(0, 3);
+      for (const category of topCategories) {
+        if (yPos + 30 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text(`${category.categoryName} - Outlet Distribution`, 14, yPos);
+        yPos += 8;
+
+        const outletHeaders = [["Outlet", "Total Cost", "% of Category", "Trend"]];
+        const outletData = (category.outletBreakdown || []).map((outlet: any) => [
+          outlet.outletName || "Unknown Outlet",
+          renderCurrency(outlet.totalCost || 0),
+          renderPercentage(outlet.percentage || 0),
+          outlet.trend || "Stable"
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: outletHeaders,
+          body: outletData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 6: Insights (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Key Insights & Recommendations", 14, yPos);
+      yPos += 10;
+
+      // Trending Up
+      if (categoryTrendsReport.insights.trendingUp && categoryTrendsReport.insights.trendingUp.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Categories Trending Up (Cost Increases):", 14, yPos);
+        yPos += 6;
+        
+        categoryTrendsReport.insights.trendingUp.forEach((category: string, index: number) => {
+          doc.setFontSize(10);
+          doc.text(`• ${category}`, 20, yPos);
+          yPos += 5;
+        });
+        yPos += 5;
+      }
+
+      // Trending Down
+      if (categoryTrendsReport.insights.trendingDown && categoryTrendsReport.insights.trendingDown.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Categories Trending Down (Cost Decreases):", 14, yPos);
+        yPos += 6;
+        
+        categoryTrendsReport.insights.trendingDown.forEach((category: string, index: number) => {
+          doc.setFontSize(10);
+          doc.text(`• ${category}`, 20, yPos);
+          yPos += 5;
+        });
+        yPos += 5;
+      }
+
+      // Most Stable
+      if (categoryTrendsReport.insights.mostStable && categoryTrendsReport.insights.mostStable.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Most Stable Categories:", 14, yPos);
+        yPos += 6;
+        
+        categoryTrendsReport.insights.mostStable.forEach((category: string, index: number) => {
+          doc.setFontSize(10);
+          doc.text(`• ${category}`, 20, yPos);
+          yPos += 5;
+        });
+        yPos += 5;
+      }
+
+      // Key Findings
+      if (categoryTrendsReport.insights.keyFindings && categoryTrendsReport.insights.keyFindings.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Key Findings:", 14, yPos);
+        yPos += 6;
+        
+        categoryTrendsReport.insights.keyFindings.forEach((finding: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${finding}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Recommendations
+      if (categoryTrendsReport.insights.recommendations && categoryTrendsReport.insights.recommendations.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Recommendations:", 14, yPos);
+        yPos += 6;
+        
+        categoryTrendsReport.insights.recommendations.forEach((recommendation: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${recommendation}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+      }
+
+      // Add footer to all pages before saving
+      const totalPagesCategoryTrends = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesCategoryTrends; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
+      doc.save(
+        `Category_Performance_Trends_ALL_TABS_${formatDateFn(
+          dateRange.from,
+          "yyyyMMdd"
+        )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "user_activity_audit" && reportData) {
+      // User Activity & Audit Report PDF Export
+      const auditReport = reportData as any;
+
+      // Create professional header
+      const reportTitle = "User Activity & Audit Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+
+      // Summary
+      if (auditReport.summary) {
+        doc.setFontSize(14);
+        doc.text("Activity Summary", 14, yPos);
+        yPos += 10;
+
+        const summaryHeaders = [["Metric", "Value"]];
+        const summaryData = [
+          ["Total Users", (auditReport.summary.totalUsers || 0).toString()],
+          ["Active Users", (auditReport.summary.activeUsers || 0).toString()],
+          ["Total Actions", (auditReport.summary.totalActions || 0).toString()],
+          ["Avg Actions per User", formatNumber(auditReport.summary.avgActionsPerUser || 0)],
+          ["Most Active User", auditReport.summary.mostActiveUser || "N/A"],
+          ["Top Action", auditReport.summary.topAction || "N/A"]
+        ];
+
+        autoTable(doc, {
+          startY: yPos,
+          head: summaryHeaders,
+          body: summaryData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 10, cellPadding: 2 },
+          columnStyles: { 1: { halign: "right" } },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // User Activity Details
+      if (auditReport.userData && auditReport.userData.length > 0) {
+        // Check if we need a new page
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("User Activity Details", 14, yPos);
+        yPos += 10;
+
+        const userHeaders = [["User", "Role", "Total Actions", "Daily Avg", "Last Active", "Risk Score"]];
+        const userData = auditReport.userData.slice(0, 20).map((user: any) => [
+          user.userName || "Unknown User",
+          user.userRole || "N/A",
+          (user.totalActions || 0).toString(),
+          formatNumber(user.dailyAverage || 0),
+          user.lastActive ? new Date(user.lastActive).toLocaleDateString() : "N/A",
+          formatNumber(user.riskScore || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: userHeaders,
+          body: userData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            5: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+      }
+
+      // Add footer to all pages before saving
+      const totalPagesAudit = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesAudit; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
+      doc.save(
+        `User_Activity_Audit_${formatDateFn(
+          dateRange.from,
+          "yyyyMMdd"
+        )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "cost_variance_analysis" && reportData) {
+      // Cost Variance Analysis Report PDF Export - ALL TABS
+      const varianceReport = reportData as CostVarianceAnalysisReport;
+
+      // Create professional header
+      const reportTitle = "Cost Variance Analysis Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+
+      // Executive Summary
+      doc.setFontSize(16);
+      doc.text("Executive Summary", 14, yPos);
+      yPos += 10;
+
+      const summaryHeaders = [["Metric", "Value"]];
+      const summaryData = [
+        ["Overall Variance", renderCurrency(varianceReport.summary.overallVariance)],
+        ["Overall Variance %", renderPercentage(varianceReport.summary.overallVariancePercentage)],
+        ["Budget Accuracy", renderPercentage(varianceReport.summary.budgetAccuracy)],
+        ["Categories Over Budget", varianceReport.summary.categoriesOverBudget.toString()],
+        ["Variance Trend", varianceReport.summary.varianceTrend],
+        ["Average Daily Variance", renderCurrency(varianceReport.summary.averageDailyVariance)]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: summaryHeaders,
+        body: summaryData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Key Performance Indicators
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text("Key Performance Indicators", 14, yPos);
+      yPos += 10;
+
+      const kpiHeaders = [["Category", "Performance", "Variance", "Status"]];
+      const kpiData = [
+        ["Worst Performing", varianceReport.summary.worstPerformingCategory.name, 
+         renderCurrency(varianceReport.summary.worstPerformingCategory.variance), "Critical"],
+        ["Best Performing", varianceReport.summary.bestPerformingCategory.name, 
+         renderCurrency(varianceReport.summary.bestPerformingCategory.variance), "Excellent"],
+        ["Most Volatile", varianceReport.summary.mostVolatileCategory.name, 
+         `${varianceReport.summary.mostVolatileCategory.volatility.toFixed(1)}% volatility`, "Monitor"]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: kpiHeaders,
+        body: kpiData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 2: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Tab 1: Categories (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Category Variance Analysis", 14, yPos);
+      yPos += 10;
+
+      if (varianceReport.categoryVariances && varianceReport.categoryVariances.length > 0) {
+        const categoryHeaders = [["Category", "Type", "Budgeted", "Actual", "Variance", "Variance %", "Utilization", "Trend", "Status"]];
+        const categoryData = varianceReport.categoryVariances.map((category: any) => [
+          category.categoryName || "Unknown Category",
+          category.categoryType || "Unknown",
+          renderCurrency(category.budgetedCost || 0),
+          renderCurrency(category.actualCost || 0),
+          renderCurrency(category.variance || 0),
+          renderPercentage(category.variancePercentage || 0),
+          `${(category.budgetUtilization || 0).toFixed(1)}%`,
+          category.trendDirection || "Stable",
+          category.variancePercentage > 10 ? "High Over" : 
+          category.variancePercentage > 5 ? "Moderate Over" : 
+          category.variancePercentage > -5 ? "Within Budget" : "Under Budget"
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: categoryHeaders,
+          body: categoryData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 8, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+            5: { halign: "right" },
+            6: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 2: Outlets (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Outlet Performance Analysis", 14, yPos);
+      yPos += 10;
+
+      if (varianceReport.outletVariances && varianceReport.outletVariances.length > 0) {
+        const outletHeaders = [["Outlet", "Total Budgeted", "Total Actual", "Total Variance", "Variance %", "Performance", "Risk Level"]];
+        const outletData = varianceReport.outletVariances.map((outlet: any) => [
+          outlet.outletName || "Unknown Outlet",
+          renderCurrency(outlet.totalBudgeted || 0),
+          renderCurrency(outlet.totalActual || 0),
+          renderCurrency(outlet.totalVariance || 0),
+          renderPercentage(outlet.totalVariancePercentage || 0),
+          outlet.performanceRating || "Unknown",
+          outlet.riskLevel || "Unknown"
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: outletHeaders,
+          body: outletData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+
+        // Food vs Beverage Breakdown by Outlet
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Food vs Beverage Variance by Outlet", 14, yPos);
+        yPos += 10;
+
+        const fbHeaders = [["Outlet", "Food Variance", "Food %", "Beverage Variance", "Beverage %"]];
+        const fbData = varianceReport.outletVariances.map((outlet: any) => [
+          outlet.outletName || "Unknown Outlet",
+          renderCurrency(outlet.foodVariance?.variance || 0),
+          renderPercentage(outlet.foodVariance?.variancePercentage || 0),
+          renderCurrency(outlet.beverageVariance?.variance || 0),
+          renderPercentage(outlet.beverageVariance?.variancePercentage || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: fbHeaders,
+          body: fbData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 3: Daily Variance Trends
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Daily Variance Trends", 14, yPos);
+      yPos += 10;
+
+      if (varianceReport.timeSeriesAnalysis?.daily && varianceReport.timeSeriesAnalysis.daily.length > 0) {
+        const trendsHeaders = [["Date", "Budgeted", "Actual", "Variance", "Variance %", "Accuracy"]];
+        const trendsData = varianceReport.timeSeriesAnalysis.daily.slice(0, 15).map((day: any) => [
+          formatDateFn(day.period, "MMM dd, yyyy"),
+          renderCurrency(day.totalBudgeted || 0),
+          renderCurrency(day.totalActual || 0),
+          renderCurrency(day.totalVariance || 0),
+          renderPercentage(day.totalVariancePercentage || 0),
+          `${(day.budgetAccuracy || 0).toFixed(1)}%`
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: trendsHeaders,
+          body: trendsData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+            5: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 4: Variance Distribution
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Variance Distribution Analysis", 14, yPos);
+      yPos += 10;
+
+      // Significant Over Budget
+      if (varianceReport.varianceDistribution?.significantOverBudget && varianceReport.varianceDistribution.significantOverBudget.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Significant Over Budget (>10%)", 14, yPos);
+        yPos += 8;
+
+        const sigOverHeaders = [["Category", "Variance %"]];
+        const sigOverData = varianceReport.varianceDistribution.significantOverBudget.map((category: any) => [
+          category.categoryName || "Unknown Category",
+          renderPercentage(category.variancePercentage || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: sigOverHeaders,
+          body: sigOverData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: { 1: { halign: "right" } },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Within Budget
+      if (varianceReport.varianceDistribution?.withinBudget && varianceReport.varianceDistribution.withinBudget.length > 0) {
+        if (yPos + 30 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Within Budget (±5%)", 14, yPos);
+        yPos += 8;
+
+        const withinHeaders = [["Category", "Variance %"]];
+        const withinData = varianceReport.varianceDistribution.withinBudget.slice(0, 10).map((category: any) => [
+          category.categoryName || "Unknown Category",
+          renderPercentage(category.variancePercentage || 0)
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: withinHeaders,
+          body: withinData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: { 1: { halign: "right" } },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 5: Insights & Risk Factors
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Insights & Risk Analysis", 14, yPos);
+      yPos += 10;
+
+      // Risk Factors
+      if (varianceReport.predictions?.riskFactors && varianceReport.predictions.riskFactors.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Risk Factors:", 14, yPos);
+        yPos += 6;
+        
+        varianceReport.predictions.riskFactors.forEach((risk: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${risk}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Opportunities
+      if (varianceReport.predictions?.opportunities && varianceReport.predictions.opportunities.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Opportunities:", 14, yPos);
+        yPos += 6;
+        
+        varianceReport.predictions.opportunities.forEach((opportunity: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${opportunity}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Category Performance Insights
+      if (yPos + 30 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(12);
+      doc.text("Category Performance Insights:", 14, yPos);
+      yPos += 8;
+
+      const insightCategories = varianceReport.categoryVariances.slice(0, 6);
+      for (const category of insightCategories) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(10);
+        doc.text(`${category.categoryName}:`, 20, yPos);
+        yPos += 5;
+        doc.text(`  Variance: ${renderCurrency(category.variance)} (${renderPercentage(category.variancePercentage)})`, 25, yPos);
+        yPos += 4;
+        doc.text(`  Volatility: ${category.volatility?.toFixed(1) || 0}%`, 25, yPos);
+        yPos += 4;
+        doc.text(`  Consistency: ${category.consistencyScore?.toFixed(1) || 0}%`, 25, yPos);
+        yPos += 4;
+        doc.text(`  Trend: ${category.trendDirection}`, 25, yPos);
+        yPos += 8;
+      }
+
+      // Tab 6: Predictions & Recommendations
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Predictions & Recommendations", 14, yPos);
+      yPos += 10;
+
+      // Projected Month-End Variance
+      doc.setFontSize(12);
+      doc.text("Projected Month-End Variance:", 14, yPos);
+      yPos += 6;
+      doc.setFontSize(14);
+      doc.text(renderCurrency(varianceReport.predictions?.projectedMonthEndVariance || 0), 20, yPos);
+      yPos += 10;
+
+      // Budget Performance Status
+      doc.setFontSize(12);
+      doc.text("Budget Performance Status:", 14, yPos);
+      yPos += 6;
+      doc.setFontSize(10);
+      doc.text(`Current Accuracy: ${varianceReport.summary.budgetAccuracy.toFixed(1)}%`, 20, yPos);
+      yPos += 5;
+      doc.text(`Categories on track: ${varianceReport.categoryVariances.length - varianceReport.summary.categoriesOverBudget}`, 20, yPos);
+      yPos += 5;
+      doc.text(`Categories over budget: ${varianceReport.summary.categoriesOverBudget}`, 20, yPos);
+      yPos += 10;
+
+      // Recommendations
+      if (varianceReport.predictions?.recommendations && varianceReport.predictions.recommendations.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Recommendations:", 14, yPos);
+        yPos += 6;
+        
+        varianceReport.predictions.recommendations.forEach((recommendation: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${recommendation}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+      }
+
+      // Add footer to all pages before saving
+      const totalPagesVariance = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesVariance; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
+      doc.save(
+        `Cost_Variance_Analysis_ALL_TABS_${formatDateFn(
+          dateRange.from,
+          "yyyyMMdd"
+        )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
+      );
+    } else if (selectedReport === "predictive_analytics" && reportData) {
+      // Predictive Analytics & Forecasting Report PDF Export - ALL TABS
+      const predictiveReport = reportData as PredictiveAnalyticsReport;
+
+      // Create professional header
+      const reportTitle = "Predictive Analytics & Forecasting Report";
+      const dateRangeText = `Historical: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")} | Forecast: ${formatDateFn(
+        predictiveReport.forecastPeriod?.from || dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(
+        predictiveReport.forecastPeriod?.to || dateRange.to,
+        "MMM dd, yyyy"
+      )}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
+
+      // Executive Summary
+      doc.setFontSize(16);
+      doc.text("Executive Summary", 14, yPos);
+      yPos += 10;
+
+      const summaryHeaders = [["Metric", "Value"]];
+      const summaryData = [
+        ["Forecasted Revenue", renderCurrency(predictiveReport.summary.forecastedRevenue)],
+        ["Forecasted Costs", renderCurrency(predictiveReport.summary.forecastedCosts)],
+        ["Revenue Growth Prediction", renderPercentage(predictiveReport.summary.revenueGrowthPrediction)],
+        ["Cost Growth Prediction", renderPercentage(predictiveReport.summary.costGrowthPrediction)],
+        ["Predicted Margin", `${predictiveReport.summary.predictedMargin.toFixed(1)}%`],
+        ["Margin Trend", predictiveReport.summary.marginTrend],
+        ["Confidence Level", `${predictiveReport.summary.confidenceLevel.toFixed(1)}%`]
+      ];
+
+      autoTable(doc, {
+        startY: yPos,
+        head: summaryHeaders,
+        body: summaryData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [240, 240, 240],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+        },
+        styles: { fontSize: 10, cellPadding: 2 },
+        columnStyles: { 1: { halign: "right" } },
+        margin: { bottom: 30 },
+        didDrawPage: function (data) {
+          yPos = data.cursor?.y || yPos;
+        },
+      });
+      yPos += 15;
+
+      // Key Insights & Alerts
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text("Key Insights & Critical Alerts", 14, yPos);
+      yPos += 10;
+
+      // Key Insights
+      if (predictiveReport.summary.keyInsights && predictiveReport.summary.keyInsights.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Key Insights:", 14, yPos);
+        yPos += 6;
+        
+        predictiveReport.summary.keyInsights.forEach((insight: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${insight}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Critical Alerts
+      if (predictiveReport.summary.criticalAlerts && predictiveReport.summary.criticalAlerts.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Critical Alerts:", 14, yPos);
+        yPos += 6;
+        
+        predictiveReport.summary.criticalAlerts.forEach((alert: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`⚠ ${alert}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 10;
+      }
+
+      // Tab 1: Categories (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Category Forecasting Analysis", 14, yPos);
+      yPos += 10;
+
+      if (predictiveReport.categoryForecasts && predictiveReport.categoryForecasts.length > 0) {
+        const categoryHeaders = [["Category", "Type", "Historical Avg", "Forecast Avg", "Trend", "Seasonality", "Accuracy", "Volatility", "Confidence"]];
+        const categoryData = predictiveReport.categoryForecasts.map((category: any) => {
+          const forecastAvg = category.forecast && category.forecast.length > 0 ? 
+            category.forecast.reduce((sum: number, f: any) => sum + (f.predicted || 0), 0) / category.forecast.length : 0;
+          
+          return [
+            category.categoryName || "Unknown Category",
+            category.categoryType || "Unknown",
+            renderCurrency(category.historicalAverage || 0),
+            renderCurrency(forecastAvg),
+            category.historicalTrend || "Stable",
+            category.seasonality?.pattern || "No Pattern",
+            `${(category.accuracy || 0).toFixed(1)}%`,
+            `${(category.volatility || 0).toFixed(1)}%`,
+            `${(category.confidenceLevel || 0).toFixed(1)}%`
+          ];
+        });
+
+        autoTable(doc, {
+          startY: yPos,
+          head: categoryHeaders,
+          body: categoryData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 8, cellPadding: 1.5 },
+          columnStyles: {
+            2: { halign: "right" },
+            3: { halign: "right" },
+            6: { halign: "right" },
+            7: { halign: "right" },
+            8: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+
+        // Category Risk Factors and Opportunities
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Category Risk Factors & Opportunities", 14, yPos);
+        yPos += 10;
+
+        const categoriesWithRisks = predictiveReport.categoryForecasts.filter(cat => cat.riskFactors && cat.riskFactors.length > 0).slice(0, 3);
+        for (const category of categoriesWithRisks) {
+          if (yPos + 25 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`${category.categoryName} - Risk Factors:`, 14, yPos);
+          yPos += 6;
+          
+          (category.riskFactors || []).forEach((risk: string, index: number) => {
+            doc.setFontSize(10);
+            doc.text(`• ${risk}`, 20, yPos);
+            yPos += 5;
+          });
+          yPos += 8;
+        }
+
+        const categoriesWithOpportunities = predictiveReport.categoryForecasts.filter(cat => cat.opportunities && cat.opportunities.length > 0).slice(0, 3);
+        for (const category of categoriesWithOpportunities) {
+          if (yPos + 25 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`${category.categoryName} - Opportunities:`, 14, yPos);
+          yPos += 6;
+          
+          (category.opportunities || []).forEach((opportunity: string, index: number) => {
+            doc.setFontSize(10);
+            doc.text(`• ${opportunity}`, 20, yPos);
+            yPos += 5;
+          });
+          yPos += 8;
+        }
+      }
+
+      // Tab 2: Outlets (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Outlet Performance Forecasting", 14, yPos);
+      yPos += 10;
+
+      if (predictiveReport.outletForecasts && predictiveReport.outletForecasts.length > 0) {
+        const outletHeaders = [["Outlet", "Forecasted Revenue", "Forecasted Costs", "Predicted Margin", "Expected Growth", "Risk Level"]];
+        const outletData = predictiveReport.outletForecasts.map((outlet: any) => {
+          const totalRevenue = outlet.revenueForecast?.total ? 
+            outlet.revenueForecast.total.reduce((sum: number, f: any) => sum + (f.predicted || 0), 0) : 0;
+          const totalCosts = outlet.costForecast?.total ? 
+            outlet.costForecast.total.reduce((sum: number, f: any) => sum + (f.predicted || 0), 0) : 0;
+          
+          return [
+            outlet.outletName || "Unknown Outlet",
+            renderCurrency(totalRevenue),
+            renderCurrency(totalCosts),
+            `${(outlet.forecastedMargin || 0).toFixed(1)}%`,
+            renderPercentage(outlet.expectedGrowth || 0),
+            outlet.riskLevel || "Unknown"
+          ];
+        });
+
+        autoTable(doc, {
+          startY: yPos,
+          head: outletHeaders,
+          body: outletData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+            4: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+
+        // Outlet Recommendations
+        if (yPos + 30 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Outlet-Specific Recommendations", 14, yPos);
+        yPos += 10;
+
+        for (const outlet of predictiveReport.outletForecasts.slice(0, 5)) {
+          if (yPos + 20 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`${outlet.outletName}:`, 14, yPos);
+          yPos += 6;
+          
+          (outlet.recommendations || []).slice(0, 2).forEach((rec: string, index: number) => {
+            doc.setFontSize(10);
+            const splitText = doc.splitTextToSize(`• ${rec}`, 180);
+            doc.text(splitText, 20, yPos);
+            yPos += splitText.length * 5;
+          });
+          yPos += 5;
+        }
+      }
+
+      // Tab 3: Market Trends (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Market Trend Analysis", 14, yPos);
+      yPos += 10;
+
+      if (predictiveReport.marketTrends && predictiveReport.marketTrends.length > 0) {
+        for (const trend of predictiveReport.marketTrends) {
+          if (yPos + 30 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`${trend.trendName} (${trend.strength} Strength, ${trend.impact} Impact)`, 14, yPos);
+          yPos += 6;
+          
+          doc.setFontSize(10);
+          const splitDescription = doc.splitTextToSize(trend.description || "", 180);
+          doc.text(splitDescription, 14, yPos);
+          yPos += splitDescription.length * 5 + 3;
+          
+          doc.text("Recommended Actions:", 14, yPos);
+          yPos += 5;
+          
+          (trend.recommendedActions || []).forEach((action: string, index: number) => {
+            const splitText = doc.splitTextToSize(`• ${action}`, 180);
+            doc.text(splitText, 20, yPos);
+            yPos += splitText.length * 5;
+          });
+          yPos += 8;
+        }
+      }
+
+      // Tab 4: Seasonality (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Seasonality Patterns", 14, yPos);
+      yPos += 10;
+
+      if (predictiveReport.seasonalityAnalysis && predictiveReport.seasonalityAnalysis.length > 0) {
+        for (const pattern of predictiveReport.seasonalityAnalysis) {
+          if (yPos + 30 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`${pattern.type} Seasonality (${pattern.strength}% strength)`, 14, yPos);
+          yPos += 6;
+          
+          doc.setFontSize(10);
+          const splitDescription = doc.splitTextToSize(pattern.description || "", 180);
+          doc.text(splitDescription, 14, yPos);
+          yPos += splitDescription.length * 5 + 3;
+          
+          if (pattern.pattern && pattern.pattern.length > 0) {
+            const seasonalHeaders = [["Period", "Multiplier", "Confidence", "Impact"]];
+            const seasonalData = pattern.pattern.map((item: any) => [
+              item.period || "Unknown",
+              `${(item.multiplier || 1).toFixed(2)}x`,
+              `${item.confidence || 0}%`,
+              item.multiplier > 1.1 ? "High" : item.multiplier < 0.9 ? "Low" : "Normal"
+            ]);
+
+            autoTable(doc, {
+              startY: yPos,
+              head: seasonalHeaders,
+              body: seasonalData,
+              theme: "grid",
+              headStyles: {
+                fillColor: [240, 240, 240],
+                textColor: [0, 0, 0],
+                fontStyle: "bold",
+              },
+              styles: { fontSize: 9, cellPadding: 1.5 },
+              columnStyles: {
+                1: { halign: "right" },
+                2: { halign: "right" },
+              },
+              margin: { bottom: 30 },
+              didDrawPage: function (data) {
+                yPos = data.cursor?.y || yPos;
+              },
+            });
+            yPos += 10;
+          }
+        }
+      }
+
+      // Tab 5: Risk Analysis (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Risk Assessment & Scenario Analysis", 14, yPos);
+      yPos += 10;
+
+      // Overall Risk Score
+      doc.setFontSize(12);
+      doc.text("Overall Risk Score:", 14, yPos);
+      yPos += 6;
+      doc.setFontSize(14);
+      doc.text(`${predictiveReport.riskAssessment?.overallRiskScore?.toFixed(1) || 0}/100`, 20, yPos);
+      yPos += 8;
+
+      // Risk Factors
+      if (predictiveReport.riskAssessment?.riskFactors && predictiveReport.riskAssessment.riskFactors.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Risk Factors:", 14, yPos);
+        yPos += 6;
+        
+        predictiveReport.riskAssessment.riskFactors.forEach((risk: any, index: number) => {
+          if (yPos + 15 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(10);
+          doc.text(`• ${risk.factor} (${risk.probability}% probability)`, 20, yPos);
+          yPos += 5;
+          const splitMitigation = doc.splitTextToSize(`  Mitigation: ${risk.mitigation}`, 170);
+          doc.text(splitMitigation, 22, yPos);
+          yPos += splitMitigation.length * 5 + 3;
+        });
+        yPos += 5;
+      }
+
+      // Scenario Analysis
+      if (predictiveReport.riskAssessment?.scenarios && predictiveReport.riskAssessment.scenarios.length > 0) {
+        if (yPos + 40 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Scenario Analysis:", 14, yPos);
+        yPos += 10;
+
+        const scenarioHeaders = [["Scenario", "Probability", "Revenue Impact", "Cost Impact", "Description"]];
+        const scenarioData = predictiveReport.riskAssessment.scenarios.map((scenario: any) => [
+          scenario.name || "Unknown Scenario",
+          `${scenario.probability || 0}%`,
+          renderPercentage(scenario.revenueImpact || 0),
+          renderPercentage(scenario.costImpact || 0),
+          (scenario.description || "").substring(0, 50) + "..."
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: scenarioHeaders,
+          body: scenarioData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Tab 6: Strategic Insights (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Strategic Insights & Recommendations", 14, yPos);
+      yPos += 10;
+
+      // Short Term Recommendations
+      if (predictiveReport.recommendations?.shortTerm && predictiveReport.recommendations.shortTerm.length > 0) {
+        doc.setFontSize(12);
+        doc.text("Short Term (30 days):", 14, yPos);
+        yPos += 6;
+        
+        predictiveReport.recommendations.shortTerm.forEach((rec: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${rec}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Medium Term Recommendations
+      if (predictiveReport.recommendations?.mediumTerm && predictiveReport.recommendations.mediumTerm.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Medium Term (3 months):", 14, yPos);
+        yPos += 6;
+        
+        predictiveReport.recommendations.mediumTerm.forEach((rec: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${rec}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Long Term Recommendations
+      if (predictiveReport.recommendations?.longTerm && predictiveReport.recommendations.longTerm.length > 0) {
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(12);
+        doc.text("Long Term (6-12 months):", 14, yPos);
+        yPos += 6;
+        
+        predictiveReport.recommendations.longTerm.forEach((rec: string, index: number) => {
+          doc.setFontSize(10);
+          const splitText = doc.splitTextToSize(`• ${rec}`, 180);
+          doc.text(splitText, 20, yPos);
+          yPos += splitText.length * 5;
+        });
+        yPos += 5;
+      }
+
+      // Actionable Insights
+      if (predictiveReport.actionableInsights && predictiveReport.actionableInsights.length > 0) {
+        if (yPos + 30 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
+        
+        doc.setFontSize(14);
+        doc.text("Actionable Insights", 14, yPos);
+        yPos += 10;
+
+        for (const insight of predictiveReport.actionableInsights.slice(0, 5)) {
+          if (yPos + 25 > doc.internal.pageSize.height - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`${insight.priority} Priority - ${insight.category}:`, 14, yPos);
+          yPos += 6;
+          
+          doc.setFontSize(10);
+          const splitInsight = doc.splitTextToSize(insight.insight || "", 180);
+          doc.text(splitInsight, 14, yPos);
+          yPos += splitInsight.length * 5 + 3;
+          
+          doc.text(`Expected Impact: ${insight.expectedImpact}`, 14, yPos);
+          yPos += 5;
+          doc.text(`Timeframe: ${insight.timeframe}`, 14, yPos);
+          yPos += 5;
+          
+          doc.text("Required Actions:", 14, yPos);
+          yPos += 5;
+          
+          (insight.requiredActions || []).forEach((action: string, index: number) => {
+            const splitText = doc.splitTextToSize(`• ${action}`, 180);
+            doc.text(splitText, 20, yPos);
+            yPos += splitText.length * 5;
+          });
+          yPos += 8;
+        }
+      }
+
+      // Tab 7: Model Performance (Complete)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(16);
+      doc.text("Model Performance Metrics", 14, yPos);
+      yPos += 10;
+
+      if (predictiveReport.modelPerformance && predictiveReport.modelPerformance.length > 0) {
+        const modelHeaders = [["Model Type", "Accuracy", "MAE", "RMSE", "Last Updated", "Performance"]];
+        const modelData = predictiveReport.modelPerformance.map((model: any) => [
+          model.modelType || "Unknown Model",
+          `${(model.accuracy || 0).toFixed(1)}%`,
+          (model.meanAbsoluteError || 0).toFixed(2),
+          (model.rootMeanSquareError || 0).toFixed(2),
+          formatDateFn(model.lastUpdated || new Date(), "MMM dd, yyyy"),
+          model.accuracy >= 80 ? "Excellent" : 
+          model.accuracy >= 70 ? "Good" : 
+          model.accuracy >= 60 ? "Fair" : "Poor"
+        ]);
+
+        autoTable(doc, {
+          startY: yPos,
+          head: modelHeaders,
+          body: modelData,
+          theme: "grid",
+          headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [0, 0, 0],
+            fontStyle: "bold",
+          },
+          styles: { fontSize: 9, cellPadding: 1.5 },
+          columnStyles: {
+            1: { halign: "right" },
+            2: { halign: "right" },
+            3: { halign: "right" },
+          },
+          margin: { bottom: 30 },
+          didDrawPage: function (data) {
+            yPos = data.cursor?.y || yPos;
+          },
+        });
+        yPos += 15;
+      }
+
+      // Model Improvement Recommendations
+      if (yPos + 20 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFontSize(14);
+      doc.text("Model Improvement Recommendations", 14, yPos);
+      yPos += 10;
+
+      const improvements = [
+        "Data Quality Enhancement: Increase data collection frequency for better accuracy",
+        "Advanced Algorithms: Consider implementing machine learning models for complex patterns",
+        "External Factors: Incorporate external market data and economic indicators"
+      ];
+
+      improvements.forEach((improvement: string, index: number) => {
+        doc.setFontSize(10);
+        const splitText = doc.splitTextToSize(`• ${improvement}`, 180);
+        doc.text(splitText, 14, yPos);
+        yPos += splitText.length * 5 + 3;
+      });
+
+      // Add footer to all pages before saving
+      const totalPagesPredictive = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesPredictive; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
+      doc.save(
+        `Predictive_Analytics_ALL_TABS_${formatDateFn(
+          dateRange.from,
+          "yyyyMMdd"
+        )}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.pdf`
       );
     }
 
