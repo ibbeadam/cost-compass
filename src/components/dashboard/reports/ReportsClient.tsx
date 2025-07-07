@@ -216,6 +216,294 @@ export default function ReportsClient() {
     return `${formatNumber(value)}%`;
   };
 
+  // Helper function to get property header data for reports
+  const getPropertyHeaderData = () => {
+    const selectedProperty = properties.find(p => p.id.toString() === selectedPropertyId);
+    const currentDate = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    if (!selectedProperty && selectedPropertyId !== "all") {
+      return {
+        propertyName: "Unknown Property",
+        propertyType: "",
+        propertyCode: "",
+        address: "",
+        city: "",
+        state: "",
+        country: "",
+        logoUrl: "",
+        generatedAt: currentDate,
+        isAllProperties: false
+      };
+    }
+
+    if (selectedPropertyId === "all" || !selectedProperty) {
+      return {
+        propertyName: "All Properties",
+        propertyType: "Multi-Property Report",
+        propertyCode: "ALL",
+        address: "",
+        city: "",
+        state: "",
+        country: "",
+        logoUrl: "",
+        generatedAt: currentDate,
+        isAllProperties: true
+      };
+    }
+
+    return {
+      propertyName: selectedProperty.name || "Unknown Property",
+      propertyType: selectedProperty.propertyType ? 
+        selectedProperty.propertyType.charAt(0).toUpperCase() + selectedProperty.propertyType.slice(1) : "",
+      propertyCode: selectedProperty.propertyCode || "",
+      address: selectedProperty.address || "",
+      city: selectedProperty.city || "",
+      state: selectedProperty.state || "",
+      country: selectedProperty.country || "",
+      logoUrl: selectedProperty.logoUrl || "",
+      generatedAt: currentDate,
+      isAllProperties: false
+    };
+  };
+
+  // Helper function to create formatted header for Excel reports
+  const createExcelReportHeader = (reportTitle: string, dateRangeText: string) => {
+    const propertyHeader = getPropertyHeaderData();
+    const headerRows: any[][] = [];
+    
+    // 1. Report Title (centered)
+    headerRows.push(["", "", reportTitle, "", "", ""]);
+    
+    // 2. Date Range (centered)
+    headerRows.push(["", "", dateRangeText, "", "", ""]);
+    
+    // Empty row for spacing
+    headerRows.push([]);
+    
+    // 3. Property details on left, space for logo on right
+    // Property Name (left) + Logo space (right)
+    headerRows.push([propertyHeader.propertyName, "", "", "", "", "LOGO_PLACEHOLDER"]);
+    
+    // Property Code (left)
+    if (propertyHeader.propertyCode) {
+      headerRows.push([`Property Code: ${propertyHeader.propertyCode}`, "", "", "", "", ""]);
+    }
+    
+    // Full Address (left)
+    const fullAddress = [
+      propertyHeader.address,
+      propertyHeader.city,
+      propertyHeader.state,
+      propertyHeader.country
+    ].filter(Boolean).join(", ");
+    
+    if (fullAddress) {
+      headerRows.push([fullAddress, "", "", "", "", ""]);
+    }
+    
+    // Generated date (left)
+    headerRows.push([`Generated: ${propertyHeader.generatedAt}`, "", "", "", "", ""]);
+    
+    // Empty row for spacing
+    headerRows.push([]);
+    
+    return headerRows;
+  };
+
+  // Helper function to load and add logo to PDF
+  const addLogoToPDF = async (
+    doc: jsPDF, 
+    logoUrl: string, 
+    x: number, 
+    y: number, 
+    maxWidth: number = 40, 
+    maxHeight: number = 30
+  ): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      
+      img.onload = () => {
+        try {
+          // Calculate dimensions while maintaining aspect ratio
+          const imgWidth = img.width;
+          const imgHeight = img.height;
+          const aspectRatio = imgWidth / imgHeight;
+          
+          let finalWidth = maxWidth;
+          let finalHeight = maxHeight;
+          
+          if (aspectRatio > 1) {
+            // Image is wider than it is tall
+            finalHeight = maxWidth / aspectRatio;
+          } else {
+            // Image is taller than it is wide
+            finalWidth = maxHeight * aspectRatio;
+          }
+          
+          // Ensure dimensions don't exceed maximums
+          if (finalWidth > maxWidth) {
+            finalWidth = maxWidth;
+            finalHeight = maxWidth / aspectRatio;
+          }
+          if (finalHeight > maxHeight) {
+            finalHeight = maxHeight;
+            finalWidth = maxHeight * aspectRatio;
+          }
+          
+          // Add the image to the PDF
+          doc.addImage(img, 'JPEG', x, y, finalWidth, finalHeight);
+          resolve();
+        } catch (error) {
+          console.warn("Failed to add logo to PDF:", error);
+          resolve(); // Continue without logo rather than failing
+        }
+      };
+      
+      img.onerror = () => {
+        console.warn("Failed to load logo for PDF");
+        resolve(); // Continue without logo rather than failing
+      };
+      
+      // Handle both relative and absolute URLs
+      if (logoUrl.startsWith('/')) {
+        img.src = `${window.location.origin}${logoUrl}`;
+      } else {
+        img.src = logoUrl;
+      }
+    });
+  };
+
+  // Helper function to add footer to PDF pages
+  const addPDFFooter = (doc: jsPDF, currentUser: any) => {
+    const pageHeight = doc.internal.pageSize.height;
+    const pageWidth = doc.internal.pageSize.width;
+    const leftMargin = 14;
+    const rightMargin = 14;
+    const footerY = pageHeight - 10; // 10px from bottom
+    
+    // Get current date and time in the requested format
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    };
+    const formattedDate = now.toLocaleDateString('en-US', options);
+    
+    // Format: "Generated by: Ibrahim Adam on July 7, 2025 at 02:43 PM"
+    const userName = currentUser?.name || 'System User';
+    const generatedByText = `Generated by: ${userName} on ${formattedDate}`;
+    
+    // Page numbers: "Page X of Y"
+    const pageInfo = doc.internal.getCurrentPageInfo();
+    const currentPage = pageInfo.pageNumber;
+    const totalPages = doc.internal.getNumberOfPages();
+    const pageText = `Page ${currentPage} of ${totalPages}`;
+    
+    // Set footer font
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100); // Gray color
+    
+    // Add generated by text (left side)
+    doc.text(generatedByText, leftMargin, footerY);
+    
+    // Add page numbers (right side)
+    const pageTextWidth = doc.getTextWidth(pageText);
+    doc.text(pageText, pageWidth - rightMargin - pageTextWidth, footerY);
+    
+    // Reset text color to black for other content
+    doc.setTextColor(0, 0, 0);
+  };
+
+  // Helper function to create professional PDF header layout with logo support
+  const createProfessionalPDFHeader = async (
+    doc: jsPDF, 
+    reportTitle: string, 
+    dateRangeText: string
+  ): Promise<number> => {
+    const propertyHeader = getPropertyHeaderData();
+    let yPos = 20;
+    const pageWidth = doc.internal.pageSize.width;
+    const leftMargin = 14;
+    const rightMargin = 14;
+    const contentWidth = pageWidth - leftMargin - rightMargin;
+    
+    // 1. Report title (centered)
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    const titleWidth = doc.getTextWidth(reportTitle);
+    const titleX = leftMargin + (contentWidth - titleWidth) / 2;
+    doc.text(reportTitle, titleX, yPos);
+    yPos += 10;
+    
+    // 2. Date range (centered)
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    const dateWidth = doc.getTextWidth(dateRangeText);
+    const dateX = leftMargin + (contentWidth - dateWidth) / 2;
+    doc.text(dateRangeText, dateX, yPos);
+    yPos += 15;
+    
+    // Store the starting Y position for property details
+    const propertyDetailsStartY = yPos;
+    
+    // 3. Property details on left, logo on right
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    
+    // Property Name (left side)
+    doc.text(propertyHeader.propertyName, leftMargin, yPos);
+    yPos += 6;
+    
+    // Property Code (left side)
+    if (propertyHeader.propertyCode) {
+      doc.setFont("helvetica", "normal");
+      doc.text(`Property Code: ${propertyHeader.propertyCode}`, leftMargin, yPos);
+      yPos += 6;
+    }
+    
+    // Full Address (left side)
+    const fullAddress = [
+      propertyHeader.address,
+      propertyHeader.city,
+      propertyHeader.state,
+      propertyHeader.country
+    ].filter(Boolean).join(", ");
+    
+    if (fullAddress) {
+      doc.setFont("helvetica", "normal");
+      doc.text(fullAddress, leftMargin, yPos);
+      yPos += 6;
+    }
+    
+    // Add logo on the right side (aligned with property details)
+    if (propertyHeader.logoUrl) {
+      const logoX = pageWidth - rightMargin - 40; // 40px width for logo
+      const logoY = propertyDetailsStartY - 5; // Align with property name
+      
+      try {
+        await addLogoToPDF(doc, propertyHeader.logoUrl, logoX, logoY, 40, 30);
+      } catch (error) {
+        console.warn("Could not add logo to PDF:", error);
+      }
+    }
+    
+    yPos += 15; // Extra space before content
+    
+    return yPos;
+  };
+
   // Add effect to handle outlet selection when report type changes
   useEffect(() => {
     if (
@@ -576,7 +864,10 @@ export default function ReportsClient() {
     ) {
       // Food Cost Report Export
       const foodReportData = reportData as DetailedFoodCostReportResponse;
-      ws_data.push(["Detailed Food Cost Report (All Outlets)"]);
+      const propertyHeader = getPropertyHeaderData();
+      
+      // Simple Excel header
+      ws_data.push([`${propertyHeader.propertyName} - Detailed Food Cost Report`]);
       ws_data.push([
         `Date Range: ${formatDateFn(
           foodReportData.overallSummaryReport.dateRange.from,
@@ -586,6 +877,7 @@ export default function ReportsClient() {
           "MMM dd, yyyy"
         )}`,
       ]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
       ws_data.push([]); // Empty row for spacing
       ws_data.push(["Summary Financial Metrics"]);
       ws_data.push(["Details", "Total"]);
@@ -657,7 +949,10 @@ export default function ReportsClient() {
       // Beverage Cost Report Export
       const beverageReportData =
         reportData as DetailedBeverageCostReportResponse;
-      ws_data.push(["Detailed Beverage Cost Report (All Outlets)"]);
+      const propertyHeader = getPropertyHeaderData();
+      
+      // Simple Excel header
+      ws_data.push([`${propertyHeader.propertyName} - Detailed Beverage Cost Report`]);
       ws_data.push([
         `Date Range: ${formatDateFn(
           beverageReportData.overallSummaryReport.dateRange.from,
@@ -667,6 +962,7 @@ export default function ReportsClient() {
           "MMM dd, yyyy"
         )}`,
       ]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
       ws_data.push([]); // Empty row for spacing
       ws_data.push(["Summary Financial Metrics"]);
       ws_data.push(["Details", "Total"]);
@@ -748,6 +1044,22 @@ export default function ReportsClient() {
     ) {
       // Handle array of monthly reports
       const monthlyReports = reportData as MonthlyProfitLossReport[];
+      const propertyHeader = getPropertyHeaderData();
+      
+      // Simple Excel header
+      if (monthlyReports.length > 0) {
+        const reportTitle = monthlyReports.length > 1 
+          ? `${propertyHeader.propertyName} - Monthly Profit/Loss Reports (${monthlyReports.length} months)`
+          : `${propertyHeader.propertyName} - Monthly Profit/Loss Report for ${monthlyReports[0].monthYear}`;
+        const dateRangeText = monthlyReports.length > 1
+          ? `Multiple Periods: ${monthlyReports[0].monthYear} through ${monthlyReports[monthlyReports.length - 1].monthYear}`
+          : `Period: ${monthlyReports[0].monthYear}`;
+        
+        ws_data.push([reportTitle]);
+        ws_data.push([dateRangeText]);
+        ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+        ws_data.push([]); // Empty row for spacing
+      }
       
       // Export all monthly reports
       monthlyReports.forEach((monthlyReportData, index) => {
@@ -888,17 +1200,21 @@ export default function ReportsClient() {
       const isOutletSpecific =
         selectedOutletId && selectedOutletId !== "all" && selectedOutlet;
 
-      ws_data.push(["Cost Analysis by Category Report"]);
-      if (isOutletSpecific) {
-        ws_data.push([`Outlet: ${selectedOutlet.name}`]);
-      }
-      ws_data.push([
-        `Date Range: ${formatDateFn(
-          categoryReport.dateRange.from,
-          "MMM dd, yyyy"
-        )} - ${formatDateFn(categoryReport.dateRange.to, "MMM dd, yyyy")}`,
-      ]);
-      ws_data.push([]);
+      const propertyHeader = getPropertyHeaderData();
+      
+      // Simple Excel header
+      const reportTitle = isOutletSpecific 
+        ? `${propertyHeader.propertyName} - Cost Analysis by Category Report - ${selectedOutlet.name}`
+        : `${propertyHeader.propertyName} - Cost Analysis by Category Report`;
+      const dateRangeText = `Date Range: ${formatDateFn(
+        categoryReport.dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(categoryReport.dateRange.to, "MMM dd, yyyy")}`;
+      
+      ws_data.push([reportTitle]);
+      ws_data.push([dateRangeText]);
+      ws_data.push([`Generated: ${propertyHeader.generatedAt}`]);
+      ws_data.push([]); // Empty row for spacing
 
       // Summary section
       ws_data.push(["Summary"]);
@@ -1664,7 +1980,7 @@ export default function ReportsClient() {
     }
   };
 
-  const handleExportToPDF = () => {
+  const handleExportToPDF = async () => {
     if (!reportData) {
       showToast.error("Generate a report first before exporting.");
       return;
@@ -1685,20 +2001,14 @@ export default function ReportsClient() {
       // Food Cost Report Export
       const foodReportData = reportData as DetailedFoodCostReportResponse;
 
-      // Report Title and Date Range
-      doc.setFontSize(18);
-      doc.text("Detailed Food Cost Report (All Outlets)", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(10);
-      doc.text(
-        `Date Range: ${formatDateFn(
-          dateRange.from,
-          "MMM dd, yyyy"
-        )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      // Create professional header
+      const reportTitle = "Detailed Food Cost Report (All Outlets)";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Summary Financial Metrics
       doc.setFontSize(14);
@@ -1828,6 +2138,13 @@ export default function ReportsClient() {
         yPos += 10; // Gap after each outlet table
       });
 
+      // Add footer to all pages before saving
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Detailed_Food_Cost_Report_${formatDateFn(
           dateRange.from,
@@ -1842,20 +2159,14 @@ export default function ReportsClient() {
       const beverageReportData =
         reportData as DetailedBeverageCostReportResponse;
 
-      // Report Title and Date Range
-      doc.setFontSize(18);
-      doc.text("Detailed Beverage Cost Report (All Outlets)", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(10);
-      doc.text(
-        `Date Range: ${formatDateFn(
-          dateRange.from,
-          "MMM dd, yyyy"
-        )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      // Create professional header
+      const reportTitle = "Detailed Beverage Cost Report (All Outlets)";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Summary Financial Metrics
       doc.setFontSize(14);
@@ -1993,6 +2304,13 @@ export default function ReportsClient() {
         yPos += 10; // Gap after each outlet table
       });
 
+      // Add footer to all pages before saving
+      const totalPagesBev = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesBev; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Detailed_Beverage_Cost_Report_${formatDateFn(
           dateRange.from,
@@ -2006,13 +2324,12 @@ export default function ReportsClient() {
     ) {
       // Handle array of monthly reports - export the first one for now
       const monthlyReportData = reportData[0] as MonthlyProfitLossReport;
-      doc.setFontSize(18);
-      doc.text(
-        `Monthly Profit/Loss Report for ${monthlyReportData.monthYear}`,
-        14,
-        yPos
-      );
-      yPos += 10;
+      
+      // Create professional header
+      const reportTitle = "Monthly Profit/Loss Report";
+      const dateRangeText = `Report Period: ${monthlyReportData.monthYear}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
       // INCOME SECTION
       doc.setFontSize(14);
       doc.text("INCOME", 14, yPos);
@@ -2235,6 +2552,14 @@ export default function ReportsClient() {
           yPos = data.cursor?.y || yPos;
         },
       });
+      
+      // Add footer to all pages before saving
+      const totalPagesMonthly = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesMonthly; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+      
       doc.save(
         `Monthly_Profit_Loss_Report_${monthlyReportData.monthYear.replace(
           / /g,
@@ -2250,24 +2575,15 @@ export default function ReportsClient() {
       const isOutletSpecific =
         selectedOutletId && selectedOutletId !== "all" && selectedOutlet;
 
-      doc.setFontSize(18);
-      doc.text("Cost Analysis by Category Report", 14, yPos);
-      yPos += 10;
-      if (isOutletSpecific) {
-        doc.setFontSize(12);
-        doc.text(`Outlet: ${selectedOutlet.name}`, 14, yPos);
-        yPos += 8;
-      }
-      doc.setFontSize(10);
-      doc.text(
-        `Date Range: ${formatDateFn(
-          dateRange.from,
-          "MMM dd, yyyy"
-        )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      // Create professional header
+      const reportTitle = "Cost Analysis by Category Report";
+      const outletText = isOutletSpecific ? `Outlet: ${selectedOutlet.name}` : "";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}${outletText ? `\n${outletText}` : ""}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Summary section
       doc.setFontSize(14);
@@ -2320,6 +2636,11 @@ export default function ReportsClient() {
       yPos += 15;
 
       // Food Categories
+      // Check if we need a new page (reserve 40px for section header + minimum content)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
       doc.setFontSize(14);
       doc.text("Food Categories Analysis", 14, yPos);
       yPos += 6;
@@ -2357,6 +2678,7 @@ export default function ReportsClient() {
           3: { halign: "right" },
           4: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
@@ -2364,6 +2686,11 @@ export default function ReportsClient() {
       yPos += 15;
 
       // Beverage Categories
+      // Check if we need a new page (reserve 40px for section header + minimum content)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
       doc.setFontSize(14);
       doc.text("Beverage Categories Analysis", 14, yPos);
       yPos += 6;
@@ -2401,6 +2728,7 @@ export default function ReportsClient() {
           3: { halign: "right" },
           4: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
@@ -2408,6 +2736,11 @@ export default function ReportsClient() {
 
       // Key Insights Section
       yPos += 10;
+      // Check if we need a new page (reserve 60px for section header + minimum content)
+      if (yPos + 60 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
       doc.setFontSize(14);
       doc.text("Key Insights", 14, yPos);
       yPos += 10;
@@ -2437,6 +2770,7 @@ export default function ReportsClient() {
           0: { halign: "left" },
           1: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
@@ -2464,6 +2798,7 @@ export default function ReportsClient() {
           1: { halign: "left" },
           2: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
@@ -2471,6 +2806,11 @@ export default function ReportsClient() {
 
       if (categoryReport.topFoodCategories[0]) {
         yPos += 5;
+        // Check if we need a new page for insight text (reserve 20px)
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
         doc.setFontSize(9);
         const foodInsightText = `Insight: ${categoryReport.topFoodCategories[0].categoryName} is your highest food cost category, representing ${formatNumber(categoryReport.topFoodCategories[0].percentageOfTotalFoodCost)}% of total food costs.`;
         const splitText = doc.splitTextToSize(foodInsightText, 180);
@@ -2480,6 +2820,11 @@ export default function ReportsClient() {
 
       // Beverage Key Insights
       yPos += 10;
+      // Check if we need a new page (reserve 50px for subsection header + minimum content)
+      if (yPos + 50 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
       doc.setFontSize(12);
       doc.text("Beverage Key Insights", 14, yPos);
       yPos += 8;
@@ -2502,6 +2847,7 @@ export default function ReportsClient() {
           0: { halign: "left" },
           1: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
@@ -2529,6 +2875,7 @@ export default function ReportsClient() {
           1: { halign: "left" },
           2: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
@@ -2536,6 +2883,11 @@ export default function ReportsClient() {
 
       if (categoryReport.topBeverageCategories[0]) {
         yPos += 5;
+        // Check if we need a new page for insight text (reserve 20px)
+        if (yPos + 20 > doc.internal.pageSize.height - 20) {
+          doc.addPage();
+          yPos = 20;
+        }
         doc.setFontSize(9);
         const beverageInsightText = `Insight: ${categoryReport.topBeverageCategories[0].categoryName} is your highest beverage cost category, representing ${formatNumber(categoryReport.topBeverageCategories[0].percentageOfTotalBeverageCost)}% of total beverage costs.`;
         const splitText = doc.splitTextToSize(beverageInsightText, 180);
@@ -2545,6 +2897,11 @@ export default function ReportsClient() {
 
       // Overall Summary
       yPos += 10;
+      // Check if we need a new page (reserve 40px for section header + minimum content)
+      if (yPos + 40 > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
       doc.setFontSize(12);
       doc.text("Overall Performance Summary", 14, yPos);
       yPos += 8;
@@ -2565,10 +2922,18 @@ export default function ReportsClient() {
           0: { halign: "left" },
           1: { halign: "right" },
         },
+        margin: { bottom: 30 }, // Reserve space for footer
         didDrawPage: function (data) {
           yPos = data.cursor?.y || yPos;
         },
       });
+
+      // Add footer to all pages before saving
+      const totalPagesCostAnalysis = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesCostAnalysis; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
 
       doc.save(
         `Cost_Analysis_by_Category_Report_${formatDateFn(
@@ -2581,19 +2946,15 @@ export default function ReportsClient() {
       "foodBudget" in reportData
     ) {
       const budgetVsActualsReport = reportData as BudgetVsActualsReport;
-      doc.setFontSize(18);
-      doc.text("Budget vs. Actuals Report", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(10);
-      doc.text(
-        `Date Range: ${formatDateFn(
-          dateRange.from,
-          "MMM dd, yyyy"
-        )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      
+      // Create professional header
+      const reportTitle = "Budget vs. Actuals Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Food section
       doc.setFontSize(14);
@@ -2725,6 +3086,13 @@ export default function ReportsClient() {
         },
       });
 
+      // Add footer to all pages before saving
+      const totalPagesBudget = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesBudget; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Budget_vs_Actuals_Report_${formatDateFn(
           dateRange.from,
@@ -2736,19 +3104,15 @@ export default function ReportsClient() {
       "summary" in reportData
     ) {
       const dailyRevenueTrendsReport = reportData as DailyRevenueTrendsReport;
-      doc.setFontSize(18);
-      doc.text("Daily Revenue Trends Report", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(10);
-      doc.text(
-        `Date Range: ${formatDateFn(
-          dateRange.from,
-          "MMM dd, yyyy"
-        )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      
+      // Create professional header
+      const reportTitle = "Daily Revenue Trends Report";
+      const dateRangeText = `Date Range: ${formatDateFn(
+        dateRange.from,
+        "MMM dd, yyyy"
+      )} - ${formatDateFn(dateRange.to, "MMM dd, yyyy")}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Summary section
       doc.setFontSize(14);
@@ -2894,6 +3258,13 @@ export default function ReportsClient() {
         },
       });
 
+      // Add footer to all pages before saving
+      const totalPagesDaily = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesDaily; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Daily_Revenue_Trends_Report_${formatDateFn(
           dateRange.from,
@@ -2904,17 +3275,11 @@ export default function ReportsClient() {
       // Year-over-Year Report PDF Export
       const yearOverYearReport = reportData as any;
 
-      // Report Title
-      doc.setFontSize(18);
-      doc.text("Year-over-Year Performance Report", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(12);
-      doc.text(
-        `${yearOverYearReport.currentYearData.year} vs ${yearOverYearReport.previousYearData.year} Comparison`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      // Create professional header
+      const reportTitle = "Year-over-Year Performance Report";
+      const dateRangeText = `${yearOverYearReport.currentYearData.year} vs ${yearOverYearReport.previousYearData.year} Comparison`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // High-Level Metrics
       doc.setFontSize(14);
@@ -3075,6 +3440,13 @@ export default function ReportsClient() {
         });
       });
 
+      // Add footer to all pages before saving
+      const totalPagesYearOverYear = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesYearOverYear; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Year_Over_Year_Report_${yearOverYearReport.currentYearData.year}_vs_${yearOverYearReport.previousYearData.year}.pdf`
       );
@@ -3082,17 +3454,11 @@ export default function ReportsClient() {
       // Real-Time KPI Dashboard PDF Export
       const kpiReport = reportData as any;
 
-      // Report Title
-      doc.setFontSize(18);
-      doc.text("Real-Time KPI Dashboard", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(10);
-      doc.text(
-        `${kpiReport.outletName} • Last updated: ${kpiReport.lastUpdated.toLocaleString()}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      // Create professional header
+      const reportTitle = "Real-Time KPI Dashboard";
+      const dateRangeText = `${kpiReport.outletName} • Last updated: ${kpiReport.lastUpdated.toLocaleString()}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Current Period KPIs
       doc.setFontSize(14);
@@ -3237,6 +3603,13 @@ export default function ReportsClient() {
         doc.text("No active alerts at this time", 14, yPos);
       }
 
+      // Add footer to all pages before saving
+      const totalPagesKPI = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesKPI; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Real_Time_KPI_Dashboard_${formatDateFn(new Date(), "yyyyMMdd_HHmmss")}.pdf`
       );
@@ -3244,23 +3617,12 @@ export default function ReportsClient() {
       // Forecasting Report PDF Export
       const forecastReport = reportData as any;
 
-      // Report Title
-      doc.setFontSize(18);
-      doc.text("Revenue & Cost Forecasting Report", 14, yPos);
-      yPos += 10;
-      doc.setFontSize(10);
-      doc.text(
-        `${forecastReport.outletName} • Historical: ${forecastReport.dateRange.from.toLocaleDateString()} - ${forecastReport.dateRange.to.toLocaleDateString()}`,
-        14,
-        yPos
-      );
-      yPos += 5;
-      doc.text(
-        `Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${forecastReport.forecastPeriod.to.toLocaleDateString()}`,
-        14,
-        yPos
-      );
-      yPos += 15;
+      // Create professional header
+      const reportTitle = "Revenue & Cost Forecasting Report";
+      const dateRangeText = `${forecastReport.outletName} • Historical: ${forecastReport.dateRange.from.toLocaleDateString()} - ${forecastReport.dateRange.to.toLocaleDateString()}
+Forecast Period: ${forecastReport.forecastPeriod.from.toLocaleDateString()} - ${forecastReport.forecastPeriod.to.toLocaleDateString()}`;
+      
+      yPos = await createProfessionalPDFHeader(doc, reportTitle, dateRangeText);
 
       // Historical Analysis
       doc.setFontSize(14);
@@ -3433,6 +3795,13 @@ export default function ReportsClient() {
         });
       }
 
+      // Add footer to all pages before saving
+      const totalPagesForecasting = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= totalPagesForecasting; i++) {
+        doc.setPage(i);
+        addPDFFooter(doc, user);
+      }
+
       doc.save(
         `Forecasting_Report_${formatDateFn(forecastReport.dateRange.from, "yyyyMMdd")}_to_${formatDateFn(forecastReport.dateRange.to, "yyyyMMdd")}.pdf`
       );
@@ -3472,11 +3841,11 @@ export default function ReportsClient() {
                   <SelectValue placeholder="Select a report" />
                 </SelectTrigger>
                 <SelectContent 
-                  side="bottom" 
-                  sideOffset={5}
+                  sideOffset={8}
                   align="start"
                   avoidCollisions={true}
-                  collisionPadding={40}
+                  collisionPadding={100}
+                  className="h-[324px] max-h-[324px] overflow-y-auto z-[9999]"
                 >
                   {reportOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
@@ -3538,11 +3907,11 @@ export default function ReportsClient() {
                     <SelectValue placeholder="Select property" />
                   </SelectTrigger>
                   <SelectContent 
-                    side="bottom" 
-                    sideOffset={5}
+                    sideOffset={8}
                     align="start"
                     avoidCollisions={true}
-                    collisionPadding={20}
+                    collisionPadding={100}
+                    className="max-h-[300px] overflow-y-auto z-[9999]"
                   >
                     {properties.map((property) => (
                       <SelectItem key={property.id} value={property.id.toString()}>
@@ -3603,11 +3972,11 @@ export default function ReportsClient() {
                 <SelectValue placeholder="All Outlets" />
               </SelectTrigger>
               <SelectContent 
-                side="bottom" 
-                sideOffset={5}
+                sideOffset={8}
                 align="start"
                 avoidCollisions={true}
-                collisionPadding={20}
+                collisionPadding={100}
+                className="max-h-[300px] overflow-y-auto z-[9999]"
               >
                 {allOutlets.map((outlet) => (
                   <SelectItem key={outlet.id} value={outlet.id}>
