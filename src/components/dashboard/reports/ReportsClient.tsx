@@ -1993,33 +1993,33 @@ export default function ReportsClient() {
       
       summaryData.push(["Executive Summary"]);
       summaryData.push(["Metric", "Value"]);
-      summaryData.push(["Total Properties", propertyReport.summary.totalProperties]);
-      summaryData.push(["Top Performing Property", propertyReport.summary.topPerformingProperty.name]);
-      summaryData.push(["Lowest Performing Property", propertyReport.summary.lowestPerformingProperty.name]);
-      summaryData.push(["Average Performance Score", formatNumber(propertyReport.summary.averagePerformanceScore)]);
-      summaryData.push(["Total Portfolio Revenue", formatNumber(propertyReport.summary.totalPortfolioRevenue)]);
-      summaryData.push(["Total Portfolio Costs", formatNumber(propertyReport.summary.totalPortfolioCosts)]);
-      summaryData.push(["Portfolio Profit Margin", `${formatNumber(propertyReport.summary.portfolioProfitMargin)}%`]);
+      summaryData.push(["Total Properties", propertyReport.overallSummary.totalProperties]);
+      summaryData.push(["Top Performing Property", propertyReport.overallSummary.bestPerformingProperty.name]);
+      summaryData.push(["Lowest Performing Property", propertyReport.overallSummary.worstPerformingProperty.name]);
+      summaryData.push(["Total Outlets", propertyReport.overallSummary.totalOutlets]);
+      summaryData.push(["Total Portfolio Revenue", formatNumber(propertyReport.overallSummary.totalRevenue)]);
+      summaryData.push(["Total Portfolio Costs", formatNumber(propertyReport.overallSummary.totalCost)]);
+      summaryData.push(["Average Profit Margin", `${formatNumber(propertyReport.overallSummary.avgProfitMargin)}%`]);
       summaryData.push([]);
       
-      summaryData.push(["Key Performance Indicators"]);
-      if (propertyReport.kpiComparison) {
-        summaryData.push(["KPI", "Best Property", "Value", "Worst Property", "Value"]);
-        summaryData.push(["Revenue per Sq Ft", 
-          propertyReport.kpiComparison.revenuePerSqFt.best.propertyName, 
-          formatNumber(propertyReport.kpiComparison.revenuePerSqFt.best.value),
-          propertyReport.kpiComparison.revenuePerSqFt.worst.propertyName,
-          formatNumber(propertyReport.kpiComparison.revenuePerSqFt.worst.value)]);
-        summaryData.push(["Cost per Sq Ft", 
-          propertyReport.kpiComparison.costPerSqFt.best.propertyName, 
-          formatNumber(propertyReport.kpiComparison.costPerSqFt.best.value),
-          propertyReport.kpiComparison.costPerSqFt.worst.propertyName,
-          formatNumber(propertyReport.kpiComparison.costPerSqFt.worst.value)]);
-        summaryData.push(["Occupancy Rate", 
-          propertyReport.kpiComparison.occupancyRate.best.propertyName, 
-          `${formatNumber(propertyReport.kpiComparison.occupancyRate.best.value)}%`,
-          propertyReport.kpiComparison.occupancyRate.worst.propertyName,
-          `${formatNumber(propertyReport.kpiComparison.occupancyRate.worst.value)}%`]);
+      summaryData.push(["Performance Rankings"]);
+      if (propertyReport.rankings) {
+        summaryData.push(["Ranking Type", "Top Property", "Value"]);
+        if (propertyReport.rankings.byRevenue.length > 0) {
+          summaryData.push(["Revenue Leader", 
+            propertyReport.rankings.byRevenue[0].propertyName, 
+            formatNumber(propertyReport.rankings.byRevenue[0].totalRevenue)]);
+        }
+        if (propertyReport.rankings.byProfitMargin.length > 0) {
+          summaryData.push(["Profit Margin Leader", 
+            propertyReport.rankings.byProfitMargin[0].propertyName, 
+            `${formatNumber(propertyReport.rankings.byProfitMargin[0].profitMargin)}%`]);
+        }
+        if (propertyReport.rankings.byEfficiency.length > 0) {
+          summaryData.push(["Efficiency Leader", 
+            propertyReport.rankings.byEfficiency[0].propertyName, 
+            formatNumber(propertyReport.rankings.byEfficiency[0].efficiency)]);
+        }
       }
       
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
@@ -2029,18 +2029,19 @@ export default function ReportsClient() {
       const propertyData: any[][] = [];
       propertyData.push(["Property Performance Details"]);
       propertyData.push([]);
-      propertyData.push(["Property", "Revenue", "Costs", "Net Profit", "Profit Margin %", "Performance Score", "Rank"]);
+      propertyData.push(["Property", "Revenue", "Costs", "Net Profit", "Profit Margin %", "Efficiency", "Outlets"]);
       
       if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
         propertyReport.propertyData.forEach((property: any) => {
+          const netProfit = (property.totalRevenue || 0) - (property.totalCost || 0);
           propertyData.push([
             property.propertyName || "Unknown Property",
             formatNumber(property.totalRevenue || 0),
-            formatNumber(property.totalCosts || 0),
-            formatNumber(property.netProfit || 0),
+            formatNumber(property.totalCost || 0),
+            formatNumber(netProfit),
             formatNumber(property.profitMargin || 0),
-            formatNumber(property.performanceScore || 0),
-            property.rank || "N/A"
+            formatNumber(property.efficiency || 0),
+            property.outletCount || 0
           ]);
         });
       }
@@ -2058,9 +2059,9 @@ export default function ReportsClient() {
         propertyReport.propertyData.forEach((property: any) => {
           revenueData.push([
             property.propertyName || "Unknown Property",
-            formatNumber(property.foodRevenue || 0),
-            formatNumber(property.beverageRevenue || 0),
-            formatNumber(property.otherRevenue || 0),
+            formatNumber(property.totalFoodRevenue || 0),
+            formatNumber(property.totalBeverageRevenue || 0),
+            formatNumber(0), // Other revenue not available in current structure
             formatNumber(property.totalRevenue || 0),
             formatNumber(property.revenueGrowth || 0)
           ]);
@@ -2080,11 +2081,11 @@ export default function ReportsClient() {
         propertyReport.propertyData.forEach((property: any) => {
           costData.push([
             property.propertyName || "Unknown Property",
-            formatNumber(property.foodCosts || 0),
-            formatNumber(property.beverageCosts || 0),
-            formatNumber(property.operatingCosts || 0),
-            formatNumber(property.totalCosts || 0),
-            formatNumber(property.costEfficiency || 0)
+            formatNumber(property.totalFoodCost || 0),
+            formatNumber(property.totalBeverageCost || 0),
+            formatNumber(0), // Operating costs not separately available
+            formatNumber(property.totalCost || 0),
+            formatNumber(property.efficiency || 0)
           ]);
         });
       }
@@ -2096,17 +2097,17 @@ export default function ReportsClient() {
       const efficiencyData: any[][] = [];
       efficiencyData.push(["Property Efficiency Metrics"]);
       efficiencyData.push([]);
-      efficiencyData.push(["Property", "Revenue per Sq Ft", "Cost per Sq Ft", "Occupancy Rate %", "Operational Efficiency", "Customer Satisfaction"]);
+      efficiencyData.push(["Property", "Revenue per Outlet", "Cost per Outlet", "Avg Daily Revenue", "Efficiency Ratio", "Profit Margin %"]);
       
       if (propertyReport.propertyData && propertyReport.propertyData.length > 0) {
         propertyReport.propertyData.forEach((property: any) => {
           efficiencyData.push([
             property.propertyName || "Unknown Property",
-            formatNumber(property.revenuePerSqFt || 0),
-            formatNumber(property.costPerSqFt || 0),
-            formatNumber(property.occupancyRate || 0),
-            formatNumber(property.operationalEfficiency || 0),
-            formatNumber(property.customerSatisfaction || 0)
+            formatNumber(property.revenuePerOutlet || 0),
+            formatNumber(property.costPerOutlet || 0),
+            formatNumber(property.avgDailyRevenue || 0),
+            formatNumber(property.efficiency || 0),
+            formatNumber(property.profitMargin || 0)
           ]);
         });
       }
@@ -2119,30 +2120,32 @@ export default function ReportsClient() {
       insightsData.push(["Benchmarking & Strategic Insights"]);
       insightsData.push([]);
       
-      insightsData.push(["Portfolio Benchmarks"]);
-      if (propertyReport.benchmarks) {
-        insightsData.push(["Metric", "Portfolio Average", "Industry Benchmark", "Performance Gap"]);
-        insightsData.push(["Profit Margin", `${formatNumber(propertyReport.benchmarks.portfolioAverage.profitMargin)}%`, 
-          `${formatNumber(propertyReport.benchmarks.industryBenchmark.profitMargin)}%`,
-          `${formatNumber(propertyReport.benchmarks.performanceGap.profitMargin)}%`]);
-        insightsData.push(["Revenue Growth", `${formatNumber(propertyReport.benchmarks.portfolioAverage.revenueGrowth)}%`, 
-          `${formatNumber(propertyReport.benchmarks.industryBenchmark.revenueGrowth)}%`,
-          `${formatNumber(propertyReport.benchmarks.performanceGap.revenueGrowth)}%`]);
-        insightsData.push(["Cost Efficiency", formatNumber(propertyReport.benchmarks.portfolioAverage.costEfficiency), 
-          formatNumber(propertyReport.benchmarks.industryBenchmark.costEfficiency),
-          formatNumber(propertyReport.benchmarks.performanceGap.costEfficiency)]);
-      }
+      insightsData.push(["Portfolio Summary"]);
+      insightsData.push(["Metric", "Value"]);
+      insightsData.push(["Average Profit Margin", `${formatNumber(propertyReport.overallSummary.avgProfitMargin)}%`]);
+      insightsData.push(["Total Portfolio Revenue", formatNumber(propertyReport.overallSummary.totalRevenue)]);
+      insightsData.push(["Total Portfolio Cost", formatNumber(propertyReport.overallSummary.totalCost)]);
+      insightsData.push(["Best Performing Property", propertyReport.overallSummary.bestPerformingProperty.name]);
+      insightsData.push(["Worst Performing Property", propertyReport.overallSummary.worstPerformingProperty.name]);
       
       insightsData.push([]);
-      insightsData.push(["Key Insights & Recommendations"]);
-      if (propertyReport.insights?.recommendations) {
-        propertyReport.insights.recommendations.forEach((rec: string, index: number) => {
-          insightsData.push([`${index + 1}. ${rec}`]);
+      insightsData.push(["Performance Analysis"]);
+      if (propertyReport.rankings?.byProfitMargin && propertyReport.rankings.byProfitMargin.length > 0) {
+        insightsData.push(["Top Performers (by Profit Margin)"]);
+        propertyReport.rankings.byProfitMargin.slice(0, 3).forEach((property: any, index: number) => {
+          insightsData.push([`${index + 1}. ${property.propertyName} - ${formatNumber(property.profitMargin)}%`]);
+        });
+        insightsData.push([]);
+        
+        insightsData.push(["Areas for Improvement"]);
+        const bottomPerformers = propertyReport.rankings.byProfitMargin.slice(-3).reverse();
+        bottomPerformers.forEach((property: any, index: number) => {
+          insightsData.push([`${index + 1}. ${property.propertyName} - ${formatNumber(property.profitMargin)}% profit margin`]);
         });
       }
       
       const insightsWs = XLSX.utils.aoa_to_sheet(insightsData);
-      XLSX.utils.book_append_sheet(wb, insightsWs, "Benchmarking & Insights");
+      XLSX.utils.book_append_sheet(wb, insightsWs, "Portfolio Insights");
       
       XLSX.writeFile(wb, `Property_Performance_Comparison_ALL_TABS_${formatDateFn(dateRange.from, "yyyyMMdd")}_to_${formatDateFn(dateRange.to, "yyyyMMdd")}.xlsx`);
       
@@ -2164,23 +2167,28 @@ export default function ReportsClient() {
       summaryData.push(["Executive Summary"]);
       summaryData.push(["Metric", "Value"]);
       summaryData.push(["Total Outlets", outletReport.summary.totalOutlets]);
-      summaryData.push(["Average Efficiency Score", formatNumber(outletReport.summary.averageEfficiencyScore)]);
+      summaryData.push(["Active Outlets", outletReport.summary.activeOutlets]);
       summaryData.push(["Top Performing Outlet", outletReport.summary.topPerformingOutlet.name]);
-      summaryData.push(["Most Profitable Outlet", outletReport.summary.mostProfitableOutlet.name]);
-      summaryData.push(["Total Portfolio Revenue", formatNumber(outletReport.summary.totalPortfolioRevenue)]);
-      summaryData.push(["Total Portfolio Costs", formatNumber(outletReport.summary.totalPortfolioCosts)]);
-      summaryData.push(["Portfolio Profit Margin", `${formatNumber(outletReport.summary.portfolioProfitMargin)}%`]);
+      summaryData.push(["Bottom Performing Outlet", outletReport.summary.bottomPerformingOutlet.name]);
+      summaryData.push(["Total Revenue", formatNumber(outletReport.summary.totalRevenue)]);
+      summaryData.push(["Total Costs", formatNumber(outletReport.summary.totalCost)]);
+      summaryData.push(["Total Profit", formatNumber(outletReport.summary.totalProfit)]);
+      summaryData.push(["Average Profit Margin", `${formatNumber(outletReport.summary.avgProfitMargin)}%`]);
+      summaryData.push(["Average Efficiency Ratio", formatNumber(outletReport.summary.avgEfficiencyRatio)]);
       summaryData.push([]);
       
-      summaryData.push(["Performance Distribution"]);
-      if (outletReport.performanceDistribution) {
-        summaryData.push(["Performance Level", "Number of Outlets", "Percentage"]);
-        summaryData.push(["High Performers", outletReport.performanceDistribution.highPerformers, 
-          `${formatNumber((outletReport.performanceDistribution.highPerformers / outletReport.summary.totalOutlets) * 100)}%`]);
-        summaryData.push(["Average Performers", outletReport.performanceDistribution.averagePerformers,
-          `${formatNumber((outletReport.performanceDistribution.averagePerformers / outletReport.summary.totalOutlets) * 100)}%`]);
-        summaryData.push(["Low Performers", outletReport.performanceDistribution.lowPerformers,
-          `${formatNumber((outletReport.performanceDistribution.lowPerformers / outletReport.summary.totalOutlets) * 100)}%`]);
+      summaryData.push(["Comparative Analysis"]);
+      if (outletReport.comparisons && outletReport.comparisons.length > 0) {
+        summaryData.push(["Metric", "Best Outlet", "Best Value", "Worst Outlet", "Worst Value"]);
+        outletReport.comparisons.slice(0, 5).forEach((comparison: any) => {
+          summaryData.push([
+            comparison.metric || "Unknown Metric",
+            comparison.bestOutlet.name || "Unknown",
+            comparison.bestOutlet.formattedValue || formatNumber(comparison.bestOutlet.value || 0),
+            comparison.worstOutlet.name || "Unknown",
+            comparison.worstOutlet.formattedValue || formatNumber(comparison.worstOutlet.value || 0)
+          ]);
+        });
       }
       
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
@@ -2190,17 +2198,17 @@ export default function ReportsClient() {
       const outletData: any[][] = [];
       outletData.push(["Outlet Performance Details"]);
       outletData.push([]);
-      outletData.push(["Outlet", "Revenue", "Costs", "Net Profit", "Profit Margin %", "Efficiency Score", "Performance Rating"]);
+      outletData.push(["Outlet", "Revenue", "Costs", "Net Profit", "Profit Margin %", "Efficiency Ratio", "Performance Rating"]);
       
       if (outletReport.outletData && outletReport.outletData.length > 0) {
         outletReport.outletData.forEach((outlet: any) => {
           outletData.push([
             outlet.outletName || "Unknown Outlet",
             formatNumber(outlet.totalRevenue || 0),
-            formatNumber(outlet.totalCosts || 0),
+            formatNumber(outlet.totalCost || 0),
             formatNumber(outlet.netProfit || 0),
             formatNumber(outlet.profitMargin || 0),
-            formatNumber(outlet.efficiencyScore || 0),
+            formatNumber(outlet.revenueToCostRatio || 0),
             outlet.performanceRating || "N/A"
           ]);
         });
@@ -2221,8 +2229,8 @@ export default function ReportsClient() {
             index + 1,
             outlet.outletName || "Unknown Outlet",
             formatNumber(outlet.totalRevenue || 0),
-            formatNumber(outlet.foodRevenue || 0),
-            formatNumber(outlet.beverageRevenue || 0),
+            formatNumber(outlet.totalFoodRevenue || 0),
+            formatNumber(outlet.totalBeverageRevenue || 0),
             formatNumber(outlet.revenueGrowth || 0)
           ]);
         });
@@ -2242,7 +2250,7 @@ export default function ReportsClient() {
           profitData.push([
             index + 1,
             outlet.outletName || "Unknown Outlet",
-            formatNumber(outlet.totalProfit || 0),
+            formatNumber(outlet.netProfit || 0),
             formatNumber(outlet.profitMargin || 0),
             formatNumber(outlet.profitGrowth || 0)
           ]);
@@ -2280,13 +2288,16 @@ export default function ReportsClient() {
       
       if (outletReport.insights?.topPerformers && outletReport.insights.topPerformers.length > 0) {
         insightsData.push(["Top Performers"]);
-        insightsData.push(["Outlet", "Strength", "Score"]);
-        outletReport.insights.topPerformers.slice(0, 5).forEach((performer: any) => {
-          insightsData.push([
-            performer.outletName || "N/A",
-            performer.strength || "High Performance",
-            formatNumber(performer.score || 0)
-          ]);
+        outletReport.insights.topPerformers.slice(0, 5).forEach((performer: string) => {
+          insightsData.push([`• ${performer}`]);
+        });
+        insightsData.push([]);
+      }
+      
+      if (outletReport.insights?.underPerformers && outletReport.insights.underPerformers.length > 0) {
+        insightsData.push(["Under Performers"]);
+        outletReport.insights.underPerformers.slice(0, 5).forEach((underPerformer: string) => {
+          insightsData.push([`⚠️ ${underPerformer}`]);
         });
         insightsData.push([]);
       }
@@ -2295,6 +2306,14 @@ export default function ReportsClient() {
         insightsData.push(["Key Recommendations"]);
         outletReport.insights.recommendations.slice(0, 10).forEach((recommendation: string, index: number) => {
           insightsData.push([`${index + 1}. ${recommendation}`]);
+        });
+        insightsData.push([]);
+      }
+      
+      if (outletReport.insights?.keyFindings && outletReport.insights.keyFindings.length > 0) {
+        insightsData.push(["Key Findings"]);
+        outletReport.insights.keyFindings.slice(0, 5).forEach((finding: string, index: number) => {
+          insightsData.push([`${index + 1}. ${finding}`]);
         });
       }
       
