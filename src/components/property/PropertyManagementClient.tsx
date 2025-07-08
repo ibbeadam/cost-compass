@@ -74,10 +74,40 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CURRENCIES, DEFAULT_CURRENCY, getCurrencyDisplayName, type Currency } from "@/lib/currency";
+
+// Helper functions moved outside components to be accessible by all
+const getPropertyTypeBadgeVariant = (type: PropertyType) => {
+  switch (type) {
+    case 'hotel': return 'default';
+    case 'restaurant': return 'secondary';
+    case 'cafe': return 'outline';
+    case 'bar': return 'destructive';
+    case 'catering': return 'default';
+    case 'franchise': return 'secondary';
+    case 'chain': return 'outline';
+    default: return 'outline';
+  }
+};
+
+const getPropertyTypeDisplayName = (type: PropertyType) => {
+  switch (type) {
+    case 'hotel': return 'Hotel';
+    case 'restaurant': return 'Restaurant';
+    case 'cafe': return 'Cafe';
+    case 'bar': return 'Bar';
+    case 'catering': return 'Catering';
+    case 'franchise': return 'Franchise';
+    case 'chain': return 'Chain';
+    default: return type;
+  }
+};
 
 export default function PropertyManagementClient() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [currencies, setCurrencies] = useState<Currency[]>(CURRENCIES); // Start with fallback
+  const [currencyMap, setCurrencyMap] = useState<{[key: string]: number}>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
@@ -90,18 +120,37 @@ export default function PropertyManagementClient() {
   const fetchProperties = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [propertiesResponse, usersResponse] = await Promise.all([
+      const [propertiesResponse, usersResponse, currenciesResponse] = await Promise.all([
         fetch('/api/properties'),
-        getAllUsersAction()
+        getAllUsersAction(),
+        fetch('/api/currencies/manage')
       ]);
       
       if (!propertiesResponse.ok) {
         throw new Error('Failed to fetch properties');
       }
       
+      if (!currenciesResponse.ok) {
+        console.warn('Failed to fetch currencies, using fallback');
+      }
+      
       const { properties } = await propertiesResponse.json();
+      const currenciesData = currenciesResponse.ok 
+        ? (await currenciesResponse.json()).currencies 
+        : CURRENCIES; // Fallback to hardcoded currencies
+      
+      // Create a mapping from currency code to ID
+      const codeToIdMap: {[key: string]: number} = {};
+      if (currenciesResponse.ok) {
+        currenciesData.forEach((currency: any) => {
+          codeToIdMap[currency.code] = currency.id;
+        });
+      }
+      
       setProperties(properties);
       setUsers(usersResponse);
+      setCurrencies(currenciesData);
+      setCurrencyMap(codeToIdMap);
     } catch (error) {
       showToast.error((error as Error).message || "Could not load properties.");
     } finally {
@@ -459,31 +508,7 @@ export default function PropertyManagementClient() {
     }
   };
 
-  const getPropertyTypeBadgeVariant = (type: PropertyType) => {
-    switch (type) {
-      case 'hotel': return 'default';
-      case 'restaurant': return 'secondary';
-      case 'cafe': return 'outline';
-      case 'bar': return 'destructive';
-      case 'catering': return 'default';
-      case 'franchise': return 'secondary';
-      case 'chain': return 'outline';
-      default: return 'outline';
-    }
-  };
-
-  const getPropertyTypeDisplayName = (type: PropertyType) => {
-    switch (type) {
-      case 'hotel': return 'Hotel';
-      case 'restaurant': return 'Restaurant';
-      case 'cafe': return 'Cafe';
-      case 'bar': return 'Bar';
-      case 'catering': return 'Catering';
-      case 'franchise': return 'Franchise';
-      case 'chain': return 'Chain';
-      default: return type;
-    }
-  };
+  // Helper functions moved outside the component
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage);
@@ -677,7 +702,7 @@ export default function PropertyManagementClient() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {property.createdAt instanceof Date ? format(property.createdAt, "MMM d, yyyy") : "Unknown"}
+                        {property.createdAt ? format(new Date(property.createdAt), "MMM d, yyyy") : "Unknown"}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -784,6 +809,8 @@ export default function PropertyManagementClient() {
         onOpenChange={setIsFormOpen}
         property={editingProperty}
         users={users}
+        currencies={currencies}
+        currencyMap={currencyMap}
         onSubmit={(formData, logoFile) => handleSubmit(formData, logoFile)}
         isSubmitting={isSubmitting}
       />
@@ -803,11 +830,13 @@ interface PropertyFormDialogProps {
   onOpenChange: (open: boolean) => void;
   property: Property | null;
   users: User[];
+  currencies: Currency[];
+  currencyMap: {[key: string]: number};
   onSubmit: (data: CreatePropertyData | UpdatePropertyData, logoFile?: File | null) => Promise<void>;
   isSubmitting: boolean;
 }
 
-function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isSubmitting }: PropertyFormDialogProps) {
+function PropertyFormDialog({ open, onOpenChange, property, users, currencies, currencyMap, onSubmit, isSubmitting }: PropertyFormDialogProps) {
   const [formData, setFormData] = useState<CreatePropertyData>({
     name: "",
     propertyCode: "",
@@ -817,7 +846,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
     state: "",
     country: "",
     timeZone: "UTC",
-    currency: "USD",
+    currencyId: currencyMap['USD'] || 1, // Default to USD
     logoUrl: "",
     ownerId: undefined,
     managerId: undefined,
@@ -836,7 +865,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
         state: property.state || "",
         country: property.country || "",
         timeZone: property.timeZone || "UTC",
-        currency: property.currency || "USD",
+        currencyId: property.currencyId || 1, // Default to USD (ID 1)
         logoUrl: property.logoUrl || "",
         ownerId: property.ownerId || undefined,
         managerId: property.managerId || undefined,
@@ -852,7 +881,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
         state: "",
         country: "",
         timeZone: "UTC",
-        currency: "USD",
+        currencyId: currencyMap['USD'] || 1, // Default to USD
         logoUrl: "",
         ownerId: undefined,
         managerId: undefined,
@@ -959,19 +988,18 @@ function PropertyFormDialog({ open, onOpenChange, property, users, onSubmit, isS
             <div className="space-y-2">
               <Label htmlFor="currency">Currency</Label>
               <Select
-                value={formData.currency}
-                onValueChange={(value) => setFormData({ ...formData, currency: value })}
+                value={formData.currencyId?.toString() || "1"}
+                onValueChange={(value) => setFormData({ ...formData, currencyId: parseInt(value) })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD ($)</SelectItem>
-                  <SelectItem value="EUR">EUR (€)</SelectItem>
-                  <SelectItem value="GBP">GBP (£)</SelectItem>
-                  <SelectItem value="JPY">JPY (¥)</SelectItem>
-                  <SelectItem value="AUD">AUD (A$)</SelectItem>
-                  <SelectItem value="CAD">CAD (C$)</SelectItem>
+                <SelectContent className="max-h-80">
+                  {currencies.map((currency: any) => (
+                    <SelectItem key={currency.code} value={currency.id?.toString() || currencyMap[currency.code]?.toString() || "1"}>
+                      {currency.displayName}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1232,7 +1260,7 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Currency:</span>
-                  <span className="font-medium">{property.currency || 'USD'}</span>
+                  <span className="font-medium">{property.currency?.displayName || 'USD ($)'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Time Zone:</span>
@@ -1247,7 +1275,7 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Created:</span>
                   <span className="font-medium">
-                    {property.createdAt instanceof Date ? format(property.createdAt, "MMM d, yyyy 'at' h:mm a") : "Unknown"}
+                    {property.createdAt ? format(new Date(property.createdAt), "MMM d, yyyy 'at' h:mm a") : "Unknown"}
                   </span>
                 </div>
               </div>

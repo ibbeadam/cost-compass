@@ -42,6 +42,7 @@ import {
   ClipboardListIcon
 } from "lucide-react";
 import type { CostVarianceAnalysisReport } from "@/actions/costVarianceActions";
+import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
 interface CostVarianceAnalysisReportProps {
   data: CostVarianceAnalysisReport;
@@ -52,11 +53,9 @@ export default function CostVarianceAnalysisReport({
   data,
   outletName,
 }: CostVarianceAnalysisReportProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    // Use default currency for cost variance analysis
+    return formatCurrency(amount, DEFAULT_CURRENCY);
   };
 
   const formatPercentage = (percentage: number) => {
@@ -149,7 +148,7 @@ export default function CostVarianceAnalysisReport({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(data.summary.overallVariance)}
+              {formatCurrencyValue(data.summary.overallVariance)}
             </div>
             <p className="text-xs text-muted-foreground">
               {formatPercentage(data.summary.overallVariancePercentage)} vs budget
@@ -200,7 +199,7 @@ export default function CostVarianceAnalysisReport({
               <span className="text-lg font-semibold">{data.summary.varianceTrend}</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Avg daily: {formatCurrency(data.summary.averageDailyVariance)}
+              Avg daily: {formatCurrencyValue(data.summary.averageDailyVariance)}
             </p>
           </CardContent>
         </Card>
@@ -218,7 +217,7 @@ export default function CostVarianceAnalysisReport({
           <CardContent>
             <div className="font-semibold text-lg">{data.summary.worstPerformingCategory.name}</div>
             <div className="text-red-600 font-medium">
-              {formatCurrency(data.summary.worstPerformingCategory.variance)}
+              {formatCurrencyValue(data.summary.worstPerformingCategory.variance)}
             </div>
             <div className="text-sm text-muted-foreground">
               {formatPercentage(data.summary.worstPerformingCategory.variancePercentage)} over budget
@@ -236,7 +235,7 @@ export default function CostVarianceAnalysisReport({
           <CardContent>
             <div className="font-semibold text-lg">{data.summary.bestPerformingCategory.name}</div>
             <div className="text-green-600 font-medium">
-              {formatCurrency(data.summary.bestPerformingCategory.variance)}
+              {formatCurrencyValue(data.summary.bestPerformingCategory.variance)}
             </div>
             <div className="text-sm text-muted-foreground">
               {formatPercentage(data.summary.bestPerformingCategory.variancePercentage)} vs budget
@@ -305,11 +304,11 @@ export default function CostVarianceAnalysisReport({
                             {category.categoryType}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(category.budgetedCost)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(category.actualCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(category.budgetedCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(category.actualCost)}</TableCell>
                         <TableCell className="text-right">
                           <span className={category.variance >= 0 ? "text-red-600" : "text-green-600"}>
-                            {formatCurrency(category.variance)}
+                            {formatCurrencyValue(category.variance)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -359,11 +358,11 @@ export default function CostVarianceAnalysisReport({
                     {data.outletVariances.map((outlet) => (
                       <TableRow key={outlet.outletId}>
                         <TableCell className="font-medium">{outlet.outletName}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.totalBudgeted)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.totalActual)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.totalBudgeted)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.totalActual)}</TableCell>
                         <TableCell className="text-right">
                           <span className={outlet.totalVariance >= 0 ? "text-red-600" : "text-green-600"}>
-                            {formatCurrency(outlet.totalVariance)}
+                            {formatCurrencyValue(outlet.totalVariance)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -416,7 +415,7 @@ export default function CostVarianceAnalysisReport({
                         <TableCell className="font-medium">{outlet.outletName}</TableCell>
                         <TableCell className="text-right">
                           <span className={outlet.foodVariance.variance >= 0 ? "text-red-600" : "text-green-600"}>
-                            {formatCurrency(outlet.foodVariance.variance)}
+                            {formatCurrencyValue(outlet.foodVariance.variance)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -426,7 +425,7 @@ export default function CostVarianceAnalysisReport({
                         </TableCell>
                         <TableCell className="text-right">
                           <span className={outlet.beverageVariance.variance >= 0 ? "text-red-600" : "text-green-600"}>
-                            {formatCurrency(outlet.beverageVariance.variance)}
+                            {formatCurrencyValue(outlet.beverageVariance.variance)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -471,11 +470,11 @@ export default function CostVarianceAnalysisReport({
                         <TableCell className="font-medium">
                           {format(day.period, "MMM dd, yyyy")}
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(day.totalBudgeted)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(day.totalActual)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(day.totalBudgeted)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(day.totalActual)}</TableCell>
                         <TableCell className="text-right">
                           <span className={day.totalVariance >= 0 ? "text-red-600" : "text-green-600"}>
-                            {formatCurrency(day.totalVariance)}
+                            {formatCurrencyValue(day.totalVariance)}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
@@ -685,7 +684,7 @@ export default function CostVarianceAnalysisReport({
                       <div className="flex justify-between">
                         <span>Variance:</span>
                         <span className={category.variance >= 0 ? "text-red-600" : "text-green-600"}>
-                          {formatCurrency(category.variance)}
+                          {formatCurrencyValue(category.variance)}
                         </span>
                       </div>
                       <div className="flex justify-between">
@@ -723,7 +722,7 @@ export default function CostVarianceAnalysisReport({
               <CardContent>
                 <div className="text-center">
                   <div className="text-3xl font-bold text-red-600">
-                    {formatCurrency(data.predictions.projectedMonthEndVariance)}
+                    {formatCurrencyValue(data.predictions.projectedMonthEndVariance)}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
                     Based on current trends

@@ -85,9 +85,11 @@ export function formatValue(value: any, context?: string): string {
     if (context?.toLowerCase().includes('cost') || 
         context?.toLowerCase().includes('revenue') || 
         context?.toLowerCase().includes('price')) {
+      // For audit logs, we use USD as standard for historical consistency
+      // This ensures all historical audit data maintains consistent currency formatting
       return new Intl.NumberFormat('en-US', { 
         style: 'currency', 
-        currency: 'USD' 
+        currency: 'USD'
       }).format(value);
     }
     return value.toString();

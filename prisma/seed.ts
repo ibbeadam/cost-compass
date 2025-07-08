@@ -76,7 +76,7 @@ async function seedInitialProperty() {
           address: 'To be updated',
           city: 'To be updated',
           country: 'US',
-          currency: 'USD',
+          currencyId: 1, // USD
           isActive: true,
         },
       });

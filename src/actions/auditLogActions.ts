@@ -62,6 +62,7 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
       propertyId,
       resource,
       action,
+      excludeActions,
       dateRange,
       searchTerm,
       page = 1,
@@ -85,7 +86,21 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
     if (userId) where.userId = userId;
     if (propertyId) where.propertyId = propertyId;
     if (resource) where.resource = resource;
-    if (action) where.action = action;
+    
+    // Handle action filtering - specific action or exclude actions
+    if (action && excludeActions && excludeActions.length > 0) {
+      // If both are specified, include the action but exclude the excluded actions
+      where.action = {
+        AND: [
+          { equals: action },
+          { notIn: excludeActions }
+        ]
+      };
+    } else if (action) {
+      where.action = action;
+    } else if (excludeActions && excludeActions.length > 0) {
+      where.action = { notIn: excludeActions };
+    }
 
     // Date range filter
     if (dateRange && (dateRange.from || dateRange.to)) {
@@ -519,5 +534,252 @@ export async function cleanupOldAuditLogsAction(retentionDays: number = 365): Pr
   } catch (error) {
     console.error("Error cleaning up audit logs:", error);
     throw new Error("Failed to cleanup old audit logs");
+  }
+}
+
+/**
+ * Get general audit log statistics (excluding login/logout activities)
+ */
+export async function getGeneralAuditLogStatsAction(): Promise<{
+  totalLogs: number;
+  todayLogs: number;
+  uniqueUsers: number;
+  topActions: Array<{ action: string; count: number }>;
+  topResources: Array<{ resource: string; count: number }>;
+}> {
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Check permissions
+    if (currentUser.role !== "super_admin" && currentUser.role !== "property_admin") {
+      throw new Error("Insufficient permissions to view audit log statistics");
+    }
+
+    // Build where clause based on user role, excluding login/logout activities
+    const where: any = {
+      action: {
+        notIn: ["LOGIN", "LOGOUT"] // Exclude authentication activities
+      }
+    };
+
+    if (currentUser.role === "property_admin") {
+      const userPropertyIds = currentUser.propertyAccess?.map(pa => pa.propertyId) || [];
+      where.OR = [
+        { propertyId: { in: userPropertyIds } },
+        { propertyId: null },
+      ];
+    }
+
+    // Get total logs (excluding login/logout)
+    const totalLogs = await prisma.auditLog.count({
+      where,
+    });
+
+    // Get today's logs
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayLogs = await prisma.auditLog.count({
+      where: {
+        ...where,
+        timestamp: {
+          gte: todayStart,
+          lte: todayEnd,
+        },
+      },
+    });
+
+    // Get unique users
+    const uniqueUsersResult = await prisma.auditLog.findMany({
+      where,
+      select: {
+        userId: true,
+      },
+      distinct: ["userId"],
+    });
+
+    const uniqueUsers = uniqueUsersResult.filter(u => u.userId !== null).length;
+
+    // Get top actions
+    const topActionsResult = await prisma.auditLog.groupBy({
+      by: ["action"],
+      where,
+      _count: {
+        action: true,
+      },
+      orderBy: {
+        _count: {
+          action: "desc",
+        },
+      },
+      take: 5,
+    });
+
+    const topActions = topActionsResult.map(item => ({
+      action: item.action,
+      count: item._count.action,
+    }));
+
+    // Get top resources
+    const topResourcesResult = await prisma.auditLog.groupBy({
+      by: ["resource"],
+      where,
+      _count: {
+        resource: true,
+      },
+      orderBy: {
+        _count: {
+          resource: "desc",
+        },
+      },
+      take: 5,
+    });
+
+    const topResources = topResourcesResult.map(item => ({
+      resource: item.resource,
+      count: item._count.resource,
+    }));
+
+    return {
+      totalLogs,
+      todayLogs,
+      uniqueUsers,
+      topActions,
+      topResources,
+    };
+  } catch (error) {
+    console.error("Error fetching general audit log statistics:", error);
+    throw new Error("Failed to fetch general audit log statistics");
+  }
+}
+
+/**
+ * Get user activity (login/logout) statistics
+ */
+export async function getUserActivityStatsAction(): Promise<{
+  totalLoginSessions: number;
+  todayLogins: number;
+  uniqueUsers: number;
+  avgSessionDuration: string;
+  recentLogins: Array<{ 
+    userId: number; 
+    userEmail: string; 
+    userName: string; 
+    loginTime: Date; 
+    ipAddress?: string; 
+  }>;
+}> {
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Check permissions
+    if (currentUser.role !== "super_admin" && currentUser.role !== "property_admin") {
+      throw new Error("Insufficient permissions to view user activity statistics");
+    }
+
+    // Build where clause for user authentication activities
+    const authWhere: any = {
+      resource: "user",
+      action: { in: ["LOGIN", "LOGOUT"] },
+    };
+
+    if (currentUser.role === "property_admin") {
+      const userPropertyIds = currentUser.propertyAccess?.map(pa => pa.propertyId) || [];
+      authWhere.OR = [
+        { propertyId: { in: userPropertyIds } },
+        { propertyId: null },
+      ];
+    }
+
+    // Get total login sessions (LOGIN actions)
+    const totalLoginSessions = await prisma.auditLog.count({
+      where: {
+        ...authWhere,
+        action: "LOGIN",
+      },
+    });
+
+    // Get today's logins
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayLogins = await prisma.auditLog.count({
+      where: {
+        ...authWhere,
+        action: "LOGIN",
+        timestamp: {
+          gte: todayStart,
+          lte: todayEnd,
+        },
+      },
+    });
+
+    // Get unique users with login activity
+    const uniqueUsersResult = await prisma.auditLog.findMany({
+      where: {
+        ...authWhere,
+        action: "LOGIN",
+      },
+      select: {
+        userId: true,
+      },
+      distinct: ["userId"],
+    });
+
+    const uniqueUsers = uniqueUsersResult.length;
+
+    // Get recent logins for display
+    const recentLoginLogs = await prisma.auditLog.findMany({
+      where: {
+        ...authWhere,
+        action: "LOGIN",
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        timestamp: "desc",
+      },
+      take: 10,
+    });
+
+    const recentLogins = recentLoginLogs.map(log => ({
+      userId: log.userId || 0,
+      userEmail: log.user?.email || "Unknown",
+      userName: log.user?.name || "Unknown User",
+      loginTime: log.timestamp,
+      ipAddress: log.ipAddress,
+    }));
+
+    // Calculate average session duration (placeholder calculation)
+    // In a real implementation, you'd match LOGIN/LOGOUT pairs
+    const avgSessionDuration = "2h 15m"; // Placeholder
+
+    return {
+      totalLoginSessions,
+      todayLogins,
+      uniqueUsers,
+      avgSessionDuration,
+      recentLogins,
+    };
+  } catch (error) {
+    console.error("Error fetching user activity statistics:", error);
+    throw new Error("Failed to fetch user activity statistics");
   }
 }

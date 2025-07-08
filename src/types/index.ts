@@ -68,7 +68,15 @@ export interface Property {
   state?: string | null;
   country?: string | null;
   timeZone?: string | null;
-  currency: string;
+  currencyId: number;
+  currency?: {
+    code: string;
+    name: string;
+    symbol: string;
+    displayName: string;
+    decimalPlaces: number;
+    locale?: string | null;
+  } | null;
   logoUrl?: string | null;
   isActive: boolean;
   
@@ -638,7 +646,7 @@ export interface CreatePropertyData {
   state?: string;
   country?: string;
   timeZone?: string;
-  currency?: string;
+  currencyId?: number;
   logoUrl?: string;
   ownerId?: number;
   managerId?: number;
@@ -653,7 +661,7 @@ export interface UpdatePropertyData {
   state?: string;
   country?: string;
   timeZone?: string;
-  currency?: string;
+  currencyId?: number;
   logoUrl?: string;
   ownerId?: number;
   managerId?: number;
@@ -691,6 +699,7 @@ export interface AuditLogFilters {
   propertyId?: number;
   resource?: string;
   action?: string;
+  excludeActions?: string[]; // Actions to exclude from results
   dateRange?: { from?: Date; to?: Date };
   searchTerm?: string;
   page?: number;

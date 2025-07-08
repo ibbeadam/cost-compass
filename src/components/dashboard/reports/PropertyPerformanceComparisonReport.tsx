@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowUpIcon, ArrowDownIcon, TrendingUpIcon, TrendingDownIcon } from "lucide-react";
 import type { PropertyPerformanceComparisonReport } from "@/actions/propertyPerformanceActions";
+import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
 interface PropertyPerformanceComparisonReportProps {
   data: PropertyPerformanceComparisonReport;
@@ -31,11 +32,10 @@ export default function PropertyPerformanceComparisonReport({
   data,
   outletName,
 }: PropertyPerformanceComparisonReportProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    // Use default currency since this is a comparison report across properties
+    // Properties might have different currencies, so we standardize to default
+    return formatCurrency(amount, DEFAULT_CURRENCY);
   };
 
   const formatPercentage = (percentage: number) => {
@@ -106,7 +106,7 @@ export default function PropertyPerformanceComparisonReport({
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.overallSummary.totalRevenue)}</div>
+            <div className="text-2xl font-bold">{formatCurrencyValue(data.overallSummary.totalRevenue)}</div>
             <p className="text-xs text-muted-foreground">Across {data.overallSummary.totalOutlets} outlets</p>
           </CardContent>
         </Card>
@@ -180,8 +180,8 @@ export default function PropertyPerformanceComparisonReport({
                           <Badge variant="outline">{property.propertyType}</Badge>
                         </TableCell>
                         <TableCell>{property.outletCount}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.totalRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.totalCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.totalRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.totalCost)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {formatPercentage(property.profitMargin)}
@@ -232,10 +232,10 @@ export default function PropertyPerformanceComparisonReport({
                             <div className="text-sm text-muted-foreground">{property.propertyCode}</div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(property.totalRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.totalFoodRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.totalBeverageRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.revenuePerOutlet)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrencyValue(property.totalRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.totalFoodRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.totalBeverageRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.revenuePerOutlet)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {formatPercentage(property.revenueGrowth)}
@@ -285,7 +285,7 @@ export default function PropertyPerformanceComparisonReport({
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-medium">{formatPercentage(property.profitMargin)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.totalRevenue - property.totalCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.totalRevenue - property.totalCost)}</TableCell>
                         <TableCell className="text-right">{formatPercentage(property.avgFoodCostPct)}</TableCell>
                         <TableCell className="text-right">{formatPercentage(property.avgBeverageCostPct)}</TableCell>
                         <TableCell className="text-right">
@@ -338,10 +338,10 @@ export default function PropertyPerformanceComparisonReport({
                           </div>
                         </TableCell>
                         <TableCell className="text-right font-medium">{property.efficiency.toFixed(2)}x</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.revenuePerOutlet)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.costPerOutlet)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.avgDailyRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(property.avgDailyCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.revenuePerOutlet)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.costPerOutlet)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.avgDailyRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(property.avgDailyCost)}</TableCell>
                         <TableCell>{getPerformanceBadge(property.efficiency, "efficiency")}</TableCell>
                       </TableRow>
                     ))}

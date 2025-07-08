@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { Property, PropertyType, CreatePropertyData, UpdatePropertyData } from "@/types";
 import { revalidatePath } from "next/cache";
 import { auditDataChange, auditUserAction } from "@/lib/audit-middleware";
+import { DEFAULT_CURRENCY } from "@/lib/currency";
 
 // Property data interfaces are now imported from types
 
@@ -142,7 +143,7 @@ export async function createPropertyAction(data: CreatePropertyData): Promise<Pr
         state: data.state,
         country: data.country,
         timeZone: data.timeZone || "UTC",
-        currency: data.currency || "USD",
+        currency: data.currency || DEFAULT_CURRENCY,
         logoUrl: data.logoUrl,
         ownerId: data.ownerId,
         managerId: data.managerId,

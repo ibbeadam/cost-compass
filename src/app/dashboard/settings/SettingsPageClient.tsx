@@ -17,12 +17,15 @@ import {
   Upload,
   User,
   HelpCircle,
-  ChevronRight
+  ChevronRight,
+  DollarSign
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useNotifications } from "@/contexts/NotificationContext";
 
 export default function SettingsPageClient() {
+  const router = useRouter();
   const { preferences: notificationPreferences, updatePreferences, requestPermission } = useNotifications();
   
   const [notifications, setNotifications] = useState(notificationPreferences);

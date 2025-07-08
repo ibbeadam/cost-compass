@@ -13,6 +13,11 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   LayoutDashboard,
   Settings,
   FileText,
@@ -24,6 +29,9 @@ import {
   GlassWater,
   Users,
   Activity,
+  Banknote,
+  Shield,
+  ChevronRight,
 } from "lucide-react"; // Added Users and Activity icons
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -39,6 +47,7 @@ interface NavItem {
   permissions?: string[]; // Required permissions to view this item
   roles?: string[]; // Required roles to view this item
   requireAnyPermission?: boolean; // true = any of permissions, false = all permissions
+  subItems?: NavItem[]; // For collapsible sections
 }
 
 const navItems: NavItem[] = [
@@ -76,41 +85,55 @@ const navItems: NavItem[] = [
     permissions: ["reports.basic.read"]
   },
   { 
-    href: "/dashboard/properties", 
-    label: "Manage Properties", 
-    icon: Home,
-    roles: ["super_admin"]
-  },
-  { 
     href: "/dashboard/outlets", 
     label: "Manage Outlets", 
     icon: Building,
     permissions: ["outlets.read"]
   },
   {
-    href: "/dashboard/categories",
-    label: "Manage Categories",
-    icon: ListChecks,
-    roles: ["super_admin"]
-  },
-  { 
-    href: "/dashboard/users", 
-    label: "Manage Users", 
-    icon: Users,
-    roles: ["super_admin"]
-  },
-  { 
-    href: "/dashboard/activity-log", 
-    label: "Activity Log", 
-    icon: Activity,
-    roles: ["super_admin", "property_admin"]
-  },
-  {
-    href: "/dashboard/settings",
-    label: "Settings",
-    icon: Settings,
-    roles: ["super_admin"]
-  },
+    href: "/admin",
+    label: "Admin",
+    icon: Shield,
+    roles: ["super_admin", "property_admin"],
+    subItems: [
+      {
+        href: "/dashboard/settings",
+        label: "Settings",
+        icon: Settings,
+        roles: ["super_admin"]
+      },
+      { 
+        href: "/dashboard/properties", 
+        label: "Manage Properties", 
+        icon: Home,
+        roles: ["super_admin"]
+      },
+      {
+        href: "/dashboard/categories",
+        label: "Manage Categories",
+        icon: ListChecks,
+        roles: ["super_admin"]
+      },
+      { 
+        href: "/dashboard/users", 
+        label: "Manage Users", 
+        icon: Users,
+        roles: ["super_admin"]
+      },
+      { 
+        href: "/dashboard/activity-log", 
+        label: "Activity Log", 
+        icon: Activity,
+        roles: ["super_admin", "property_admin"]
+      },
+      {
+        href: "/dashboard/currencies",
+        label: "Currency Management",
+        icon: Banknote,
+        roles: ["super_admin"]
+      }
+    ]
+  }
 ];
 
 const SidebarMenuSkeleton: React.FC<{ showIcon?: boolean }> = ({
@@ -124,6 +147,7 @@ const SidebarMenuSkeleton: React.FC<{ showIcon?: boolean }> = ({
 
 export function MainNav() {
   const [isMounted, setIsMounted] = React.useState(false);
+  const [adminSectionOpen, setAdminSectionOpen] = React.useState(false);
   const pathname = usePathname();
   const { isMobile, setOpenMobile } = useSidebar();
   const { isLoading } = usePermissions();
@@ -132,9 +156,23 @@ export function MainNav() {
     setIsMounted(true);
   }, []);
 
+  // Set admin section open state based on current path
+  React.useEffect(() => {
+    const adminItem = navItems.find(item => item.subItems);
+    if (adminItem && isAdminSectionActive(adminItem)) {
+      setAdminSectionOpen(true);
+    }
+  }, [pathname]);
+
   // Handler to close sidebar on mobile after navigation
   const handleNavClick = () => {
     if (isMobile) setOpenMobile(false);
+  };
+
+  // Handler for non-admin nav clicks - collapses admin section
+  const handleNonAdminNavClick = () => {
+    setAdminSectionOpen(false);
+    handleNavClick();
   };
 
   const isActive = (href: string) => {
@@ -148,6 +186,11 @@ export function MainNav() {
       return true;
     }
     return false;
+  };
+
+  const isAdminSectionActive = (item: NavItem) => {
+    if (!item.subItems) return false;
+    return item.subItems.some(subItem => isActive(subItem.href));
   };
 
   if (isLoading && !isMounted) {
@@ -173,40 +216,110 @@ export function MainNav() {
           requireAll={!item.requireAnyPermission}
         >
           <SidebarMenuItem>
-            <Link href={item.href} legacyBehavior passHref>
-              <SidebarMenuButton
-                asChild
-                isActive={isActive(item.href)}
-                disabled={item.disabled}
-                className={cn(
-                  "justify-start group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0",
-                  isActive(item.href)
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                  item.disabled &&
-                    "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-sidebar-foreground"
-                )}
-                tooltip={{
-                  children: item.label,
-                  side: "right",
-                  sideOffset: 24,
-                  align: "center",
-                  avoidCollisions: true,
-                  className:
-                    "bg-sidebar text-sidebar-foreground border-sidebar-border shadow-lg z-50",
-                }}
+            {item.subItems ? (
+              // Collapsible admin section
+              <Collapsible 
+                open={adminSectionOpen}
+                onOpenChange={setAdminSectionOpen}
+                className="group/collapsible"
               >
-                <a
-                  onClick={handleNavClick}
-                  className="flex items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:h-full"
+                <CollapsibleTrigger asChild>
+                  <SidebarMenuButton
+                    className={cn(
+                      "justify-start group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0",
+                      isAdminSectionActive(item)
+                        ? "!bg-blue-500 !text-white hover:!bg-blue-600 hover:!text-white data-[active=true]:!bg-blue-500 data-[active=true]:!text-white"
+                        : "hover:!bg-blue-100 hover:!text-blue-900"
+                    )}
+                    tooltip={{
+                      children: item.label,
+                      side: "right",
+                      sideOffset: 24,
+                      align: "center",
+                      avoidCollisions: true,
+                      className:
+                        "bg-sidebar text-sidebar-foreground border-sidebar-border shadow-lg z-50",
+                    }}
+                  >
+                    <item.icon className="h-6 w-6 mr-3 group-data-[collapsible=icon]:mr-0 flex-shrink-0" />
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      {item.label}
+                    </span>
+                    <ChevronRight className="ml-auto h-4 w-4 transition-transform group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <SidebarMenuSub>
+                    {item.subItems.map((subItem) => (
+                      <PermissionGate
+                        key={subItem.href}
+                        permissions={subItem.permissions}
+                        roles={subItem.roles as any}
+                        requireAll={!subItem.requireAnyPermission}
+                      >
+                        <SidebarMenuSubItem>
+                          <Link href={subItem.href} legacyBehavior passHref>
+                            <SidebarMenuSubButton
+                              asChild
+                              isActive={isActive(subItem.href)}
+                              disabled={subItem.disabled}
+                              className={cn(
+                                isActive(subItem.href)
+                                  ? "!bg-blue-500 !text-white hover:!bg-blue-600 hover:!text-white data-[active=true]:!bg-blue-500 data-[active=true]:!text-white"
+                                  : "hover:!bg-blue-100 hover:!text-blue-900",
+                                subItem.disabled &&
+                                  "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-sidebar-foreground"
+                              )}
+                            >
+                              <a onClick={handleNavClick} className="flex items-center">
+                                <subItem.icon className="h-4 w-4 mr-2 flex-shrink-0" />
+                                <span>{subItem.label}</span>
+                              </a>
+                            </SidebarMenuSubButton>
+                          </Link>
+                        </SidebarMenuSubItem>
+                      </PermissionGate>
+                    ))}
+                  </SidebarMenuSub>
+                </CollapsibleContent>
+              </Collapsible>
+            ) : (
+              // Regular navigation item
+              <Link href={item.href} legacyBehavior passHref>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isActive(item.href)}
+                  disabled={item.disabled}
+                  className={cn(
+                    "justify-start group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:!p-0",
+                    isActive(item.href)
+                      ? "!bg-blue-500 !text-white hover:!bg-blue-600 hover:!text-white data-[active=true]:!bg-blue-500 data-[active=true]:!text-white"
+                      : "hover:!bg-blue-100 hover:!text-blue-900",
+                    item.disabled &&
+                      "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-sidebar-foreground"
+                  )}
+                  tooltip={{
+                    children: item.label,
+                    side: "right",
+                    sideOffset: 24,
+                    align: "center",
+                    avoidCollisions: true,
+                    className:
+                      "bg-sidebar text-sidebar-foreground border-sidebar-border shadow-lg z-50",
+                  }}
                 >
-                  <item.icon className="h-6 w-6 mr-3 group-data-[collapsible=icon]:mr-0 flex-shrink-0" />
-                  <span className="group-data-[collapsible=icon]:hidden">
-                    {item.label}
-                  </span>
-                </a>
-              </SidebarMenuButton>
-            </Link>
+                  <a
+                    onClick={handleNonAdminNavClick}
+                    className="flex items-center group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:h-full"
+                  >
+                    <item.icon className="h-6 w-6 mr-3 group-data-[collapsible=icon]:mr-0 flex-shrink-0" />
+                    <span className="group-data-[collapsible=icon]:hidden">
+                      {item.label}
+                    </span>
+                  </a>
+                </SidebarMenuButton>
+              </Link>
+            )}
           </SidebarMenuItem>
         </PermissionGate>
       ))}

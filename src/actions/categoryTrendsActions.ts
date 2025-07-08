@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/server-auth";
 import { startOfDay, endOfDay, subDays, format, eachWeekOfInterval, eachMonthOfInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
+import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
 export interface CategoryTrendData {
   categoryId: number;
@@ -648,7 +649,7 @@ export async function getCategoryPerformanceTrendsReportAction(
       recommendations.push("Beverage costs are growing rapidly. Review beverage procurement and portion sizes.");
     }
 
-    keyFindings.push(`${mostExpensiveCategory.categoryName} is the highest cost category at ${formatCurrency(mostExpensiveCategory.totalCost)}`);
+    keyFindings.push(`${mostExpensiveCategory.categoryName} is the highest cost category at ${formatCurrency(mostExpensiveCategory.totalCost, DEFAULT_CURRENCY)}`);
     keyFindings.push(`${fastestGrowingCategory.categoryName} shows fastest growth at ${fastestGrowingCategory.trendPercentage.toFixed(1)}%`);
     keyFindings.push(`${trendingUp.length} categories trending up, ${trendingDown.length} trending down, ${mostStable.length} stable`);
     if (foodVsBeverage.foodPercentage > 70) {
@@ -719,9 +720,4 @@ export async function getCategoryPerformanceTrendsReportAction(
   }
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
-}
+// Remove this function as we now use the centralized currency utilities

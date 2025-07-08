@@ -32,6 +32,7 @@ import {
   Building2
 } from "lucide-react";
 import type { OutletEfficiencyProfitabilityReport } from "@/actions/outletEfficiencyActions";
+import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
 interface OutletEfficiencyProfitabilityReportProps {
   data: OutletEfficiencyProfitabilityReport;
@@ -42,11 +43,9 @@ export default function OutletEfficiencyProfitabilityReport({
   data,
   outletName,
 }: OutletEfficiencyProfitabilityReportProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    // Use default currency for outlet efficiency and profitability
+    return formatCurrency(amount, DEFAULT_CURRENCY);
   };
 
   const formatPercentage = (percentage: number) => {
@@ -136,9 +135,9 @@ export default function OutletEfficiencyProfitabilityReport({
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.summary.totalRevenue)}</div>
+            <div className="text-2xl font-bold">{formatCurrencyValue(data.summary.totalRevenue)}</div>
             <p className="text-xs text-muted-foreground">
-              Avg: {formatCurrency(data.summary.totalRevenue / data.summary.totalOutlets)}/outlet
+              Avg: {formatCurrencyValue(data.summary.totalRevenue / data.summary.totalOutlets)}/outlet
             </p>
           </CardContent>
         </Card>
@@ -150,7 +149,7 @@ export default function OutletEfficiencyProfitabilityReport({
           <CardContent>
             <div className="text-2xl font-bold">{formatPercentage(data.summary.avgProfitMargin)}</div>
             <p className="text-xs text-muted-foreground">
-              Net Profit: {formatCurrency(data.summary.totalProfit)}
+              Net Profit: {formatCurrencyValue(data.summary.totalProfit)}
             </p>
           </CardContent>
         </Card>
@@ -246,7 +245,7 @@ export default function OutletEfficiencyProfitabilityReport({
                         </div>
                       </TableCell>
                       <TableCell className="text-right">{property.outletCount}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(property.totalRevenue)}</TableCell>
+                      <TableCell className="text-right">{formatCurrencyValue(property.totalRevenue)}</TableCell>
                       <TableCell className="text-right">{formatPercentage(property.avgProfitMargin)}</TableCell>
                       <TableCell>{property.topOutlet}</TableCell>
                     </TableRow>
@@ -304,8 +303,8 @@ export default function OutletEfficiencyProfitabilityReport({
                             <div className="text-xs text-muted-foreground">{outlet.propertyCode}</div>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.totalRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.totalCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.totalRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.totalCost)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {formatPercentage(outlet.profitMargin)}
@@ -366,10 +365,10 @@ export default function OutletEfficiencyProfitabilityReport({
                           </div>
                         </TableCell>
                         <TableCell>{outlet.propertyName}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(outlet.totalRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.avgDailyRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.totalFoodRevenue)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.totalBeverageRevenue)}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrencyValue(outlet.totalRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.avgDailyRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.totalFoodRevenue)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.totalBeverageRevenue)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
                             {formatPercentage(outlet.revenueGrowth)}
@@ -419,8 +418,8 @@ export default function OutletEfficiencyProfitabilityReport({
                         </TableCell>
                         <TableCell>{outlet.propertyName}</TableCell>
                         <TableCell className="text-right font-medium">{formatPercentage(outlet.profitMargin)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.netProfit)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(outlet.dailyProfitability)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.netProfit)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(outlet.dailyProfitability)}</TableCell>
                         <TableCell className="text-right">{formatPercentage(outlet.totalCostPercentage)}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">

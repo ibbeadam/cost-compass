@@ -83,6 +83,18 @@ export const authOptions: NextAuthOptions = {
             console.log('Login tracking fields not available in current schema');
           }
 
+          // Log successful login
+          try {
+            const { auditAuthAction } = await import("@/lib/audit-middleware");
+            await auditAuthAction(user.id, "LOGIN", {
+              email: user.email,
+              loginTime: new Date(),
+              userAgent: req.headers?.["user-agent"],
+            });
+          } catch (error) {
+            console.error("Failed to log login activity:", error);
+          }
+
           // Get user permissions
           const mockUser = {
             id: user.id,
@@ -210,7 +222,18 @@ export const authOptions: NextAuthOptions = {
   events: {
     async signOut({ session, token }) {
       console.log('User signed out:', token?.sub);
-      // TODO: Add audit logging when schema is updated
+      // Log successful logout
+      if (token?.sub) {
+        try {
+          const { auditAuthAction } = await import("@/lib/audit-middleware");
+          await auditAuthAction(parseInt(token.sub), "LOGOUT", {
+            email: token.email,
+            logoutTime: new Date(),
+          });
+        } catch (error) {
+          console.error("Failed to log logout activity:", error);
+        }
+      }
     },
   },
 

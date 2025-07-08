@@ -37,6 +37,7 @@ import {
   Percent
 } from "lucide-react";
 import type { CategoryPerformanceTrendsReport } from "@/actions/categoryTrendsActions";
+import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
 interface CategoryPerformanceTrendsReportProps {
   data: CategoryPerformanceTrendsReport;
@@ -47,11 +48,9 @@ export default function CategoryPerformanceTrendsReport({
   data,
   outletName,
 }: CategoryPerformanceTrendsReportProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    // Use default currency for category performance trends
+    return formatCurrency(amount, DEFAULT_CURRENCY);
   };
 
   const formatPercentage = (percentage: number) => {
@@ -166,9 +165,9 @@ export default function CategoryPerformanceTrendsReport({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(data.summary.totalCost)}</div>
+            <div className="text-2xl font-bold">{formatCurrencyValue(data.summary.totalCost)}</div>
             <p className="text-xs text-muted-foreground">
-              Daily Avg: {formatCurrency(data.summary.averageDailyCost)}
+              Daily Avg: {formatCurrencyValue(data.summary.averageDailyCost)}
             </p>
           </CardContent>
         </Card>
@@ -183,7 +182,7 @@ export default function CategoryPerformanceTrendsReport({
           <CardContent>
             <div className="text-lg font-semibold truncate">{data.summary.mostExpensiveCategory.name}</div>
             <p className="text-xs text-muted-foreground">
-              {formatCurrency(data.summary.mostExpensiveCategory.cost)} • {data.summary.mostExpensiveCategory.type}
+              {formatCurrencyValue(data.summary.mostExpensiveCategory.cost)} • {data.summary.mostExpensiveCategory.type}
             </p>
           </CardContent>
         </Card>
@@ -221,14 +220,14 @@ export default function CategoryPerformanceTrendsReport({
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Food Costs</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{formatCurrency(data.foodVsBeverage.foodTotal)}</span>
+                    <span className="font-medium">{formatCurrencyValue(data.foodVsBeverage.foodTotal)}</span>
                     <Badge variant="outline">{formatPercentage(data.foodVsBeverage.foodPercentage)}</Badge>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm">Beverage Costs</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{formatCurrency(data.foodVsBeverage.beverageTotal)}</span>
+                    <span className="font-medium">{formatCurrencyValue(data.foodVsBeverage.beverageTotal)}</span>
                     <Badge variant="outline">{formatPercentage(data.foodVsBeverage.beveragePercentage)}</Badge>
                   </div>
                 </div>
@@ -271,7 +270,7 @@ export default function CategoryPerformanceTrendsReport({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center p-4 border rounded-lg">
               <div className="text-sm text-muted-foreground">Previous Period</div>
-              <div className="text-xl font-bold">{formatCurrency(data.periodComparison.previousPeriod.totalCost)}</div>
+              <div className="text-xl font-bold">{formatCurrencyValue(data.periodComparison.previousPeriod.totalCost)}</div>
               <div className="text-xs text-muted-foreground">
                 {data.periodComparison.previousPeriod.categoryCount} categories
               </div>
@@ -279,7 +278,7 @@ export default function CategoryPerformanceTrendsReport({
             
             <div className="text-center p-4 border rounded-lg">
               <div className="text-sm text-muted-foreground">Current Period</div>
-              <div className="text-xl font-bold">{formatCurrency(data.periodComparison.currentPeriod.totalCost)}</div>
+              <div className="text-xl font-bold">{formatCurrencyValue(data.periodComparison.currentPeriod.totalCost)}</div>
               <div className="text-xs text-muted-foreground">
                 {data.periodComparison.currentPeriod.categoryCount} categories
               </div>
@@ -336,8 +335,8 @@ export default function CategoryPerformanceTrendsReport({
                         <TableCell>
                           <div className="font-medium">{category.categoryName}</div>
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(category.totalCost)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(category.averageDailyCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(category.totalCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(category.averageDailyCost)}</TableCell>
                         <TableCell className="text-right">{formatPercentage(category.percentageOfTotalCost)}</TableCell>
                         <TableCell className="text-right">{getTrendBadge(category.trendDirection, false)}</TableCell>
                         <TableCell className="text-right">
@@ -384,8 +383,8 @@ export default function CategoryPerformanceTrendsReport({
                         <TableCell>
                           <div className="font-medium">{category.categoryName}</div>
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(category.totalCost)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(category.averageDailyCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(category.totalCost)}</TableCell>
+                        <TableCell className="text-right">{formatCurrencyValue(category.averageDailyCost)}</TableCell>
                         <TableCell className="text-right">{formatPercentage(category.percentageOfTotalCost)}</TableCell>
                         <TableCell className="text-right">{getTrendBadge(category.trendDirection, false)}</TableCell>
                         <TableCell className="text-right">
@@ -440,7 +439,7 @@ export default function CategoryPerformanceTrendsReport({
                         </TableCell>
                         <TableCell className="text-right">
                           <div>
-                            <div className="font-medium">{formatCurrency(category.highestCostDay.cost)}</div>
+                            <div className="font-medium">{formatCurrencyValue(category.highestCostDay.cost)}</div>
                             <div className="text-xs text-muted-foreground">
                               {format(category.highestCostDay.date, "MMM dd")}
                             </div>
@@ -448,7 +447,7 @@ export default function CategoryPerformanceTrendsReport({
                         </TableCell>
                         <TableCell className="text-right">
                           <div>
-                            <div className="font-medium">{formatCurrency(category.lowestCostDay.cost)}</div>
+                            <div className="font-medium">{formatCurrencyValue(category.lowestCostDay.cost)}</div>
                             <div className="text-xs text-muted-foreground">
                               {format(category.lowestCostDay.date, "MMM dd")}
                             </div>
@@ -506,7 +505,7 @@ export default function CategoryPerformanceTrendsReport({
                           <TableCell>
                             <div className="font-medium">{outlet.outletName}</div>
                           </TableCell>
-                          <TableCell className="text-right">{formatCurrency(outlet.totalCost)}</TableCell>
+                          <TableCell className="text-right">{formatCurrencyValue(outlet.totalCost)}</TableCell>
                           <TableCell className="text-right">{formatPercentage(outlet.percentage)}</TableCell>
                           <TableCell>{getTrendBadge(outlet.trend, false)}</TableCell>
                         </TableRow>

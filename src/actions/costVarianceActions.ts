@@ -696,9 +696,4 @@ export async function getCostVarianceAnalysisReportAction(
   }
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(amount);
-}
+// Remove this function as we now use the centralized currency utilities

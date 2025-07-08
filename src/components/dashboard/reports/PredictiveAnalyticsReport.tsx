@@ -53,6 +53,7 @@ import {
   Calendar
 } from "lucide-react";
 import type { PredictiveAnalyticsReport } from "@/actions/predictiveAnalyticsActions";
+import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
 interface PredictiveAnalyticsReportProps {
   data: PredictiveAnalyticsReport;
@@ -63,11 +64,9 @@ export default function PredictiveAnalyticsReport({
   data,
   outletName,
 }: PredictiveAnalyticsReportProps) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
+  const formatCurrencyValue = (amount: number) => {
+    // Use default currency for predictive analytics
+    return formatCurrency(amount, DEFAULT_CURRENCY);
   };
 
   const formatPercentage = (percentage: number) => {
@@ -186,7 +185,7 @@ export default function PredictiveAnalyticsReport({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(data.summary.forecastedRevenue)}
+              {formatCurrencyValue(data.summary.forecastedRevenue)}
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               {getTrendIcon("Upward")}
@@ -204,7 +203,7 @@ export default function PredictiveAnalyticsReport({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(data.summary.forecastedCosts)}
+              {formatCurrencyValue(data.summary.forecastedCosts)}
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
               {getTrendIcon("Upward")}
@@ -342,8 +341,8 @@ export default function PredictiveAnalyticsReport({
                               {category.categoryType}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right">{formatCurrency(category.historicalAverage)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(forecastAvg)}</TableCell>
+                          <TableCell className="text-right">{formatCurrencyValue(category.historicalAverage)}</TableCell>
+                          <TableCell className="text-right">{formatCurrencyValue(forecastAvg)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
                               {getTrendIcon(category.historicalTrend)}
@@ -447,8 +446,8 @@ export default function PredictiveAnalyticsReport({
                       return (
                         <TableRow key={outlet.outletId}>
                           <TableCell className="font-medium">{outlet.outletName}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(totalRevenue)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(totalCosts)}</TableCell>
+                          <TableCell className="text-right">{formatCurrencyValue(totalRevenue)}</TableCell>
+                          <TableCell className="text-right">{formatCurrencyValue(totalCosts)}</TableCell>
                           <TableCell className="text-right">{outlet.forecastedMargin.toFixed(1)}%</TableCell>
                           <TableCell className="text-right">
                             <span className={outlet.expectedGrowth >= 0 ? "text-green-600" : "text-red-600"}>

@@ -84,6 +84,7 @@ model User {
   sessions                       Session[]
   grantedPermissions             UserPermission[]        @relation("GrantedBy")
   userPermissions                UserPermission[]
+  createdCurrencies              Currency[]              @relation("CurrencyCreator")
 
   @@map("users")
 }
@@ -98,7 +99,8 @@ model Property {
   state                   String?
   country                 String?
   timeZone                String?                 @map("time_zone")
-  currency                String                  @default("USD")
+  currencyId              Int?                    @map("currency_id")
+  currency                Currency?               @relation("PropertyCurrency", fields: [currencyId], references: [id])
   logoUrl                 String?                 @map("logo_url")
   isActive                Boolean                 @default(true) @map("is_active")
   ownerId                 Int?                    @map("owner_id")
@@ -117,6 +119,7 @@ model Property {
   @@index([managerId])
   @@index([propertyType])
   @@index([isActive])
+  @@index([currencyId])
   @@map("properties")
 }
 
@@ -423,4 +426,30 @@ enum PropertyAccessLevel {
   management
   full_control
   owner
+}
+
+model Currency {
+  id                Int                     @id @default(autoincrement())
+  code              String                  @unique @db.VarChar(3) // ISO 4217 currency code (e.g., USD, EUR)
+  name              String                  @db.VarChar(100) // Full currency name (e.g., "US Dollar")
+  symbol            String                  @db.VarChar(10) // Currency symbol (e.g., "$", "€")
+  displayName       String                  @map("display_name") @db.VarChar(50) // Display format (e.g., "USD ($)")
+  decimalPlaces     Int                     @default(2) @map("decimal_places") // Number of decimal places
+  isActive          Boolean                 @default(true) @map("is_active")
+  isDefault         Boolean                 @default(false) @map("is_default") // Only one currency can be default
+  isSystemCurrency  Boolean                 @default(false) @map("is_system_currency") // Predefined currencies cannot be deleted
+  exchangeRate      Decimal?                @map("exchange_rate") @db.Decimal(10, 6) // Optional exchange rate to USD
+  locale            String?                 @db.VarChar(10) // Locale for formatting (e.g., "en-US")
+  createdBy         Int?                    @map("created_by")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  
+  // Relations
+  creator           User?                   @relation("CurrencyCreator", fields: [createdBy], references: [id])
+  properties        Property[]              @relation("PropertyCurrency")
+  
+  @@index([code])
+  @@index([isActive])
+  @@index([isDefault])
+  @@map("currencies")
 }
