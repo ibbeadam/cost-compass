@@ -145,7 +145,7 @@ export default function CurrencyManagementClient() {
     } catch (err) {
       console.error("Failed to load currencies:", err);
       setError("Failed to load currencies. Please try again.");
-      showToast("error", "Failed to load currencies");
+      showToast.error("Failed to load currencies");
     } finally {
       setLoading(false);
     }
@@ -226,7 +226,7 @@ export default function CurrencyManagementClient() {
           throw new Error(error.error || 'Failed to update currency');
         }
         
-        showToast("success", "Currency updated successfully");
+        showToast.success("Currency updated successfully");
         setShowEditDialog(false);
       } else {
         const response = await fetch('/api/currencies/manage', {
@@ -240,7 +240,7 @@ export default function CurrencyManagementClient() {
           throw new Error(error.error || 'Failed to create currency');
         }
         
-        showToast("success", "Currency created successfully");
+        showToast.success("Currency created successfully");
         setShowCreateDialog(false);
       }
       
@@ -251,7 +251,7 @@ export default function CurrencyManagementClient() {
       
     } catch (err) {
       console.error("Failed to save currency:", err);
-      showToast("error", (err as Error).message || "Failed to save currency");
+      showToast.error((err as Error).message || "Failed to save currency");
     } finally {
       setSubmitting(false);
     }
@@ -271,11 +271,11 @@ export default function CurrencyManagementClient() {
         throw new Error(error.error || 'Failed to delete currency');
       }
       
-      showToast("success", "Currency deleted successfully");
+      showToast.success("Currency deleted successfully");
       await loadCurrencies();
     } catch (err) {
       console.error("Failed to delete currency:", err);
-      showToast("error", (err as Error).message || "Failed to delete currency");
+      showToast.error((err as Error).message || "Failed to delete currency");
     }
   };
 
@@ -293,11 +293,11 @@ export default function CurrencyManagementClient() {
         throw new Error(error.error || 'Failed to set default currency');
       }
       
-      showToast("success", `${currency.code} set as default currency`);
+      showToast.success(`${currency.code} set as default currency`);
       await loadCurrencies();
     } catch (err) {
       console.error("Failed to set default currency:", err);
-      showToast("error", (err as Error).message || "Failed to set default currency");
+      showToast.error((err as Error).message || "Failed to set default currency");
     }
   };
 

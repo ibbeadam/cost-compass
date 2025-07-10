@@ -1,23 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withServerPermissions } from "@/lib/permissions/server-middleware";
 import { writeFile, mkdir, unlink } from "fs/promises";
 import { join } from "path";
-import { getCurrentUser } from "@/lib/server-auth";
 import { updateUserAction } from "@/actions/prismaUserActions";
 import { createAuditLogAction } from "@/actions/auditLogActions";
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
 
-export async function POST(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser();
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
+export const POST = withServerPermissions(
+  async (request: NextRequest, context) => {
+    try {
+      const currentUser = context.user;
 
     const formData = await request.formData();
     const file = formData.get("image") as File;
@@ -110,18 +104,22 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+},
+{
+  permissions: ["profile.update"],
+  auditAction: "UPDATE",
+  auditResource: "profile_image",
+  rateLimiting: {
+    maxRequests: 5,
+    windowMs: 60000
+  }
 }
+);
 
-export async function DELETE(request: NextRequest) {
-  try {
-    const currentUser = await getCurrentUser();
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
+export const DELETE = withServerPermissions(
+  async (request: NextRequest, context) => {
+    try {
+      const currentUser = context.user;
 
     // Delete current profile image file if it exists
     if (currentUser.profileImage) {
@@ -164,4 +162,14 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     );
   }
+},
+{
+  permissions: ["profile.update"],
+  auditAction: "DELETE",
+  auditResource: "profile_image",
+  rateLimiting: {
+    maxRequests: 3,
+    windowMs: 60000
+  }
 }
+);

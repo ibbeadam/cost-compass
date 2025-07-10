@@ -1,28 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/server-auth";
+import { withServerPermissions } from "@/lib/permissions/server-middleware";
 import { resetUserPasswordAction } from "@/actions/prismaUserActions";
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const currentUser = await getCurrentUser();
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    // Check if user has super admin access (only super admins can reset passwords)
-    if (currentUser.role !== "super_admin") {
-      return NextResponse.json(
-        { error: "Only super administrators can reset user passwords" },
-        { status: 403 }
-      );
-    }
+export const POST = withServerPermissions(
+  async (
+    request: NextRequest,
+    context,
+    { params }: { params: { id: string } }
+  ) => {
+    try {
+      const currentUser = context.user;
 
     const { newPassword } = await request.json();
     
@@ -63,4 +50,14 @@ export async function POST(
       { status: 500 }
     );
   }
+},
+{
+  permissions: ["users.password.reset"],
+  auditAction: "UPDATE",
+  auditResource: "user_password",
+  rateLimiting: {
+    maxRequests: 3,
+    windowMs: 60000
+  }
 }
+);

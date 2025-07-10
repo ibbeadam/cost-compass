@@ -32,6 +32,7 @@ import {
   Banknote,
   Shield,
   ChevronRight,
+  UserCheck,
 } from "lucide-react"; // Added Users and Activity icons
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -130,6 +131,24 @@ const navItems: NavItem[] = [
         href: "/dashboard/currencies",
         label: "Currency Management",
         icon: Banknote,
+        roles: ["super_admin"]
+      },
+      {
+        href: "/dashboard/security",
+        label: "Security Dashboard",
+        icon: Shield,
+        roles: ["super_admin"]
+      },
+      {
+        href: "/dashboard/permissions",
+        label: "Permission Management",
+        icon: Shield,
+        roles: ["super_admin"]
+      },
+      {
+        href: "/dashboard/roles-permissions",
+        label: "Role & Permission Assignment",
+        icon: UserCheck,
         roles: ["super_admin"]
       }
     ]

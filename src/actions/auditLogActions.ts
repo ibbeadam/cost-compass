@@ -62,6 +62,7 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
       propertyId,
       resource,
       action,
+      includeActions,
       excludeActions,
       dateRange,
       searchTerm,
@@ -87,7 +88,7 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
     if (propertyId) where.propertyId = propertyId;
     if (resource) where.resource = resource;
     
-    // Handle action filtering - specific action or exclude actions
+    // Handle action filtering - specific action, include actions, or exclude actions
     if (action && excludeActions && excludeActions.length > 0) {
       // If both are specified, include the action but exclude the excluded actions
       where.action = {
@@ -98,6 +99,9 @@ export async function getAuditLogsAction(filters: AuditLogFilters = {}): Promise
       };
     } else if (action) {
       where.action = action;
+    } else if (includeActions && includeActions.length > 0) {
+      // Include only specific actions
+      where.action = { in: includeActions };
     } else if (excludeActions && excludeActions.length > 0) {
       where.action = { notIn: excludeActions };
     }

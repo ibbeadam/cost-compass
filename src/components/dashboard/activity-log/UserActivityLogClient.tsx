@@ -94,43 +94,23 @@ export default function UserActivityLogClient() {
   const fetchLogs = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Build filters for user authentication activities only
+      // Build filters for user authentication activities
       const userActivityFilters = {
         ...filters,
         page: currentPage,
         limit: itemsPerPage,
-        resource: "user", // Only user resource
-        action: selectedAction === "all" ? "LOGIN" : selectedAction, // Default to LOGIN if "all" is selected
       };
 
-      // If "all" is selected, we need to get both LOGIN and LOGOUT
-      if (selectedAction === "all") {
-        // Make two separate requests for LOGIN and LOGOUT, then combine
-        const [loginResult, logoutResult] = await Promise.all([
-          getAuditLogsAction({ ...userActivityFilters, action: "LOGIN" }),
-          getAuditLogsAction({ ...userActivityFilters, action: "LOGOUT" })
-        ]);
-        
-        // Combine and sort by timestamp
-        const combinedLogs = [...loginResult.logs, ...logoutResult.logs]
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        
-        setLogs(combinedLogs);
-        setTotal(combinedLogs.length);
-        setTotalPages(Math.ceil(combinedLogs.length / itemsPerPage));
-      } else {
-        // Single action filter
-        const result = await getAuditLogsAction(userActivityFilters);
-        setLogs(result.logs);
-        setTotal(result.total);
-        setTotalPages(result.totalPages);
-      }
+      const result = await getAuditLogsAction(userActivityFilters);
+      setLogs(result.logs);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
     } catch (error) {
       showToast.error((error as Error).message || "Failed to fetch user activity logs");
     } finally {
       setIsLoading(false);
     }
-  }, [filters, currentPage, itemsPerPage, selectedAction]);
+  }, [filters, currentPage, itemsPerPage]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -167,7 +147,14 @@ export default function UserActivityLogClient() {
     };
 
     if (searchTerm.trim()) newFilters.searchTerm = searchTerm.trim();
-    if (selectedAction && selectedAction !== "all") newFilters.action = selectedAction;
+    
+    // Handle action filtering
+    if (selectedAction === "all") {
+      newFilters.includeActions = ["LOGIN", "LOGOUT"];
+    } else if (selectedAction && selectedAction !== "all") {
+      newFilters.action = selectedAction;
+    }
+    
     if (userId.trim() && !isNaN(Number(userId.trim()))) {
       newFilters.userId = Number(userId.trim());
     }
@@ -179,7 +166,10 @@ export default function UserActivityLogClient() {
     }
 
     setFilters(newFilters);
-    setCurrentPage(1);
+    // Only reset to first page if filters actually changed
+    if (JSON.stringify(newFilters) !== JSON.stringify(filters)) {
+      setCurrentPage(1);
+    }
   }, [searchTerm, selectedAction, userId, dateRange, itemsPerPage]);
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
@@ -595,10 +585,11 @@ export default function UserActivityLogClient() {
                         <TableCell>
                           <Badge 
                             variant={getActionBadgeVariant(log.action)}
-                            className="flex items-center gap-1 w-fit"
+                            className="flex items-center gap-1 max-w-[200px]"
+                            title={log.action}
                           >
                             {getActionIcon(log.action)}
-                            {log.action}
+                            <span className="truncate">{log.action}</span>
                           </Badge>
                         </TableCell>
                         <TableCell>

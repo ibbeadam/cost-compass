@@ -67,6 +67,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { normalizeDate } from "@/lib/utils";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 // Excel import interface for food cost entries
 interface ExcelFoodCostRow {
@@ -637,41 +638,47 @@ export default function FoodCostEntryListClient() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h2 className="text-2xl font-bold font-headline">Food Cost Entries</h2>
         <div className="flex flex-wrap gap-2">
-          <Button 
-            onClick={downloadTemplate} 
-            variant="outline" 
-            size="sm" 
-            className="text-xs sm:text-sm"
-            disabled={isLoadingCategories || foodCategories.length === 0}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Download Template
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button 
-            onClick={() => fileInputRef.current?.click()} 
-            variant="outline"
-            size="sm"
-            className="text-xs sm:text-sm"
-            disabled={isLoadingOutlets || isLoadingCategories}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Import Excel
-          </Button>
-          <Button
-            onClick={handleAddNew}
-            disabled={isLoadingOutlets || isLoadingCategories}
-            size="sm"
-            className="text-xs sm:text-sm"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
-          </Button>
+          <PermissionGate permissions={["financial.food_costs.read"]}>
+            <Button 
+              onClick={downloadTemplate} 
+              variant="outline" 
+              size="sm" 
+              className="text-xs sm:text-sm"
+              disabled={isLoadingCategories || foodCategories.length === 0}
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Download Template
+            </Button>
+          </PermissionGate>
+          <PermissionGate permissions={["financial.food_costs.create"]}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button 
+              onClick={() => fileInputRef.current?.click()} 
+              variant="outline"
+              size="sm"
+              className="text-xs sm:text-sm"
+              disabled={isLoadingOutlets || isLoadingCategories}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import Excel
+            </Button>
+          </PermissionGate>
+          <PermissionGate permissions={["financial.food_costs.create"]}>
+            <Button
+              onClick={handleAddNew}
+              disabled={isLoadingOutlets || isLoadingCategories}
+              size="sm"
+              className="text-xs sm:text-sm"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -751,39 +758,44 @@ export default function FoodCostEntryListClient() {
                       ${(entry.totalFoodCost || 0).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleView(entry)}
-                        className="mr-1 hover:text-blue-600"
-                        disabled={isLoadingDetailsForView}
-                        title="View Details"
-                      >
-                        <Eye className="h-4 w-4" />
-                        <span className="sr-only">View Entry</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(entry)}
-                        className="mr-1 hover:text-primary"
-                        disabled={isLoadingDetailsForEdit}
-                        title="Edit Entry"
-                      >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Entry</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete Entry</span>
-                          </Button>
-                        </AlertDialogTrigger>
+                      <PermissionGate permissions={["financial.food_costs.read"]}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleView(entry)}
+                          className="mr-1 hover:text-blue-600"
+                          disabled={isLoadingDetailsForView}
+                          title="View Details"
+                        >
+                          <Eye className="h-4 w-4" />
+                          <span className="sr-only">View Entry</span>
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate permissions={["financial.food_costs.update"]}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(entry)}
+                          className="mr-1 hover:text-primary"
+                          disabled={isLoadingDetailsForEdit}
+                          title="Edit Entry"
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit Entry</span>
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate permissions={["financial.food_costs.delete"]}>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete Entry</span>
+                            </Button>
+                          </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle className="flex items-center">
@@ -815,7 +827,8 @@ export default function FoodCostEntryListClient() {
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
-                      </AlertDialog>
+                        </AlertDialog>
+                      </PermissionGate>
                     </TableCell>
                   </TableRow>
                 ))}

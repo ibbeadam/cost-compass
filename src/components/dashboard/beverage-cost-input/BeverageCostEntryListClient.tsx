@@ -75,6 +75,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { normalizeDate } from "@/lib/utils";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 // Excel import interface for beverage cost entries
 interface ExcelBeverageCostRow {
@@ -579,24 +580,28 @@ export default function BeverageCostEntryListClient() {
             onChange={handleFileUpload}
             className="hidden"
           />
-          <Button 
-            onClick={() => fileInputRef.current?.click()} 
-            variant="outline"
-            size="sm"
-            className="text-xs sm:text-sm"
-            disabled={isLoadingOutlets || isLoadingCategories}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Import Excel
-          </Button>
-          <Button
-            onClick={handleAddNew}
-            disabled={isLoadingOutlets || isLoadingCategories}
-            size="sm"
-            className="text-xs sm:text-sm"
-          >
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
-          </Button>
+          <PermissionGate permissions={["financial.beverage_costs.create"]}>
+            <Button 
+              onClick={() => fileInputRef.current?.click()} 
+              variant="outline"
+              size="sm"
+              className="text-xs sm:text-sm"
+              disabled={isLoadingOutlets || isLoadingCategories}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import Excel
+            </Button>
+          </PermissionGate>
+          <PermissionGate permissions={["financial.beverage_costs.create"]}>
+            <Button
+              onClick={handleAddNew}
+              disabled={isLoadingOutlets || isLoadingCategories}
+              size="sm"
+              className="text-xs sm:text-sm"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Entry
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -690,56 +695,60 @@ export default function BeverageCostEntryListClient() {
                         <Eye className="h-4 w-4" />
                         <span className="sr-only">View Entry</span>
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(entry)}
-                        className="mr-2 hover:text-primary"
-                        disabled={isLoadingDetailsForEdit}
-                      >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Entry</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete Entry</span>
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="flex items-center">
-                              <AlertTriangle className="h-5 w-5 text-destructive mr-2" />
-                              Are you sure?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. This will
-                              permanently delete the beverage cost entry for{" "}
-                              {entry.date instanceof Date && isValid(entry.date)
-                                ? format(entry.date, "PPP")
-                                : "this date"}{" "}
-                              at{" "}
-                              {outlets.find((o) => o.id === entry.outletId)
-                                ?.name || "this outlet"}
-                              .
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(entry.id)}
-                              className="bg-destructive hover:bg-destructive/80 text-destructive-foreground"
+                      <PermissionGate permissions={["financial.beverage_costs.update"]}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(entry)}
+                          className="mr-2 hover:text-primary"
+                          disabled={isLoadingDetailsForEdit}
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit Entry</span>
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate permissions={["financial.beverage_costs.delete"]}>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:text-destructive"
                             >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete Entry</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center">
+                                <AlertTriangle className="h-5 w-5 text-destructive mr-2" />
+                                Are you sure?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will
+                                permanently delete the beverage cost entry for{" "}
+                                {entry.date instanceof Date && isValid(entry.date)
+                                  ? format(entry.date, "PPP")
+                                  : "this date"}{" "}
+                                at{" "}
+                                {outlets.find((o) => o.id === entry.outletId)
+                                  ?.name || "this outlet"}
+                                .
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(entry.id)}
+                                className="bg-destructive hover:bg-destructive/80 text-destructive-foreground"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </PermissionGate>
                     </TableCell>
                   </TableRow>
                 ))}

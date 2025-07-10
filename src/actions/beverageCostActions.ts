@@ -8,6 +8,7 @@ import { calculateAndUpdateDailyFinancialSummary } from "./dailyFinancialSummary
 import { getCurrentUser } from "@/lib/server-auth";
 import { normalizeDate } from "@/lib/utils";
 import { auditDataChange } from "@/lib/audit-middleware";
+import { PermissionService } from "@/lib/permission-utils";
 
 interface BeverageCostItemInput {
   id?: number; 
@@ -22,6 +23,11 @@ export async function getAllBeverageCostEntriesAction() {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.beverage_costs.read")) {
+      throw new Error("Access denied. Insufficient permissions to view beverage cost entries.");
     }
 
     let whereClause = {};
@@ -72,6 +78,16 @@ export async function getAllBeverageCostEntriesAction() {
 
 export async function getBeverageCostEntryByIdAction(id: number) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.beverage_costs.read")) {
+      throw new Error("Access denied. Insufficient permissions to view beverage cost entries.");
+    }
+
     console.log("Fetching beverage cost entry with ID:", id);
     
     const entry = await prisma.beverageCostEntry.findUnique({
@@ -134,6 +150,11 @@ export async function createBeverageCostEntryAction(entryData: {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission
+    if (!PermissionService.hasPermission(user, "financial.beverage_costs.create")) {
+      throw new Error("Access denied. Insufficient permissions to create beverage cost entries.");
     }
 
     // Get property ID from outlet if not provided
@@ -242,6 +263,11 @@ export async function updateBeverageCostEntryAction(
       throw new Error("Authentication required");
     }
 
+    // Check update permission
+    if (!PermissionService.hasPermission(user, "financial.beverage_costs.update")) {
+      throw new Error("Access denied. Insufficient permissions to update beverage cost entries.");
+    }
+
     // Get current entry to know the date for recalculation
     const currentEntry = await prisma.beverageCostEntry.findUnique({
       where: { id: Number(id) },
@@ -323,6 +349,16 @@ export async function updateBeverageCostEntryAction(
 
 export async function deleteBeverageCostEntryAction(id: number) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Check delete permission
+    if (!PermissionService.hasPermission(user, "financial.beverage_costs.delete")) {
+      throw new Error("Access denied. Insufficient permissions to delete beverage cost entries.");
+    }
+
     console.log("Delete beverage cost action called with ID:", id, "Type:", typeof id);
     
     // Get entry date for recalculation
@@ -346,12 +382,6 @@ export async function deleteBeverageCostEntryAction(id: number) {
       where: { beverageCostEntryId: Number(id) },
     });
     console.log("Deleted beverage cost details:", deleteDetailsResult);
-
-    // Get current user for audit logging
-    const user = await getCurrentUser();
-    if (!user) {
-      throw new Error("Authentication required");
-    }
 
     // Delete the main entry
     console.log("Deleting beverage cost entry with ID:", id);

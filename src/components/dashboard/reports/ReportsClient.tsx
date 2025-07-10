@@ -85,6 +85,7 @@ import CategoryPerformanceTrendsReport from "./CategoryPerformanceTrendsReport";
 import UserActivityAuditReport from "./UserActivityAuditReport";
 import CostVarianceAnalysisReport from "./CostVarianceAnalysisReport";
 import PredictiveAnalyticsReport from "./PredictiveAnalyticsReport";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 import {
   Tooltip,
   TooltipContent,
@@ -8095,23 +8096,25 @@ export default function ReportsClient() {
           )}
 
             <div className="min-w-[200px] flex items-end">
-              <Button
-                onClick={handleGenerateReport}
-                className="w-full"
-                disabled={isLoadingReport}
-              >
-              {isLoadingReport ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Filter className="mr-2 h-4 w-4" />
-                  Apply Filters
-                </>
-              )}
-              </Button>
+              <PermissionGate permissions={["reports.basic.read"]}>
+                <Button
+                  onClick={handleGenerateReport}
+                  className="w-full"
+                  disabled={isLoadingReport}
+                >
+                {isLoadingReport ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Filter className="mr-2 h-4 w-4" />
+                    Apply Filters
+                  </>
+                )}
+                </Button>
+              </PermissionGate>
             </div>
           </div>
         </CardContent>
@@ -8171,22 +8174,26 @@ export default function ReportsClient() {
                   </Button>
                 </>
               )}
-              <Button
-                variant="outline"
-                onClick={handleExportToExcel}
-                className="flex items-center gap-2"
-              >
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Export to Excel
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleExportToPDF}
-                className="flex items-center gap-2"
-              >
-                <FileText className="mr-2 h-4 w-4" />
-                Export to PDF
-              </Button>
+              <PermissionGate permissions={["reports.export"]}>
+                <Button
+                  variant="outline"
+                  onClick={handleExportToExcel}
+                  className="flex items-center gap-2"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Export to Excel
+                </Button>
+              </PermissionGate>
+              <PermissionGate permissions={["reports.export"]}>
+                <Button
+                  variant="outline"
+                  onClick={handleExportToPDF}
+                  className="flex items-center gap-2"
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Export to PDF
+                </Button>
+              </PermissionGate>
             </div>
             {/* Mini icon-only buttons for small screens */}
             <div className="flex md:hidden gap-2">

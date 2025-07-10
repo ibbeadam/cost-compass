@@ -8,6 +8,7 @@ import { calculateAndUpdateDailyFinancialSummary } from "./dailyFinancialSummary
 import { getCurrentUser } from "@/lib/server-auth";
 import { normalizeDate } from "@/lib/utils";
 import { auditDataChange } from "@/lib/audit-middleware";
+import { PermissionService } from "@/lib/permission-utils";
 
 interface FoodCostItemInput {
   id?: number; 
@@ -22,6 +23,11 @@ export async function getAllFoodCostEntriesAction() {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.food_costs.read")) {
+      throw new Error("Access denied. Insufficient permissions to view food cost entries.");
     }
 
     let whereClause = {};
@@ -72,6 +78,16 @@ export async function getAllFoodCostEntriesAction() {
 
 export async function getFoodCostEntryByIdAction(id: number) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.food_costs.read")) {
+      throw new Error("Access denied. Insufficient permissions to view food cost entries.");
+    }
+
     console.log("Fetching food cost entry with ID:", id);
     
     const entry = await prisma.foodCostEntry.findUnique({
@@ -134,6 +150,11 @@ export async function createFoodCostEntryAction(entryData: {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission
+    if (!PermissionService.hasPermission(user, "financial.food_costs.create")) {
+      throw new Error("Access denied. Insufficient permissions to create food cost entries.");
     }
 
     // Get property ID from outlet if not provided
@@ -242,6 +263,11 @@ export async function updateFoodCostEntryAction(
       throw new Error("Authentication required");
     }
 
+    // Check update permission
+    if (!PermissionService.hasPermission(user, "financial.food_costs.update")) {
+      throw new Error("Access denied. Insufficient permissions to update food cost entries.");
+    }
+
     // Get current entry to know the date for recalculation and for audit
     const currentEntry = await prisma.foodCostEntry.findUnique({
       where: { id: Number(id) },
@@ -334,6 +360,11 @@ export async function deleteFoodCostEntryAction(id: number) {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check delete permission
+    if (!PermissionService.hasPermission(user, "financial.food_costs.delete")) {
+      throw new Error("Access denied. Insufficient permissions to delete food cost entries.");
     }
 
     console.log("Delete action called with ID:", id, "Type:", typeof id);

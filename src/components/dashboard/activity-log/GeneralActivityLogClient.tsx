@@ -105,16 +105,12 @@ export default function GeneralActivityLogClient() {
         ...filters,
         page: currentPage,
         limit: itemsPerPage,
+        excludeActions: ["LOGIN", "LOGOUT"], // Exclude login/logout on server side
       });
       
-      // Filter out login/logout activities since they have their own dedicated tab
-      const filteredLogs = result.logs.filter(log => 
-        log.action !== "LOGIN" && log.action !== "LOGOUT"
-      );
-      
-      setLogs(filteredLogs);
-      setTotal(filteredLogs.length);
-      setTotalPages(Math.ceil(filteredLogs.length / itemsPerPage));
+      setLogs(result.logs);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
     } catch (error) {
       showToast.error((error as Error).message || "Failed to fetch activity logs");
     } finally {
@@ -163,7 +159,10 @@ export default function GeneralActivityLogClient() {
     }
 
     setFilters(newFilters);
-    setCurrentPage(1);
+    // Only reset to first page if filters actually changed
+    if (JSON.stringify(newFilters) !== JSON.stringify(filters)) {
+      setCurrentPage(1);
+    }
   }, [searchTerm, selectedAction, selectedResource, userId, propertyId, dateRange, itemsPerPage]);
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
@@ -381,7 +380,7 @@ export default function GeneralActivityLogClient() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
+              <div className="text-2xl font-bold truncate" title={stats.topActions[0]?.action || "None"}>
                 {stats.topActions[0]?.action || "None"}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -647,10 +646,11 @@ export default function GeneralActivityLogClient() {
                         <TableCell>
                           <Badge 
                             variant={getActionBadgeVariant(log.action)}
-                            className="flex items-center gap-1 w-fit"
+                            className="flex items-center gap-1 max-w-[200px]"
+                            title={log.action}
                           >
                             {getActionIcon(log.action)}
-                            {log.action}
+                            <span className="truncate">{log.action}</span>
                           </Badge>
                         </TableCell>
                         <TableCell>

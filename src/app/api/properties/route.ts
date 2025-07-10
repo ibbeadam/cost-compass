@@ -1,126 +1,82 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { getPropertiesAction, createPropertyAction } from "@/actions/propertyActions";
-import { getUserFromHeaders } from "@/middleware";
-import { PermissionService } from "@/lib/permission-utils";
+import { withServerPermissions, SecureApiContext } from "@/lib/permissions/server-middleware";
+import { PropertyDataFilter } from "@/lib/permissions/data-isolation";
 
 /**
  * GET /api/properties
  * Get all properties (filtered by user access)
  */
-export async function GET(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+async function handleGetProperties(request: NextRequest, context: SecureApiContext) {
+  // Get query parameters for filtering
+  const searchParams = request.nextUrl.searchParams;
+  const filters = {
+    isActive: searchParams.get('isActive') === 'true' ? true : 
+              searchParams.get('isActive') === 'false' ? false : undefined,
+    propertyType: searchParams.get('propertyType') || undefined,
+    searchTerm: searchParams.get('search') || undefined,
+  };
 
-    // Get user context from middleware headers
-    const { userId, role } = getUserFromHeaders(request);
-    
-    // Get query parameters for filtering
-    const searchParams = request.nextUrl.searchParams;
-    const filters = {
-      isActive: searchParams.get('isActive') === 'true' ? true : 
-                searchParams.get('isActive') === 'false' ? false : undefined,
-      propertyType: searchParams.get('propertyType') || undefined,
-      searchTerm: searchParams.get('search') || undefined,
-    };
+  // Apply property-level data filtering
+  const propertyFilter = await PropertyDataFilter.properties(context.userId, 'read_only');
+  
+  // Get properties with security filtering
+  const properties = await getPropertiesAction({
+    ...filters,
+    ...propertyFilter // This ensures users only see accessible properties
+  });
 
-    // Check if user has permission to view properties
-    const user = {
-      id: parseInt(session.user.id),
-      email: session.user.email,
-      name: session.user.name,
-      role: session.user.role,
-      department: session.user.department,
-      phoneNumber: session.user.phoneNumber,
-      isActive: true,
-      permissions: session.user.permissions || [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+  // Log the access for audit purposes
+  await context.auditLog('VIEW_PROPERTIES', 'properties', {
+    filterCriteria: filters,
+    resultCount: properties.length
+  });
 
-    const canViewProperties = PermissionService.hasAnyPermission(user, [
-      'properties.read',
-      'properties.view_all',
-      'properties.view_own'
-    ]);
-
-    if (!canViewProperties) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-    }
-
-    // Get properties based on user permissions
-    let properties;
-    
-    if (PermissionService.hasPermission(user, 'properties.view_all') || 
-        PermissionService.isSuperAdmin(user)) {
-      // User can see all properties
-      properties = await getPropertiesAction(filters);
-    } else {
-      // User can only see their accessible properties
-      // TODO: Implement user-specific property filtering when database is updated
-      properties = await getPropertiesAction({
-        ...filters,
-        // ownerId: userId, // Uncomment when schema is updated
-      });
-    }
-
-    return NextResponse.json({ properties });
-  } catch (error) {
-    console.error("Error fetching properties:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch properties" },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json({ 
+    properties,
+    total: properties.length,
+    accessibleProperties: context.accessibleProperties.length
+  });
 }
+
+export const GET = withServerPermissions(handleGetProperties, {
+  permissions: ['properties.read', 'properties.view_all', 'properties.view_own'],
+  anyPermission: true, // User needs any of the above permissions
+  auditAction: 'VIEW_PROPERTIES',
+  auditResource: 'properties',
+  logRequest: true
+});
 
 /**
  * POST /api/properties
  * Create a new property
  */
-export async function POST(request: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions);
-    
-    if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+async function handleCreateProperty(request: NextRequest, context: SecureApiContext) {
+  const body = await request.json();
+  
+  // Validate required fields
+  if (!body.name || !body.propertyCode || !body.propertyType) {
+    return NextResponse.json(
+      { 
+        error: "Validation failed",
+        details: "Missing required fields: name, propertyCode, propertyType"
+      },
+      { status: 400 }
+    );
+  }
 
-    // Check if user has permission to create properties
-    const user = {
-      id: parseInt(session.user.id),
-      email: session.user.email,
-      name: session.user.name,
-      role: session.user.role,
-      department: session.user.department,
-      phoneNumber: session.user.phoneNumber,
-      isActive: true,
-      permissions: session.user.permissions || [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const canCreateProperties = PermissionService.hasPermission(user, 'properties.create');
-
-    if (!canCreateProperties) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
-    }
-
-    const body = await request.json();
-    
-    // Validate required fields
-    if (!body.name || !body.propertyCode || !body.propertyType) {
+  // Validate owner assignment (only super admins can assign other owners)
+  if (body.ownerId && body.ownerId !== context.userId) {
+    const canAssignOwner = await context.canAccess('properties', 'assign_owner');
+    if (!canAssignOwner) {
       return NextResponse.json(
-        { error: "Missing required fields: name, propertyCode, propertyType" },
-        { status: 400 }
+        { error: "Cannot assign property to another owner" },
+        { status: 403 }
       );
     }
+  }
 
+  try {
     // Create the property
     const property = await createPropertyAction({
       name: body.name,
@@ -133,13 +89,32 @@ export async function POST(request: NextRequest) {
       timeZone: body.timeZone,
       currency: body.currency,
       logoUrl: body.logoUrl,
-      ownerId: body.ownerId || parseInt(session.user.id), // Default to current user as owner
+      ownerId: body.ownerId || context.userId, // Default to current user as owner
       managerId: body.managerId,
     });
 
+    // Log the creation
+    await context.auditLog('CREATE_PROPERTY', 'property', {
+      propertyId: property.id,
+      propertyCode: body.propertyCode,
+      propertyName: body.name,
+      ownerId: body.ownerId || context.userId
+    });
+
     return NextResponse.json({ property }, { status: 201 });
+    
   } catch (error) {
     console.error("Error creating property:", error);
+    
+    // Log the failed attempt
+    await context.auditLog('CREATE_PROPERTY_FAILED', 'property', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      attemptedData: {
+        name: body.name,
+        propertyCode: body.propertyCode,
+        propertyType: body.propertyType
+      }
+    });
     
     if (error instanceof Error && error.message.includes("already exists")) {
       return NextResponse.json(
@@ -154,3 +129,14 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const POST = withServerPermissions(handleCreateProperty, {
+  permissions: ['properties.create'],
+  rateLimit: {
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 10, // Max 10 property creations per minute
+  },
+  auditAction: 'CREATE_PROPERTY',
+  auditResource: 'property',
+  logRequest: true
+});

@@ -16,6 +16,7 @@ import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationToastContainer } from "@/components/notifications/NotificationToast";
 import { usePathname } from "next/navigation"; // Added
 import { useEffect, useState } from "react"; // Added for isMounted pattern
+import "@/lib/startup"; // Initialize application systems
 
 // export const metadata: Metadata = { // Cannot export metadata from a Client Component
 //   title: 'Cost Compass',

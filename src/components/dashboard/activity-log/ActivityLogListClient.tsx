@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { 
-  Activity,
-  User,
-  Shield,
-  Settings
-} from "lucide-react";
+import { Activity, User, Shield, Settings } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,11 +24,11 @@ export default function ActivityLogListClient() {
             User Activity
           </TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="general" className="mt-6">
           <GeneralActivityLogClient />
         </TabsContent>
-        
+
         <TabsContent value="user" className="mt-6">
           <UserActivityLogClient />
         </TabsContent>

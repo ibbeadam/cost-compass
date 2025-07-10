@@ -85,6 +85,15 @@ model User {
   grantedPermissions             UserPermission[]        @relation("GrantedBy")
   userPermissions                UserPermission[]
   createdCurrencies              Currency[]              @relation("CurrencyCreator")
+  delegatedPermissions           PermissionDelegation[]  @relation("DelegatedBy")
+  receivedDelegations            PermissionDelegation[]  @relation("DelegatedTo")
+  revokedDelegations             PermissionDelegation[]  @relation("RevokedBy")
+  createdTemplates               PermissionTemplate[]
+  createdPermissionGroups        PermissionGroup[]
+  createdUserGroups              UserGroup[]
+  groupMemberships               UserGroupMembership[]
+  addedGroupMemberships          UserGroupMembership[]   @relation("GroupMembershipAddedBy")
+  initiatedBulkOperations        BulkOperation[]
 
   @@map("users")
 }
@@ -105,6 +114,7 @@ model Property {
   isActive                Boolean                 @default(true) @map("is_active")
   ownerId                 Int?                    @map("owner_id")
   managerId               Int?                    @map("manager_id")
+  parentPropertyId        Int?                    @map("parent_property_id")
   createdAt               DateTime                @default(now()) @map("created_at")
   updatedAt               DateTime                @updatedAt @map("updated_at")
   beverageCostEntries     BeverageCostEntry[]
@@ -113,13 +123,17 @@ model Property {
   outlets                 Outlet[]
   manager                 User?                   @relation("PropertyManager", fields: [managerId], references: [id])
   owner                   User?                   @relation("PropertyOwner", fields: [ownerId], references: [id])
+  parentProperty          Property?               @relation("PropertyHierarchy", fields: [parentPropertyId], references: [id])
+  childProperties         Property[]              @relation("PropertyHierarchy")
   propertyAccess          PropertyAccess[]
+  permissionDelegations   PermissionDelegation[]
 
   @@index([ownerId])
   @@index([managerId])
   @@index([propertyType])
   @@index([isActive])
   @@index([currencyId])
+  @@index([parentPropertyId])
   @@map("properties")
 }
 
@@ -452,4 +466,172 @@ model Currency {
   @@index([isActive])
   @@index([isDefault])
   @@map("currencies")
+}
+
+// Phase 3: Advanced Permission Management Models
+
+model PermissionDelegation {
+  id                  String    @id @default(cuid())
+  delegatedByUserId   Int       @map("delegated_by_user_id")
+  delegatedToUserId   Int       @map("delegated_to_user_id")
+  propertyId          Int?      @map("property_id")
+  permissions         Json      @default("[]")
+  conditions          Json?
+  reason              String?
+  isActive            Boolean   @default(true) @map("is_active")
+  delegatedAt         DateTime  @default(now()) @map("delegated_at")
+  expiresAt           DateTime? @map("expires_at")
+  revokedAt           DateTime? @map("revoked_at")
+  revokedBy           Int?      @map("revoked_by")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  delegatedByUser     User      @relation("DelegatedBy", fields: [delegatedByUserId], references: [id], onDelete: Cascade)
+  delegatedToUser     User      @relation("DelegatedTo", fields: [delegatedToUserId], references: [id], onDelete: Cascade)
+  property            Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  revokedByUser       User?     @relation("RevokedBy", fields: [revokedBy], references: [id])
+
+  @@unique([delegatedByUserId, delegatedToUserId, propertyId], name: "unique_active_delegation")
+  @@index([delegatedToUserId])
+  @@index([propertyId])
+  @@index([isActive])
+  @@index([expiresAt])
+  @@map("permission_delegations")
+}
+
+model PermissionTemplate {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  type        PermissionTemplateType
+  permissions Json      @default("[]")
+  conditions  Json?
+  isActive    Boolean   @default(true) @map("is_active")
+  createdBy   Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  creator     User      @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([type])
+  @@index([isActive])
+  @@map("permission_templates")
+}
+
+model PermissionGroup {
+  id              String            @id @default(cuid())
+  name            String            @unique
+  description     String?
+  parentGroupId   String?           @map("parent_group_id")
+  properties      Json              @default("[]")
+  createdBy       Int               @map("created_by")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  parentGroup     PermissionGroup?  @relation("GroupHierarchy", fields: [parentGroupId], references: [id])
+  childGroups     PermissionGroup[] @relation("GroupHierarchy")
+  creator         User              @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([parentGroupId])
+  @@map("permission_groups")
+}
+
+model UserGroup {
+  id              String                @id @default(cuid())
+  name            String                @unique
+  description     String?
+  type            UserGroupType
+  parentGroupId   String?               @map("parent_group_id")
+  rules           Json                  @default("{}")
+  createdBy       Int                   @map("created_by")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+
+  parentGroup     UserGroup?            @relation("UserGroupHierarchy", fields: [parentGroupId], references: [id])
+  childGroups     UserGroup[]           @relation("UserGroupHierarchy")
+  creator         User                  @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  memberships     UserGroupMembership[]
+
+  @@index([type])
+  @@index([parentGroupId])
+  @@map("user_groups")
+}
+
+model UserGroupMembership {
+  id        String    @id @default(cuid())
+  userId    Int       @map("user_id")
+  groupId   String    @map("group_id")
+  role      String?
+  joinedAt  DateTime  @default(now()) @map("joined_at")
+  addedBy   Int       @map("added_by")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group     UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  addedByUser User    @relation("GroupMembershipAddedBy", fields: [addedBy], references: [id])
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("user_group_memberships")
+}
+
+model BulkOperation {
+  id           String           @id @default(cuid())
+  type         BulkOperationType
+  targetType   BulkTargetType
+  targetIds    Json             @default("[]")
+  operation    Json             @default("{}")
+  status       BulkOperationStatus @default(pending)
+  progress     Int              @default(0)
+  totalItems   Int              @default(0) @map("total_items")
+  results      Json?            @default("{}")
+  errors       Json?            @default("[]")
+  initiatedBy  Int              @map("initiated_by")
+  initiatedAt  DateTime         @default(now()) @map("initiated_at")
+  completedAt  DateTime?        @map("completed_at")
+
+  initiator    User             @relation(fields: [initiatedBy], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([initiatedBy])
+  @@index([type])
+  @@map("bulk_operations")
+}
+
+// Enums for Phase 3 models
+
+enum PermissionTemplateType {
+  role_template
+  property_template
+  department_template
+}
+
+enum UserGroupType {
+  department
+  team
+  role_group
+  property_group
+}
+
+enum BulkOperationType {
+  user_creation
+  permission_grant
+  permission_revoke
+  role_assignment
+  group_operation
+}
+
+enum BulkTargetType {
+  users
+  permissions
+  properties
+  groups
+}
+
+enum BulkOperationStatus {
+  pending
+  in_progress
+  completed
+  failed
+  cancelled
 }

@@ -1,28 +1,34 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { 
-  PlusCircle, 
-  Edit, 
-  Trash2, 
-  AlertTriangle, 
-  Building, 
-  Shield, 
-  Eye, 
-  EyeOff, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  Plus, 
+import {
+  PlusCircle,
+  Edit,
+  Trash2,
+  AlertTriangle,
+  Building,
+  Shield,
+  Eye,
+  EyeOff,
+  Mail,
+  Phone,
+  MapPin,
+  Plus,
   X,
   Users,
   Store,
   Upload,
-  ImageIcon
+  ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 
-import type { Property, CreatePropertyData, UpdatePropertyData, PropertyType, User } from "@/types";
+import type {
+  Property,
+  CreatePropertyData,
+  UpdatePropertyData,
+  PropertyType,
+  User,
+} from "@/types";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -63,43 +69,64 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { showToast } from "@/lib/toast";
 // Using API routes instead of server actions for better auth handling
-// import { 
-//   getPropertiesAction, 
-//   createPropertyAction, 
-//   updatePropertyAction, 
-//   deletePropertyAction 
+// import {
+//   getPropertiesAction,
+//   createPropertyAction,
+//   updatePropertyAction,
+//   deletePropertyAction
 // } from "@/actions/propertyActions";
 import { getAllUsersAction } from "@/actions/prismaUserActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { CURRENCIES, DEFAULT_CURRENCY, getCurrencyDisplayName, type Currency } from "@/lib/currency";
+import {
+  CURRENCIES,
+  DEFAULT_CURRENCY,
+  getCurrencyDisplayName,
+  type Currency,
+} from "@/lib/currency";
 
 // Helper functions moved outside components to be accessible by all
 const getPropertyTypeBadgeVariant = (type: PropertyType) => {
   switch (type) {
-    case 'hotel': return 'default';
-    case 'restaurant': return 'secondary';
-    case 'cafe': return 'outline';
-    case 'bar': return 'destructive';
-    case 'catering': return 'default';
-    case 'franchise': return 'secondary';
-    case 'chain': return 'outline';
-    default: return 'outline';
+    case "hotel":
+      return "default";
+    case "restaurant":
+      return "secondary";
+    case "cafe":
+      return "outline";
+    case "bar":
+      return "destructive";
+    case "catering":
+      return "default";
+    case "franchise":
+      return "secondary";
+    case "chain":
+      return "outline";
+    default:
+      return "outline";
   }
 };
 
 const getPropertyTypeDisplayName = (type: PropertyType) => {
   switch (type) {
-    case 'hotel': return 'Hotel';
-    case 'restaurant': return 'Restaurant';
-    case 'cafe': return 'Cafe';
-    case 'bar': return 'Bar';
-    case 'catering': return 'Catering';
-    case 'franchise': return 'Franchise';
-    case 'chain': return 'Chain';
-    default: return type;
+    case "hotel":
+      return "Hotel";
+    case "restaurant":
+      return "Restaurant";
+    case "cafe":
+      return "Cafe";
+    case "bar":
+      return "Bar";
+    case "catering":
+      return "Catering";
+    case "franchise":
+      return "Franchise";
+    case "chain":
+      return "Chain";
+    default:
+      return type;
   }
 };
 
@@ -107,7 +134,7 @@ export default function PropertyManagementClient() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [currencies, setCurrencies] = useState<Currency[]>(CURRENCIES); // Start with fallback
-  const [currencyMap, setCurrencyMap] = useState<{[key: string]: number}>({});
+  const [currencyMap, setCurrencyMap] = useState<{ [key: string]: number }>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
@@ -120,33 +147,34 @@ export default function PropertyManagementClient() {
   const fetchProperties = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [propertiesResponse, usersResponse, currenciesResponse] = await Promise.all([
-        fetch('/api/properties'),
-        getAllUsersAction(),
-        fetch('/api/currencies/manage')
-      ]);
-      
+      const [propertiesResponse, usersResponse, currenciesResponse] =
+        await Promise.all([
+          fetch("/api/properties"),
+          getAllUsersAction(),
+          fetch("/api/currencies/manage"),
+        ]);
+
       if (!propertiesResponse.ok) {
-        throw new Error('Failed to fetch properties');
+        throw new Error("Failed to fetch properties");
       }
-      
+
       if (!currenciesResponse.ok) {
-        console.warn('Failed to fetch currencies, using fallback');
+        console.warn("Failed to fetch currencies, using fallback");
       }
-      
+
       const { properties } = await propertiesResponse.json();
-      const currenciesData = currenciesResponse.ok 
-        ? (await currenciesResponse.json()).currencies 
+      const currenciesData = currenciesResponse.ok
+        ? (await currenciesResponse.json()).currencies
         : CURRENCIES; // Fallback to hardcoded currencies
-      
+
       // Create a mapping from currency code to ID
-      const codeToIdMap: {[key: string]: number} = {};
+      const codeToIdMap: { [key: string]: number } = {};
       if (currenciesResponse.ok) {
         currenciesData.forEach((currency: any) => {
           codeToIdMap[currency.code] = currency.id;
         });
       }
-      
+
       setProperties(properties);
       setUsers(usersResponse);
       setCurrencies(currenciesData);
@@ -180,14 +208,14 @@ export default function PropertyManagementClient() {
   const handleDelete = async (propertyId: number) => {
     try {
       const response = await fetch(`/api/properties/${propertyId}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete property');
+        throw new Error(errorData.error || "Failed to delete property");
       }
-      
+
       fetchProperties();
       showToast.success("The property has been deleted successfully.");
     } catch (error) {
@@ -195,38 +223,43 @@ export default function PropertyManagementClient() {
     }
   };
 
-  const handleSubmit = async (formData: CreatePropertyData | UpdatePropertyData, logoFile?: File | null) => {
+  const handleSubmit = async (
+    formData: CreatePropertyData | UpdatePropertyData,
+    logoFile?: File | null
+  ) => {
     setIsSubmitting(true);
     let property: Property | null = null;
     let propertyCreated = false;
-    
+
     // Clean up formData to remove undefined values
     const cleanedFormData = Object.fromEntries(
-      Object.entries(formData).filter(([_, value]) => value !== undefined && value !== "")
+      Object.entries(formData).filter(
+        ([_, value]) => value !== undefined && value !== ""
+      )
     );
-    
+
     try {
       if (editingProperty) {
         // Update existing property
-        console.log("Updating property:", { 
-          id: editingProperty.id, 
+        console.log("Updating property:", {
+          id: editingProperty.id,
           originalFormData: formData,
-          cleanedFormData: cleanedFormData
+          cleanedFormData: cleanedFormData,
         });
-        
+
         const response = await fetch(`/api/properties/${editingProperty.id}`, {
-          method: 'PUT',
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(cleanedFormData),
         });
-        
-        console.log("Update response:", { 
-          status: response.status, 
-          ok: response.ok 
+
+        console.log("Update response:", {
+          status: response.status,
+          ok: response.ok,
         });
-        
+
         if (!response.ok) {
           let errorData;
           try {
@@ -235,16 +268,20 @@ export default function PropertyManagementClient() {
             console.error("Failed to parse error response JSON:", jsonError);
             const responseText = await response.text();
             console.error("Raw response:", responseText);
-            throw new Error(`Server error (${response.status}): ${responseText || 'Unknown error'}`);
+            throw new Error(
+              `Server error (${response.status}): ${
+                responseText || "Unknown error"
+              }`
+            );
           }
-          
+
           console.error("Update failed:", {
             status: response.status,
-            errorData: errorData
+            errorData: errorData,
           });
-          throw new Error(errorData.error || 'Failed to update property');
+          throw new Error(errorData.error || "Failed to update property");
         }
-        
+
         let result;
         try {
           result = await response.json();
@@ -252,12 +289,14 @@ export default function PropertyManagementClient() {
           console.error("Failed to parse success response JSON:", jsonError);
           const responseText = await response.text();
           console.error("Raw success response:", responseText);
-          throw new Error(`Server returned invalid JSON response: ${responseText}`);
+          throw new Error(
+            `Server returned invalid JSON response: ${responseText}`
+          );
         }
-        
+
         property = result.property;
         propertyCreated = true;
-        
+
         // Upload logo if there's a new file
         if (logoFile) {
           try {
@@ -266,15 +305,24 @@ export default function PropertyManagementClient() {
             await fetchProperties();
             // Update editingProperty with fresh data to show the logo in the edit form
             if (editingProperty) {
-              const updatedProperties = await fetch('/api/properties').then(res => res.json());
-              const updatedProperty = updatedProperties.properties.find((p: Property) => p.id === editingProperty.id);
+              const updatedProperties = await fetch("/api/properties").then(
+                (res) => res.json()
+              );
+              const updatedProperty = updatedProperties.properties.find(
+                (p: Property) => p.id === editingProperty.id
+              );
               if (updatedProperty) {
                 setEditingProperty(updatedProperty);
               }
             }
-            showToast.success("Property and logo have been updated successfully.");
+            showToast.success(
+              "Property and logo have been updated successfully."
+            );
           } catch (logoError) {
-            showToast.warning("Property was updated, but logo upload failed: " + (logoError as Error).message);
+            showToast.warning(
+              "Property was updated, but logo upload failed: " +
+                (logoError as Error).message
+            );
           }
         } else {
           showToast.success("Property has been updated successfully.");
@@ -283,67 +331,89 @@ export default function PropertyManagementClient() {
         // Create new property
         console.log("Creating property:", {
           originalFormData: formData,
-          cleanedFormData: cleanedFormData
+          cleanedFormData: cleanedFormData,
         });
-        
-        const response = await fetch('/api/properties', {
-          method: 'POST',
+
+        const response = await fetch("/api/properties", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
           body: JSON.stringify(cleanedFormData),
         });
-        
+
         if (!response.ok) {
           let errorData;
           try {
             errorData = await response.json();
           } catch (jsonError) {
-            console.error("Failed to parse create error response JSON:", jsonError);
+            console.error(
+              "Failed to parse create error response JSON:",
+              jsonError
+            );
             const responseText = await response.text();
             console.error("Raw create error response:", responseText);
-            throw new Error(`Server error (${response.status}): ${responseText || 'Unknown error'}`);
+            throw new Error(
+              `Server error (${response.status}): ${
+                responseText || "Unknown error"
+              }`
+            );
           }
-          throw new Error(errorData.error || 'Failed to create property');
+          throw new Error(errorData.error || "Failed to create property");
         }
-        
+
         let result;
         try {
           result = await response.json();
         } catch (jsonError) {
-          console.error("Failed to parse create success response JSON:", jsonError);
+          console.error(
+            "Failed to parse create success response JSON:",
+            jsonError
+          );
           const responseText = await response.text();
           console.error("Raw create success response:", responseText);
-          throw new Error(`Server returned invalid JSON response: ${responseText}`);
+          throw new Error(
+            `Server returned invalid JSON response: ${responseText}`
+          );
         }
-        
+
         property = result.property;
         propertyCreated = true;
-        
+
         // Upload logo if there's a file
         if (logoFile) {
           try {
             await handleLogoUpload(property.id, logoFile);
             // Refresh properties after successful logo upload
             await fetchProperties();
-            showToast.success("Property and logo have been created successfully.");
+            showToast.success(
+              "Property and logo have been created successfully."
+            );
           } catch (logoError) {
-            showToast.warning("Property was created, but logo upload failed: " + (logoError as Error).message);
+            showToast.warning(
+              "Property was created, but logo upload failed: " +
+                (logoError as Error).message
+            );
           }
         } else {
           showToast.success("Property has been created successfully.");
         }
       }
-      
+
       setIsFormOpen(false);
       setEditingProperty(null);
       fetchProperties();
     } catch (error) {
       if (propertyCreated && property) {
-        showToast.error("Property was saved but there was an issue with the logo upload: " + (error as Error).message);
+        showToast.error(
+          "Property was saved but there was an issue with the logo upload: " +
+            (error as Error).message
+        );
       } else {
         const action = editingProperty ? "update" : "create";
-        showToast.error(`Failed to ${action} property: ` + (error as Error).message);
+        showToast.error(
+          `Failed to ${action} property: ` + (error as Error).message
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -354,42 +424,57 @@ export default function PropertyManagementClient() {
     try {
       // Validate file before upload
       if (!file || !(file instanceof File)) {
-        throw new Error('Invalid file object provided');
+        throw new Error("Invalid file object provided");
       }
-      
+
       if (file.size === 0) {
-        throw new Error('File is empty');
+        throw new Error("File is empty");
       }
-      
+
       if (file.size > 5 * 1024 * 1024) {
-        throw new Error('File size exceeds 5MB limit');
+        throw new Error("File size exceeds 5MB limit");
       }
-      
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+      const allowedTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+      ];
       if (!allowedTypes.includes(file.type)) {
-        throw new Error(`File type ${file.type} not allowed. Allowed types: ${allowedTypes.join(', ')}`);
+        throw new Error(
+          `File type ${
+            file.type
+          } not allowed. Allowed types: ${allowedTypes.join(", ")}`
+        );
       }
-      
+
       console.log("Starting logo upload:", {
         propertyId,
         fileName: file.name,
         fileSize: file.size,
         fileType: file.type,
-        lastModified: file.lastModified
+        lastModified: file.lastModified,
       });
-      
+
       const formData = new FormData();
-      formData.append('logo', file);
-      formData.append('propertyId', propertyId.toString());
-      
-      console.log("FormData created, entries:", Array.from(formData.entries()).map(([key, value]) => [key, value instanceof File ? `File: ${value.name}` : value]));
+      formData.append("logo", file);
+      formData.append("propertyId", propertyId.toString());
+
+      console.log(
+        "FormData created, entries:",
+        Array.from(formData.entries()).map(([key, value]) => [
+          key,
+          value instanceof File ? `File: ${value.name}` : value,
+        ])
+      );
 
       console.log("Making fetch request to /api/property/logo...");
 
       let response;
       try {
-        response = await fetch('/api/property/logo', {
-          method: 'POST',
+        response = await fetch("/api/property/logo", {
+          method: "POST",
           body: formData,
         });
         console.log("Fetch completed successfully");
@@ -397,7 +482,7 @@ export default function PropertyManagementClient() {
         console.error("Fetch request failed:", {
           error: fetchError.message,
           stack: fetchError.stack,
-          type: fetchError.constructor.name
+          type: fetchError.constructor.name,
         });
         throw new Error(`Network error: ${fetchError.message}`);
       }
@@ -405,7 +490,7 @@ export default function PropertyManagementClient() {
       console.log("Received response object:", response);
       console.log("Response constructor:", response.constructor.name);
       console.log("Response type:", typeof response);
-      
+
       // Try to extract all possible information from the response
       const responseInfo = {
         status: response.status,
@@ -415,7 +500,7 @@ export default function PropertyManagementClient() {
         type: response.type,
         url: response.url,
         headers: {},
-        headersIterable: response.headers ? 'yes' : 'no'
+        headersIterable: response.headers ? "yes" : "no",
       };
 
       // Safely extract headers
@@ -423,34 +508,34 @@ export default function PropertyManagementClient() {
         responseInfo.headers = Object.fromEntries(response.headers.entries());
       } catch (headerError) {
         console.error("Failed to read headers:", headerError);
-        responseInfo.headers = { error: 'Failed to read headers' };
+        responseInfo.headers = { error: "Failed to read headers" };
       }
 
       console.log("Logo upload response details:", responseInfo);
 
       if (!response.ok) {
         let errorData;
-        let responseText = '';
-        
+        let responseText = "";
+
         try {
           console.log("Attempting to read response.text()...");
-          
+
           // Check if response has a body to read
           if (!response.body) {
             console.warn("Response has no body");
-            responseText = '';
+            responseText = "";
           } else {
             console.log("Response body exists, reading text...");
             responseText = await response.text();
           }
-          
+
           console.log("Raw error response text:", {
             text: responseText,
             length: responseText.length,
             trimmed: responseText.trim(),
-            type: typeof responseText
+            type: typeof responseText,
           });
-          
+
           // Try to parse as JSON
           if (responseText.trim()) {
             console.log("Attempting to parse response as JSON...");
@@ -458,51 +543,63 @@ export default function PropertyManagementClient() {
             console.log("Parsed error data:", errorData);
           } else {
             console.log("Response text is empty, creating default error");
-            errorData = { error: 'Empty response from server' };
+            errorData = { error: "Empty response from server" };
           }
         } catch (jsonError) {
           console.error("Failed to parse logo error response JSON:", {
             error: jsonError.message,
             responseText: responseText,
-            responseLength: responseText.length
+            responseLength: responseText.length,
           });
-          throw new Error(`Server error (${response.status}): ${responseText || 'Empty response'}`);
+          throw new Error(
+            `Server error (${response.status}): ${
+              responseText || "Empty response"
+            }`
+          );
         }
-        
+
         console.error("Logo upload failed - Full analysis:", {
           responseInfo: responseInfo,
           errorData: errorData,
           responseText: responseText,
           errorDataType: typeof errorData,
-          errorDataKeys: errorData ? Object.keys(errorData) : 'No keys'
+          errorDataKeys: errorData ? Object.keys(errorData) : "No keys",
         });
-        
-        const errorMessage = errorData?.error || errorData?.details || errorData?.message || 'Failed to upload logo';
+
+        const errorMessage =
+          errorData?.error ||
+          errorData?.details ||
+          errorData?.message ||
+          "Failed to upload logo";
         throw new Error(errorMessage);
       }
 
       let result;
-      let responseText = '';
-      
+      let responseText = "";
+
       try {
         responseText = await response.text();
         console.log("Raw success response text:", responseText);
-        
+
         if (responseText.trim()) {
           result = JSON.parse(responseText);
         } else {
-          throw new Error('Empty success response from server');
+          throw new Error("Empty success response from server");
         }
       } catch (jsonError) {
         console.error("Failed to parse logo success response JSON:", jsonError);
         console.error("Raw logo success response:", responseText);
-        throw new Error(`Server returned invalid JSON response: ${responseText || 'Empty response'}`);
+        throw new Error(
+          `Server returned invalid JSON response: ${
+            responseText || "Empty response"
+          }`
+        );
       }
 
       console.log("Logo upload successful:", result.logoUrl);
       return result.logoUrl;
     } catch (error) {
-      console.error('Error uploading logo:', error);
+      console.error("Error uploading logo:", error);
       // Don't show toast here - let the caller handle the error display
       throw error;
     }
@@ -522,8 +619,12 @@ export default function PropertyManagementClient() {
     currentPage * itemsPerPage
   );
 
-  const startIndexDisplay = totalProperties > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
-  const endIndexDisplay = totalProperties > 0 ? Math.min(currentPage * itemsPerPage, totalProperties) : 0;
+  const startIndexDisplay =
+    totalProperties > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
+  const endIndexDisplay =
+    totalProperties > 0
+      ? Math.min(currentPage * itemsPerPage, totalProperties)
+      : 0;
 
   const renderPageNumbers = () => {
     const pageNumbers = [];
@@ -575,7 +676,10 @@ export default function PropertyManagementClient() {
               <thead className="[&_tr]:border-b">
                 <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
                   {[...Array(7)].map((_, i) => (
-                    <th key={i} className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    <th
+                      key={i}
+                      className="h-12 px-4 text-left align-middle font-medium text-muted-foreground"
+                    >
                       <Skeleton className="h-6 w-full bg-muted/50" />
                     </th>
                   ))}
@@ -583,7 +687,10 @@ export default function PropertyManagementClient() {
               </thead>
               <tbody>
                 {[...Array(itemsPerPage)].map((_, i) => (
-                  <tr key={i} className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                  <tr
+                    key={i}
+                    className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
+                  >
                     {[...Array(6)].map((_, j) => (
                       <td key={j} className="p-4 align-middle">
                         <Skeleton className="h-6 w-full bg-muted" />
@@ -637,7 +744,9 @@ export default function PropertyManagementClient() {
                     <TableHead className="font-headline">Outlets</TableHead>
                     <TableHead className="font-headline">Status</TableHead>
                     <TableHead className="font-headline">Created</TableHead>
-                    <TableHead className="font-headline w-[120px] text-right">Actions</TableHead>
+                    <TableHead className="font-headline w-[120px] text-right">
+                      Actions
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -664,9 +773,16 @@ export default function PropertyManagementClient() {
                           {property.name}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{property.propertyCode}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {property.propertyCode}
+                      </TableCell>
                       <TableCell>
-                        <Badge variant={getPropertyTypeBadgeVariant(property.propertyType)} className="flex items-center gap-1 w-fit">
+                        <Badge
+                          variant={getPropertyTypeBadgeVariant(
+                            property.propertyType
+                          )}
+                          className="flex items-center gap-1 w-fit"
+                        >
                           {getPropertyTypeDisplayName(property.propertyType)}
                         </Badge>
                       </TableCell>
@@ -674,7 +790,11 @@ export default function PropertyManagementClient() {
                         {property.city || property.address ? (
                           <div className="flex items-center gap-1">
                             <MapPin className="h-3 w-3 text-muted-foreground" />
-                            {property.city ? `${property.city}${property.state ? `, ${property.state}` : ''}` : property.address}
+                            {property.city
+                              ? `${property.city}${
+                                  property.state ? `, ${property.state}` : ""
+                                }`
+                              : property.address}
                           </div>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -687,7 +807,9 @@ export default function PropertyManagementClient() {
                             {property.owner.name || property.owner.email}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">No owner</span>
+                          <span className="text-muted-foreground">
+                            No owner
+                          </span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -697,12 +819,16 @@ export default function PropertyManagementClient() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={property.isActive ? "default" : "secondary"}>
+                        <Badge
+                          variant={property.isActive ? "default" : "secondary"}
+                        >
                           {property.isActive ? "Active" : "Inactive"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {property.createdAt ? format(new Date(property.createdAt), "MMM d, yyyy") : "Unknown"}
+                        {property.createdAt
+                          ? format(new Date(property.createdAt), "MMM d, yyyy")
+                          : "Unknown"}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -742,13 +868,19 @@ export default function PropertyManagementClient() {
                                   Are you sure?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  This will delete the property "{property.name}". If the property has outlets or financial data, it will be marked as inactive instead of being permanently deleted. This action cannot be undone.
+                                  This will delete the property "{property.name}
+                                  ". If the property has outlets or financial
+                                  data, it will be marked as inactive instead of
+                                  being permanently deleted. This action cannot
+                                  be undone.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => handleDelete(Number(property.id))}
+                                  onClick={() =>
+                                    handleDelete(Number(property.id))
+                                  }
                                   className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
                                 >
                                   Delete
@@ -767,7 +899,8 @@ export default function PropertyManagementClient() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mt-4 px-2">
             <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
-                Showing {startIndexDisplay} to {endIndexDisplay} of {totalProperties} results
+                Showing {startIndexDisplay} to {endIndexDisplay} of{" "}
+                {totalProperties} results
               </div>
               <RecordsPerPageSelector
                 value={itemsPerPage}
@@ -814,7 +947,7 @@ export default function PropertyManagementClient() {
         onSubmit={(formData, logoFile) => handleSubmit(formData, logoFile)}
         isSubmitting={isSubmitting}
       />
-      
+
       <PropertyViewDialog
         open={isViewDialogOpen}
         onOpenChange={setIsViewDialogOpen}
@@ -831,12 +964,24 @@ interface PropertyFormDialogProps {
   property: Property | null;
   users: User[];
   currencies: Currency[];
-  currencyMap: {[key: string]: number};
-  onSubmit: (data: CreatePropertyData | UpdatePropertyData, logoFile?: File | null) => Promise<void>;
+  currencyMap: { [key: string]: number };
+  onSubmit: (
+    data: CreatePropertyData | UpdatePropertyData,
+    logoFile?: File | null
+  ) => Promise<void>;
   isSubmitting: boolean;
 }
 
-function PropertyFormDialog({ open, onOpenChange, property, users, currencies, currencyMap, onSubmit, isSubmitting }: PropertyFormDialogProps) {
+function PropertyFormDialog({
+  open,
+  onOpenChange,
+  property,
+  users,
+  currencies,
+  currencyMap,
+  onSubmit,
+  isSubmitting,
+}: PropertyFormDialogProps) {
   const [formData, setFormData] = useState<CreatePropertyData>({
     name: "",
     propertyCode: "",
@@ -846,7 +991,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
     state: "",
     country: "",
     timeZone: "UTC",
-    currencyId: currencyMap['USD'] || 1, // Default to USD
+    currencyId: currencyMap["USD"] || 1, // Default to USD
     logoUrl: "",
     ownerId: undefined,
     managerId: undefined,
@@ -881,7 +1026,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
         state: "",
         country: "",
         timeZone: "UTC",
-        currencyId: currencyMap['USD'] || 1, // Default to USD
+        currencyId: currencyMap["USD"] || 1, // Default to USD
         logoUrl: "",
         ownerId: undefined,
         managerId: undefined,
@@ -914,12 +1059,18 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
     await onSubmit(formData, logoFile);
   };
 
-  const propertyOwners = users.filter(user => 
-    ['super_admin', 'property_owner', 'property_admin'].includes(user.role)
+  const propertyOwners = users.filter((user) =>
+    ["super_admin", "property_owner", "property_admin"].includes(user.role)
   );
 
-  const propertyManagers = users.filter(user => 
-    ['super_admin', 'property_owner', 'property_admin', 'regional_manager', 'property_manager'].includes(user.role)
+  const propertyManagers = users.filter((user) =>
+    [
+      "super_admin",
+      "property_owner",
+      "property_admin",
+      "regional_manager",
+      "property_manager",
+    ].includes(user.role)
   );
 
   return (
@@ -930,10 +1081,9 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
             {property ? "Edit Property" : "Add New Property"}
           </DialogTitle>
           <DialogDescription>
-            {property 
+            {property
               ? `Update property information for ${property.name}.`
-              : "Create a new property. You can assign outlets to this property later."
-            }
+              : "Create a new property. You can assign outlets to this property later."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -943,7 +1093,9 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 required
                 placeholder="e.g., Downtown Hotel"
               />
@@ -953,7 +1105,12 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Input
                 id="propertyCode"
                 value={formData.propertyCode}
-                onChange={(e) => setFormData({ ...formData, propertyCode: e.target.value.toUpperCase() })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    propertyCode: e.target.value.toUpperCase(),
+                  })
+                }
                 required
                 placeholder="e.g., DTH001"
                 className="font-mono"
@@ -966,7 +1123,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Label htmlFor="propertyType">Property Type *</Label>
               <Select
                 value={formData.propertyType}
-                onValueChange={(value: PropertyType) => 
+                onValueChange={(value: PropertyType) =>
                   setFormData({ ...formData, propertyType: value })
                 }
               >
@@ -989,14 +1146,23 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Label htmlFor="currency">Currency</Label>
               <Select
                 value={formData.currencyId?.toString() || "1"}
-                onValueChange={(value) => setFormData({ ...formData, currencyId: parseInt(value) })}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, currencyId: parseInt(value) })
+                }
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
                   {currencies.map((currency: any) => (
-                    <SelectItem key={currency.code} value={currency.id?.toString() || currencyMap[currency.code]?.toString() || "1"}>
+                    <SelectItem
+                      key={currency.code}
+                      value={
+                        currency.id?.toString() ||
+                        currencyMap[currency.code]?.toString() ||
+                        "1"
+                      }
+                    >
                       {currency.displayName}
                     </SelectItem>
                   ))}
@@ -1034,7 +1200,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
                   </div>
                 )}
               </div>
-              
+
               {/* Upload Controls */}
               <div className="flex-1 space-y-2">
                 <div className="flex gap-2">
@@ -1046,7 +1212,7 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
                     disabled={isSubmitting}
                   >
                     <Upload className="mr-2 h-4 w-4" />
-                    {logoPreview ? 'Change Logo' : 'Upload Logo'}
+                    {logoPreview ? "Change Logo" : "Upload Logo"}
                     <input
                       type="file"
                       accept="image/jpeg,image/jpg,image/png,image/webp"
@@ -1079,7 +1245,9 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
             <Input
               id="address"
               value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, address: e.target.value })
+              }
               placeholder="Street address"
             />
           </div>
@@ -1090,7 +1258,9 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Input
                 id="city"
                 value={formData.city}
-                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, city: e.target.value })
+                }
                 placeholder="City"
               />
             </div>
@@ -1099,7 +1269,9 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Input
                 id="state"
                 value={formData.state}
-                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, state: e.target.value })
+                }
                 placeholder="State"
               />
             </div>
@@ -1108,7 +1280,9 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Input
                 id="country"
                 value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, country: e.target.value })
+                }
                 placeholder="Country"
               />
             </div>
@@ -1119,10 +1293,13 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Label htmlFor="ownerId">Property Owner</Label>
               <Select
                 value={formData.ownerId?.toString() || "none"}
-                onValueChange={(value) => setFormData({ 
-                  ...formData, 
-                  ownerId: value && value !== "none" ? parseInt(value) : undefined 
-                })}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    ownerId:
+                      value && value !== "none" ? parseInt(value) : undefined,
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select owner" />
@@ -1141,10 +1318,13 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               <Label htmlFor="managerId">Property Manager</Label>
               <Select
                 value={formData.managerId?.toString() || "none"}
-                onValueChange={(value) => setFormData({ 
-                  ...formData, 
-                  managerId: value && value !== "none" ? parseInt(value) : undefined 
-                })}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    managerId:
+                      value && value !== "none" ? parseInt(value) : undefined,
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select manager" />
@@ -1171,7 +1351,11 @@ function PropertyFormDialog({ open, onOpenChange, property, users, currencies, c
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : property ? "Update Property" : "Create Property"}
+              {isSubmitting
+                ? "Saving..."
+                : property
+                ? "Update Property"
+                : "Create Property"}
             </Button>
           </div>
         </form>
@@ -1187,11 +1371,20 @@ interface PropertyViewDialogProps {
   users: User[];
 }
 
-function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyViewDialogProps) {
+function PropertyViewDialog({
+  open,
+  onOpenChange,
+  property,
+  users,
+}: PropertyViewDialogProps) {
   if (!property) return null;
 
-  const owner = property.ownerId ? users.find(u => u.id === property.ownerId) : null;
-  const manager = property.managerId ? users.find(u => u.id === property.managerId) : null;
+  const owner = property.ownerId
+    ? users.find((u) => u.id === property.ownerId)
+    : null;
+  const manager = property.managerId
+    ? users.find((u) => u.id === property.managerId)
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1205,7 +1398,7 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
             View complete information for {property.name}
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="space-y-6">
           {/* Header Section with Logo */}
           <div className="flex items-start gap-4 p-4 bg-muted/20 rounded-lg">
@@ -1225,7 +1418,10 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
             <div className="flex-1">
               <h3 className="text-xl font-semibold mb-2">{property.name}</h3>
               <div className="flex flex-wrap items-center gap-4">
-                <Badge variant={getPropertyTypeBadgeVariant(property.propertyType)} className="flex items-center gap-1">
+                <Badge
+                  variant={getPropertyTypeBadgeVariant(property.propertyType)}
+                  className="flex items-center gap-1"
+                >
                   {getPropertyTypeDisplayName(property.propertyType)}
                 </Badge>
                 <Badge variant={property.isActive ? "default" : "secondary"}>
@@ -1256,15 +1452,21 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Type:</span>
-                  <span className="font-medium">{getPropertyTypeDisplayName(property.propertyType)}</span>
+                  <span className="font-medium">
+                    {getPropertyTypeDisplayName(property.propertyType)}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Currency:</span>
-                  <span className="font-medium">{property.currency?.displayName || 'USD ($)'}</span>
+                  <span className="font-medium">
+                    {property.currency?.displayName || "USD ($)"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Time Zone:</span>
-                  <span className="font-medium">{property.timeZone || 'UTC'}</span>
+                  <span className="font-medium">
+                    {property.timeZone || "UTC"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Status:</span>
@@ -1275,7 +1477,12 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Created:</span>
                   <span className="font-medium">
-                    {property.createdAt ? format(new Date(property.createdAt), "MMM d, yyyy 'at' h:mm a") : "Unknown"}
+                    {property.createdAt
+                      ? format(
+                          new Date(property.createdAt),
+                          "MMM d, yyyy 'at' h:mm a"
+                        )
+                      : "Unknown"}
                   </span>
                 </div>
               </div>
@@ -1289,7 +1496,9 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
               <div className="space-y-3">
                 {property.address && (
                   <div>
-                    <span className="text-muted-foreground block mb-1">Address:</span>
+                    <span className="text-muted-foreground block mb-1">
+                      Address:
+                    </span>
                     <span className="font-medium">{property.address}</span>
                   </div>
                 )}
@@ -1297,7 +1506,11 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">City/State:</span>
                     <span className="font-medium">
-                      {property.city ? `${property.city}${property.state ? `, ${property.state}` : ''}` : property.state}
+                      {property.city
+                        ? `${property.city}${
+                            property.state ? `, ${property.state}` : ""
+                          }`
+                        : property.state}
                     </span>
                   </div>
                 )}
@@ -1311,14 +1524,16 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Owner:</span>
                     <span className="font-medium">
-                      {owner ? (owner.name || owner.email) : 'No owner assigned'}
+                      {owner ? owner.name || owner.email : "No owner assigned"}
                     </span>
                   </div>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Manager:</span>
                   <span className="font-medium">
-                    {manager ? (manager.name || manager.email) : 'No manager assigned'}
+                    {manager
+                      ? manager.name || manager.email
+                      : "No manager assigned"}
                   </span>
                 </div>
               </div>
@@ -1336,12 +1551,16 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
                 <span className="text-muted-foreground">Total Outlets:</span>
                 <div className="flex items-center gap-2">
                   <Store className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-semibold text-lg">{property._count?.outlets || 0}</span>
+                  <span className="font-semibold text-lg">
+                    {property._count?.outlets || 0}
+                  </span>
                 </div>
               </div>
               {(property._count?.outlets || 0) > 0 ? (
                 <p className="text-sm text-muted-foreground mt-2">
-                  This property has {property._count?.outlets} outlet{(property._count?.outlets || 0) !== 1 ? 's' : ''} assigned to it.
+                  This property has {property._count?.outlets} outlet
+                  {(property._count?.outlets || 0) !== 1 ? "s" : ""} assigned to
+                  it.
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground mt-2">
@@ -1365,7 +1584,9 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Last Updated:</span>
                 <span className="font-medium">
-                  {property.updatedAt instanceof Date ? format(property.updatedAt, "MMM d, yyyy") : "Unknown"}
+                  {property.updatedAt instanceof Date
+                    ? format(property.updatedAt, "MMM d, yyyy")
+                    : "Unknown"}
                 </span>
               </div>
             </div>
@@ -1373,9 +1594,7 @@ function PropertyViewDialog({ open, onOpenChange, property, users }: PropertyVie
         </div>
 
         <div className="flex justify-end pt-4">
-          <Button onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
+          <Button onClick={() => onOpenChange(false)}>Close</Button>
         </div>
       </DialogContent>
     </Dialog>

@@ -196,13 +196,17 @@ export default function UserActivityAuditReport({
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div>
-                <div className="font-semibold text-lg">{data.summary.topAction.name}</div>
+              <div className="flex-1 min-w-0 mr-3">
+                <div className="font-semibold text-lg truncate" title={data.summary.topAction.name}>
+                  {data.summary.topAction.name}
+                </div>
                 <div className="text-sm text-muted-foreground">
                   {data.summary.topAction.count.toLocaleString()} occurrences ({formatPercentage(data.summary.topAction.percentage)})
                 </div>
               </div>
-              {getActionIcon(data.summary.topAction.name)}
+              <div className="flex-shrink-0">
+                {getActionIcon(data.summary.topAction.name)}
+              </div>
             </div>
           </CardContent>
         </Card>

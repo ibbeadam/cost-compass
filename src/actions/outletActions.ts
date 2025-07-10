@@ -4,9 +4,20 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/server-auth";
 import { auditDataChange } from "@/lib/audit-middleware";
+import { PermissionService } from "@/lib/permission-utils";
 
 export async function getAllOutletsAction() {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Check read permission for outlets
+    if (!PermissionService.hasPermission(user, "outlets.read")) {
+      throw new Error("Access denied. Insufficient permissions to view outlets.");
+    }
+
     const outlets = await prisma.outlet.findMany({
       orderBy: {
         name: "asc",
@@ -21,6 +32,11 @@ export async function getAllOutletsAction() {
 
 export async function getOutletByIdAction(id: string) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     const outlet = await prisma.outlet.findUnique({
       where: { id },
       include: {
@@ -47,6 +63,11 @@ export async function addOutletAction(name: string): Promise<any> {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission for outlets
+    if (!PermissionService.hasPermission(user, "outlets.create")) {
+      throw new Error("Access denied. Insufficient permissions to create outlets.");
     }
 
     const outlet = await prisma.outlet.create({
@@ -219,6 +240,11 @@ export async function getPaginatedOutletsAction(
   fetchAll: boolean = false
 ) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     const totalCount = await prisma.outlet.count();
     
     let outlets;

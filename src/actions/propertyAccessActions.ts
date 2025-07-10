@@ -1,6 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/server-auth";
+import { PermissionService } from "@/lib/permissions/permission-utils";
 import type { PropertyAccess, PropertyAccessLevel } from "@/types";
 import { revalidatePath } from "next/cache";
 
@@ -304,6 +306,21 @@ export async function updatePropertyAccessAction(
  */
 export async function getPropertyAccessListAction(propertyId: number): Promise<PropertyAccess[]> {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Check if user has permission to view property access for this property
+    const hasPermission = await PermissionService.hasPermission(
+      currentUser.id,
+      "properties.access.read"
+    );
+    
+    if (!hasPermission) {
+      throw new Error("Insufficient permissions to view property access list");
+    }
+
     const propertyAccessList = await prisma.propertyAccess.findMany({
       where: { 
         propertyId,
@@ -338,6 +355,23 @@ export async function getPropertyAccessListAction(propertyId: number): Promise<P
  */
 export async function getUserPropertyAccessListAction(userId: number): Promise<PropertyAccess[]> {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Users can only view their own access, or admins can view any user's access
+    if (currentUser.id !== userId) {
+      const hasPermission = await PermissionService.hasPermission(
+        currentUser.id,
+        "users.property_access.read"
+      );
+      
+      if (!hasPermission) {
+        throw new Error("Insufficient permissions to view user property access");
+      }
+    }
+
     const userPropertyAccessList = await prisma.propertyAccess.findMany({
       where: { 
         userId,
@@ -411,6 +445,21 @@ export async function bulkGrantPropertyAccessAction(
  */
 export async function cleanupExpiredPropertyAccessAction(): Promise<number> {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Only super admins or system operations can cleanup expired access
+    const hasPermission = await PermissionService.hasPermission(
+      currentUser.id,
+      "system.cleanup.execute"
+    );
+    
+    if (!hasPermission && currentUser.role !== "super_admin") {
+      throw new Error("Insufficient permissions to cleanup expired property access");
+    }
+
     const result = await prisma.propertyAccess.deleteMany({
       where: {
         expiresAt: {

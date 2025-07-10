@@ -1,28 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/server-auth";
+import { withServerPermissions } from "@/lib/permissions/server-middleware";
 import { toggleUserLockAction, getUserLockInfoAction } from "@/actions/prismaUserActions";
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const currentUser = await getCurrentUser();
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    // Check if user has super admin access
-    if (currentUser.role !== "super_admin") {
-      return NextResponse.json(
-        { error: "Only super administrators can lock/unlock user accounts" },
-        { status: 403 }
-      );
-    }
+export const POST = withServerPermissions(
+  async (
+    request: NextRequest,
+    context,
+    { params }: { params: { id: string } }
+  ) => {
+    try {
+      const currentUser = context.user;
 
     const { locked } = await request.json();
     
@@ -55,29 +42,26 @@ export async function POST(
       { status: 500 }
     );
   }
+},
+{
+  permissions: ["users.lock"],
+  auditAction: "UPDATE",
+  auditResource: "user_lock",
+  rateLimiting: {
+    maxRequests: 5,
+    windowMs: 60000
+  }
 }
+);
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const currentUser = await getCurrentUser();
-    
-    if (!currentUser) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
-    }
-
-    // Check if user has super admin access
-    if (currentUser.role !== "super_admin") {
-      return NextResponse.json(
-        { error: "Only super administrators can view user lock status" },
-        { status: 403 }
-      );
-    }
+export const GET = withServerPermissions(
+  async (
+    request: NextRequest,
+    context,
+    { params }: { params: { id: string } }
+  ) => {
+    try {
+      const currentUser = context.user;
 
     const lockInfo = await getUserLockInfoAction(params.id);
 
@@ -90,4 +74,14 @@ export async function GET(
       { status: 500 }
     );
   }
+},
+{
+  permissions: ["users.read"],
+  auditAction: "READ",
+  auditResource: "user_lock_info",
+  rateLimiting: {
+    maxRequests: 10,
+    windowMs: 60000
+  }
 }
+);

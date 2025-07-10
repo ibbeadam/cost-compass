@@ -27,6 +27,48 @@ export const PERMISSIONS = [
     resource: 'settings',
     action: 'MANAGE' as PermissionAction,
   },
+  {
+    name: 'system.roles.read',
+    description: 'View system roles and permissions',
+    category: 'SYSTEM_ADMIN' as PermissionCategory,
+    resource: 'roles',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'system.roles.update',
+    description: 'Manage system roles and permissions',
+    category: 'SYSTEM_ADMIN' as PermissionCategory,
+    resource: 'roles',
+    action: 'UPDATE' as PermissionAction,
+  },
+  {
+    name: 'system.currencies.read',
+    description: 'View system currencies',
+    category: 'SYSTEM_ADMIN' as PermissionCategory,
+    resource: 'currencies',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'system.currencies.create',
+    description: 'Create system currencies',
+    category: 'SYSTEM_ADMIN' as PermissionCategory,
+    resource: 'currencies',
+    action: 'CREATE' as PermissionAction,
+  },
+  {
+    name: 'system.currencies.update',
+    description: 'Update system currencies',
+    category: 'SYSTEM_ADMIN' as PermissionCategory,
+    resource: 'currencies',
+    action: 'UPDATE' as PermissionAction,
+  },
+  {
+    name: 'system.currencies.delete',
+    description: 'Delete system currencies',
+    category: 'SYSTEM_ADMIN' as PermissionCategory,
+    resource: 'currencies',
+    action: 'DELETE' as PermissionAction,
+  },
 
   // USER_MANAGEMENT permissions
   {
@@ -346,25 +388,11 @@ export const PERMISSIONS = [
     action: 'DELETE' as PermissionAction,
   },
 
-  // COST_INPUT permissions
+  // COST_INPUT permissions (bulk import only - individual cost entries use financial.* pattern)
   {
-    name: 'cost_input.food.create',
-    description: 'Input food cost data',
-    category: 'COST_INPUT' as PermissionCategory,
-    resource: 'food_cost_input',
-    action: 'CREATE' as PermissionAction,
-  },
-  {
-    name: 'cost_input.beverage.create',
-    description: 'Input beverage cost data',
-    category: 'COST_INPUT' as PermissionCategory,
-    resource: 'beverage_cost_input',
-    action: 'CREATE' as PermissionAction,
-  },
-  {
-    name: 'cost_input.bulk.import',
+    name: 'financial.bulk.import',
     description: 'Import bulk cost data',
-    category: 'COST_INPUT' as PermissionCategory,
+    category: 'FINANCIAL_DATA' as PermissionCategory,
     resource: 'cost_data',
     action: 'IMPORT' as PermissionAction,
   },
@@ -400,6 +428,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'system.admin.full_access',
     'system.logs.view',
     'system.settings.manage',
+    'system.roles.read',
+    'system.roles.update',
+    'system.currencies.read',
+    'system.currencies.create',
+    'system.currencies.update',
+    'system.currencies.delete',
     
     // Full user management
     'users.create',
@@ -453,10 +487,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'categories.update',
     'categories.delete',
     
-    // Full cost input access
-    'cost_input.food.create',
-    'cost_input.beverage.create',
-    'cost_input.bulk.import',
+    // Full bulk import access
+    'financial.bulk.import',
     
     // Full dashboard access
     'dashboard.view',
@@ -511,10 +543,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'categories.update',
     'categories.delete',
     
-    // Cost input
-    'cost_input.food.create',
-    'cost_input.beverage.create',
-    'cost_input.bulk.import',
+    // Bulk import access
+    'financial.bulk.import',
     
     // Dashboard access
     'dashboard.view',
@@ -564,10 +594,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'categories.update',
     'categories.delete',
     
-    // Cost input
-    'cost_input.food.create',
-    'cost_input.beverage.create',
-    'cost_input.bulk.import',
+    // Bulk import access
+    'financial.bulk.import',
     
     // Dashboard access
     'dashboard.view',
@@ -640,9 +668,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'categories.read',
     'categories.update',
     
-    // Cost input
-    'cost_input.food.create',
-    'cost_input.beverage.create',
     
     // Dashboard access
     'dashboard.view',
@@ -668,9 +693,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'categories.create',
     'categories.update',
     
-    // Cost input
-    'cost_input.food.create',
-    'cost_input.beverage.create',
     
     // Dashboard access
     'dashboard.view',
@@ -693,9 +715,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'outlets.read',
     'categories.read',
     
-    // Cost input
-    'cost_input.food.create',
-    'cost_input.beverage.create',
+    // Bulk import access
+    'financial.bulk.import',
     
     // Dashboard access
     'dashboard.view',
@@ -723,16 +744,18 @@ export async function seedPermissions() {
   console.log('🌱 Seeding permissions...');
   
   try {
-    // Create permissions
+    // Create permissions (upsert to handle existing permissions)
     for (const permission of PERMISSIONS) {
-      await prisma.permission.create({
-        data: permission,
+      await prisma.permission.upsert({
+        where: { name: permission.name },
+        update: permission,
+        create: permission,
       });
     }
     
     console.log(`✅ Created ${PERMISSIONS.length} permissions`);
     
-    // Create role-permission mappings
+    // Create role-permission mappings (upsert to handle existing mappings)
     for (const [role, permissionNames] of Object.entries(ROLE_PERMISSIONS)) {
       for (const permissionName of permissionNames) {
         const permission = await prisma.permission.findUnique({
@@ -740,8 +763,15 @@ export async function seedPermissions() {
         });
         
         if (permission) {
-          await prisma.rolePermission.create({
-            data: {
+          await prisma.rolePermission.upsert({
+            where: {
+              role_permissionId: {
+                role: role as UserRole,
+                permissionId: permission.id,
+              }
+            },
+            update: {},
+            create: {
               role: role as UserRole,
               permissionId: permission.id,
             },

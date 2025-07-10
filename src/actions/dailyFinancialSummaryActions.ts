@@ -7,12 +7,18 @@ import type { DailyFinancialSummary } from "@/types";
 import { normalizeDate } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/server-auth";
 import { auditDataChange } from "@/lib/audit-middleware";
+import { PermissionService } from "@/lib/permission-utils";
 
 export async function getAllDailyFinancialSummariesAction() {
   try {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.read")) {
+      throw new Error("Access denied. Insufficient permissions to view financial summaries.");
     }
 
     let whereClause = {};
@@ -57,12 +63,34 @@ export async function getAllDailyFinancialSummariesAction() {
 
 export async function getDailyFinancialSummaryByIdAction(id: number) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.read")) {
+      throw new Error("Access denied. Insufficient permissions to view financial summaries.");
+    }
+
     const summary = await prisma.dailyFinancialSummary.findUnique({
       where: { id: Number(id) },
     });
+
+    // Additional property access check for non-super-admin users
+    if (summary && user.role !== "super_admin") {
+      const userPropertyIds = user.propertyAccess?.map(access => access.propertyId) || [];
+      if (summary.propertyId && !userPropertyIds.includes(summary.propertyId)) {
+        throw new Error("Access denied to this property's financial data");
+      }
+    }
+
     return summary;
   } catch (error) {
     console.error("Error fetching daily financial summary:", error);
+    if (error instanceof Error) {
+      throw error;
+    }
     throw new Error("Failed to fetch daily financial summary");
   }
 }
@@ -93,6 +121,11 @@ export async function createDailyFinancialSummaryAction(summaryData: {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.create")) {
+      throw new Error("Access denied. Insufficient permissions to create financial summaries.");
     }
 
     // Handle property selection based on user role
@@ -229,6 +262,11 @@ export async function updateDailyFinancialSummaryAction(
       throw new Error("Authentication required");
     }
 
+    // Check update permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.update")) {
+      throw new Error("Access denied. Insufficient permissions to update financial summaries.");
+    }
+
     // Get current entry to know the date for recalculation and for audit
     const currentSummary = await prisma.dailyFinancialSummary.findUnique({
       where: { id: Number(id) },
@@ -281,6 +319,11 @@ export async function deleteDailyFinancialSummaryAction(id: number) {
       throw new Error("Authentication required");
     }
 
+    // Check delete permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.delete")) {
+      throw new Error("Access denied. Insufficient permissions to delete financial summaries.");
+    }
+
     // Get the summary for audit logging
     const summaryToDelete = await prisma.dailyFinancialSummary.findUnique({
       where: { id: Number(id) }
@@ -323,6 +366,11 @@ export async function getDailyFinancialSummariesByDateRangeAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.read")) {
+      throw new Error("Access denied. Insufficient permissions to view financial summaries.");
     }
 
     let whereClause: any = {
@@ -387,6 +435,11 @@ export async function getPaginatedDailyFinancialSummariesAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission
+    if (!PermissionService.hasPermission(user, "financial.daily_summary.read")) {
+      throw new Error("Access denied. Insufficient permissions to view financial summaries.");
     }
 
     let whereClause = {};

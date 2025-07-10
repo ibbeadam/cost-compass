@@ -45,6 +45,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserPropertyAccess } from "@/hooks/useUserPropertyAccess";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 export default function OutletListClient() {
   const [allOutlets, setAllOutlets] = useState<Outlet[]>([]);
@@ -214,9 +215,11 @@ export default function OutletListClient() {
   return (
     <div>
       <div className="flex justify-end mb-4">
-        <Button onClick={handleAddNew}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Outlet
-        </Button>
+        <PermissionGate permissions={["outlets.create"]}>
+          <Button onClick={handleAddNew}>
+            <PlusCircle className="mr-2 h-4 w-4" /> Add New Outlet
+          </Button>
+        </PermissionGate>
       </div>
 
       {allOutlets.length === 0 ? (
@@ -262,49 +265,53 @@ export default function OutletListClient() {
                       </TableCell>
                     )}
                     <TableCell className="text-right whitespace-nowrap">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(outlet)}
-                        className="mr-2 hover:text-primary"
-                      >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Outlet</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="hover:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete Outlet</span>
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="flex items-center">
-                              <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
-                              Are you sure?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. This will
-                              permanently delete the outlet "{outlet.name}" (ID:{" "}
-                              {outlet.id}) and all associated data.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(outlet.id)}
-                              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                      <PermissionGate permissions={["outlets.update"]}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(outlet)}
+                          className="mr-2 hover:text-primary"
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit Outlet</span>
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate permissions={["outlets.delete"]}>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="hover:text-destructive"
                             >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete Outlet</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center">
+                                <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
+                                Are you sure?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will
+                                permanently delete the outlet "{outlet.name}" (ID:{" "}
+                                {outlet.id}) and all associated data.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(outlet.id)}
+                                className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </PermissionGate>
                     </TableCell>
                   </TableRow>
                 ))}

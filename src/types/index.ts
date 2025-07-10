@@ -699,6 +699,7 @@ export interface AuditLogFilters {
   propertyId?: number;
   resource?: string;
   action?: string;
+  includeActions?: string[]; // Specific actions to include in results
   excludeActions?: string[]; // Actions to exclude from results
   dateRange?: { from?: Date; to?: Date };
   searchTerm?: string;

@@ -2,6 +2,7 @@ import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { User, UserRole } from "@/types";
+import { rateLimitMiddleware } from "@/lib/security/rate-limit-middleware";
 
 /**
  * Enhanced middleware with multi-property access control
@@ -12,9 +13,23 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
-    // Skip middleware for public routes
+    // 1. Apply rate limiting and DDoS protection first
+    try {
+      const rateLimitResponse = await rateLimitMiddleware(req);
+      if (rateLimitResponse) {
+        return rateLimitResponse;
+      }
+    } catch (error) {
+      console.error('Rate limiting middleware error:', error);
+      // Continue with normal flow if rate limiting fails
+    }
+
+    // 2. Skip authentication for public routes
     if (isPublicRoute(pathname)) {
-      return NextResponse.next();
+      const response = NextResponse.next();
+      // Add security headers even for public routes
+      addSecurityHeaders(response);
+      return response;
     }
 
     if (!token) {
@@ -45,6 +60,9 @@ export default withAuth(
     if (propertyId) {
       response.headers.set('x-property-id', propertyId.toString());
     }
+
+    // Add comprehensive security headers
+    addSecurityHeaders(response);
 
     // Log access in development
     if (process.env.NODE_ENV === 'development') {
@@ -141,6 +159,49 @@ function extractPropertyId(req: NextRequest): number | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * Add comprehensive security headers to response
+ */
+function addSecurityHeaders(response: NextResponse): void {
+  // Prevent clickjacking
+  response.headers.set('X-Frame-Options', 'DENY');
+  
+  // Prevent MIME type sniffing
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  
+  // XSS Protection
+  response.headers.set('X-XSS-Protection', '1; mode=block');
+  
+  // Referrer Policy
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  
+  // Permissions Policy (restrict potentially dangerous features)
+  response.headers.set('Permissions-Policy', 
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()');
+  
+  // Content Security Policy
+  response.headers.set('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "img-src 'self' data: https: blob:; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "connect-src 'self' https://api.openai.com; " +
+    "frame-ancestors 'none'; " +
+    "base-uri 'self'; " +
+    "form-action 'self';"
+  );
+
+  // HSTS (HTTP Strict Transport Security) - only in production with HTTPS
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+
+  // Security-related custom headers
+  response.headers.set('X-Rate-Limit-Applied', 'true');
+  response.headers.set('X-Security-Headers', 'enabled');
 }
 
 /**

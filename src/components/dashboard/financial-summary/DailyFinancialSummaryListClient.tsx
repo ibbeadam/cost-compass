@@ -46,6 +46,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn, formatNumber, normalizeDate } from "@/lib/utils";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 const convertTimestampsToDates = (entry: DailyFinancialSummary): DailyFinancialSummary => {
   return {
@@ -579,26 +580,30 @@ export default function DailyFinancialSummaryListClient() {
           </Button>
         </div>
         <div className="flex flex-wrap gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button 
-            onClick={() => fileInputRef.current?.click()} 
-            variant="outline"
-            size="sm"
-            className="text-xs sm:text-sm"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Import Excel
-          </Button>
-          <Button onClick={handleAddNew} size="sm" className="text-xs sm:text-sm"> 
-            <PlusCircle className="mr-2 h-4 w-4" /> 
-            Add New Daily Summary 
-          </Button>
+          <PermissionGate permissions={["financial.daily_summary.create"]}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button 
+              onClick={() => fileInputRef.current?.click()} 
+              variant="outline"
+              size="sm"
+              className="text-xs sm:text-sm"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Import Excel
+            </Button>
+          </PermissionGate>
+          <PermissionGate permissions={["financial.daily_summary.create"]}>
+            <Button onClick={handleAddNew} size="sm" className="text-xs sm:text-sm"> 
+              <PlusCircle className="mr-2 h-4 w-4" /> 
+              Add New Daily Summary 
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -672,35 +677,39 @@ export default function DailyFinancialSummaryListClient() {
                       {renderPercentage(summary.beverageVariancePct)}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap px-2 py-3">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9">
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9">
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete</span>
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="flex items-center">
-                              <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
-                              Are you sure?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(summary.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                              Delete
+                      <PermissionGate permissions={["financial.daily_summary.update"]}>
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(summary)} className="mr-1 hover:text-primary h-9 w-9">
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit</span>
+                        </Button>
+                      </PermissionGate>
+                      <PermissionGate permissions={["financial.daily_summary.delete"]}>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" className="hover:text-destructive h-9 w-9">
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle className="flex items-center">
+                                <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
+                                Are you sure?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete the summary for {summary.date instanceof Date ? format(summary.date, "PPP") : summary.id}.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => handleDelete(summary.id)} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
+                      </PermissionGate>
                     </TableCell>
                   </TableRow>
                 ))}

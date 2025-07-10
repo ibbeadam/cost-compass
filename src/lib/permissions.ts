@@ -39,6 +39,12 @@ export const PERMISSIONS = {
     VIEW_AUDIT_LOGS: 'system.audit.read',
     MANAGE_BACKUPS: 'system.backup.manage',
     PLATFORM_SETTINGS: 'system.settings.manage',
+    READ_ROLES: 'system.roles.read',
+    UPDATE_ROLES: 'system.roles.update',
+    READ_CURRENCIES: 'system.currencies.read',
+    CREATE_CURRENCIES: 'system.currencies.create',
+    UPDATE_CURRENCIES: 'system.currencies.update',
+    DELETE_CURRENCIES: 'system.currencies.delete',
   },
   
   // User Management
@@ -61,10 +67,8 @@ export const PERMISSIONS = {
     UPDATE_PROPERTIES: 'properties.update',
     DELETE_PROPERTIES: 'properties.delete',
     MANAGE_PROPERTY_ACCESS: 'properties.access.manage',
-    TRANSFER_OWNERSHIP: 'properties.ownership.transfer',
     VIEW_ALL_PROPERTIES: 'properties.view_all',
     VIEW_OWN_PROPERTIES: 'properties.view_own',
-    MANAGE_PROPERTY_SETTINGS: 'properties.settings.manage',
   },
   
   // Financial Data
@@ -82,17 +86,15 @@ export const PERMISSIONS = {
     READ_DAILY_SUMMARY: 'financial.daily_summary.read',
     UPDATE_DAILY_SUMMARY: 'financial.daily_summary.update',
     DELETE_DAILY_SUMMARY: 'financial.daily_summary.delete',
+    BULK_IMPORT: 'financial.bulk.import',
   },
   
   // Reporting
   REPORTING: {
     VIEW_BASIC_REPORTS: 'reports.basic.read',
-    VIEW_DETAILED_REPORTS: 'reports.detailed.read',
     VIEW_FINANCIAL_REPORTS: 'reports.financial.read',
     VIEW_CROSS_PROPERTY_REPORTS: 'reports.cross_property.read',
     EXPORT_REPORTS: 'reports.export',
-    CREATE_CUSTOM_REPORTS: 'reports.custom.create',
-    SCHEDULE_REPORTS: 'reports.schedule.manage',
   },
   
   // Outlet Management
@@ -101,7 +103,6 @@ export const PERMISSIONS = {
     READ_OUTLETS: 'outlets.read',
     UPDATE_OUTLETS: 'outlets.update',
     DELETE_OUTLETS: 'outlets.delete',
-    MANAGE_OUTLET_USERS: 'outlets.users.manage',
   },
   
   // Dashboard Access
@@ -109,7 +110,6 @@ export const PERMISSIONS = {
     VIEW_DASHBOARD: 'dashboard.view',
     VIEW_PROPERTY_DASHBOARD: 'dashboard.property.view',
     VIEW_CROSS_PROPERTY_DASHBOARD: 'dashboard.cross_property.view',
-    MANAGE_DASHBOARD_SETTINGS: 'dashboard.settings.manage',
   },
 } as const;
 
@@ -154,19 +154,17 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.USER_MANAGEMENT.UPDATE_USERS,
     PERMISSIONS.USER_MANAGEMENT.VIEW_PROPERTY_USERS,
     
-    // Property management (no deletion/ownership transfer)
+    // Property management (no deletion)
     PERMISSIONS.PROPERTY_MANAGEMENT.READ_PROPERTIES,
     PERMISSIONS.PROPERTY_MANAGEMENT.UPDATE_PROPERTIES,
     PERMISSIONS.PROPERTY_MANAGEMENT.MANAGE_PROPERTY_ACCESS,
     PERMISSIONS.PROPERTY_MANAGEMENT.VIEW_OWN_PROPERTIES,
-    PERMISSIONS.PROPERTY_MANAGEMENT.MANAGE_PROPERTY_SETTINGS,
     
     // Financial data management
     ...Object.values(PERMISSIONS.FINANCIAL_DATA),
     
     // Reporting access
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
-    PERMISSIONS.REPORTING.VIEW_DETAILED_REPORTS,
     PERMISSIONS.REPORTING.VIEW_FINANCIAL_REPORTS,
     PERMISSIONS.REPORTING.EXPORT_REPORTS,
     
@@ -176,7 +174,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     // Dashboard access
     PERMISSIONS.DASHBOARD_ACCESS.VIEW_DASHBOARD,
     PERMISSIONS.DASHBOARD_ACCESS.VIEW_PROPERTY_DASHBOARD,
-    PERMISSIONS.DASHBOARD_ACCESS.MANAGE_DASHBOARD_SETTINGS,
   ],
   
   regional_manager: [
@@ -202,7 +199,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     
     // Reporting
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
-    PERMISSIONS.REPORTING.VIEW_DETAILED_REPORTS,
     PERMISSIONS.REPORTING.VIEW_FINANCIAL_REPORTS,
     PERMISSIONS.REPORTING.VIEW_CROSS_PROPERTY_REPORTS,
     PERMISSIONS.REPORTING.EXPORT_REPORTS,
@@ -239,7 +235,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     
     // Reporting
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
-    PERMISSIONS.REPORTING.VIEW_DETAILED_REPORTS,
     PERMISSIONS.REPORTING.VIEW_FINANCIAL_REPORTS,
     PERMISSIONS.REPORTING.EXPORT_REPORTS,
     
@@ -287,6 +282,9 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.FINANCIAL_DATA.READ_FOOD_COSTS,
     PERMISSIONS.FINANCIAL_DATA.READ_BEVERAGE_COSTS,
     PERMISSIONS.FINANCIAL_DATA.READ_DAILY_SUMMARY,
+    
+    // Allow beverage cost creation for readonly users
+    PERMISSIONS.FINANCIAL_DATA.CREATE_BEVERAGE_COSTS,
     
     // Basic reporting
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,

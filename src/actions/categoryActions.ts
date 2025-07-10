@@ -5,9 +5,21 @@ import { revalidatePath } from "next/cache";
 import type { Category } from "@/types";
 import { getCurrentUser } from "@/lib/server-auth";
 import { auditDataChange } from "@/lib/audit-middleware";
+import { PermissionService } from "@/lib/permission-utils";
 
 export async function getAllCategoriesAction() {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
+    // Check read permission for cost data (categories are used for cost management)
+    if (!PermissionService.hasPermission(user, "financial.food_costs.read") && 
+        !PermissionService.hasPermission(user, "financial.beverage_costs.read")) {
+      throw new Error("Access denied. Insufficient permissions to view categories.");
+    }
+
     const categories = await prisma.category.findMany({
       orderBy: {
         name: "asc",
@@ -22,6 +34,11 @@ export async function getAllCategoriesAction() {
 
 export async function getCategoriesByTypeAction(type: "Food" | "Beverage") {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     const categories = await prisma.category.findMany({
       where: { type },
       orderBy: {
@@ -37,6 +54,11 @@ export async function getCategoriesByTypeAction(type: "Food" | "Beverage") {
 
 export async function getCategoryByIdAction(id: string) {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     const category = await prisma.category.findUnique({
       where: { id },
     });
@@ -66,6 +88,11 @@ export async function addCategoryAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission (only super admin and property admin can create categories)
+    if (user.role !== "super_admin" && user.role !== "property_admin") {
+      throw new Error("Access denied. Only administrators can create categories.");
     }
 
     const category = await prisma.category.create({
@@ -248,6 +275,11 @@ export async function getPaginatedCategoriesAction(
   fetchAll: boolean = false
 ): Promise<{ categories: Category[], lastVisibleDocId: string | null, hasMore: boolean, totalCount: number }> {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     const totalCount = await prisma.category.count();
     
     let categories;
@@ -291,6 +323,11 @@ export async function getPaginatedCategoriesAction(
 
 export async function initializeDefaultCategoriesAction(): Promise<{ created: number, total: number }> {
   try {
+    const user = await getCurrentUser();
+    if (!user) {
+      throw new Error("Authentication required");
+    }
+
     const foodCategories = [
       { name: "Meat & Poultry", description: "Beef, chicken, pork, lamb, etc.", type: "Food" as const },
       { name: "Seafood", description: "Fish, shrimp, shellfish, etc.", type: "Food" as const },

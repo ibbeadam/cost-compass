@@ -17,8 +17,9 @@ import {
   getAccessLevelPermissions 
 } from "@/lib/permissions";
 
-// Mock prisma import - replace with actual import when prisma is set up
-// import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { CachedPermissionService, PermissionCache } from "@/lib/cache/permission-cache";
+import { CacheInvalidationService } from "@/lib/cache/cache-invalidation";
 
 /**
  * Property Access Control Service
@@ -30,59 +31,65 @@ export class PropertyAccessService {
    * Get all accessible properties for a user
    */
   static async getUserAccessibleProperties(userId: number): Promise<Property[]> {
-    // TODO: Replace with actual prisma call when database is updated
-    /*
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        ownedProperties: true,
-        managedProperties: true,
-        propertyAccess: {
-          include: { property: true },
-          where: {
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } }
-            ]
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          ownedProperties: true,
+          managedProperties: true,
+          propertyAccess: {
+            include: { property: true },
+            where: {
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } }
+              ]
+            }
           }
         }
+      });
+
+      if (!user) return [];
+
+      // Super admin has access to all properties
+      if (user.role === 'super_admin') {
+        return await prisma.property.findMany({
+          where: { isActive: true }
+        });
       }
-    });
 
-    if (!user) return [];
-
-    const accessibleProperties: Property[] = [];
-    
-    // Add owned properties
-    if (user.ownedProperties) {
-      accessibleProperties.push(...user.ownedProperties);
+      const accessibleProperties: Property[] = [];
+      
+      // Add owned properties
+      if (user.ownedProperties) {
+        accessibleProperties.push(...user.ownedProperties);
+      }
+      
+      // Add managed properties
+      if (user.managedProperties) {
+        accessibleProperties.push(...user.managedProperties);
+      }
+      
+      // Add properties from PropertyAccess
+      if (user.propertyAccess) {
+        const accessProperties = user.propertyAccess
+          .map(access => access.property)
+          .filter(Boolean) as Property[];
+        accessibleProperties.push(...accessProperties);
+      }
+      
+      // Remove duplicates and filter active properties
+      const uniqueProperties = accessibleProperties
+        .filter((property, index, self) => 
+          index === self.findIndex(p => p.id === property.id)
+        )
+        .filter(property => property.isActive);
+      
+      return uniqueProperties;
+    } catch (error) {
+      console.error('Error fetching user accessible properties:', error);
+      return [];
     }
-    
-    // Add managed properties
-    if (user.managedProperties) {
-      accessibleProperties.push(...user.managedProperties);
-    }
-    
-    // Add properties from PropertyAccess
-    if (user.propertyAccess) {
-      const accessProperties = user.propertyAccess
-        .map(access => access.property)
-        .filter(Boolean) as Property[];
-      accessibleProperties.push(...accessProperties);
-    }
-    
-    // Remove duplicates
-    const uniqueProperties = accessibleProperties.filter(
-      (property, index, self) => 
-        index === self.findIndex(p => p.id === property.id)
-    );
-    
-    return uniqueProperties;
-    */
-    
-    // Mock implementation for now
-    console.log('PropertyAccessService.getUserAccessibleProperties called with userId:', userId);
-    return [];
   }
 
   /**
@@ -93,52 +100,50 @@ export class PropertyAccessService {
     propertyId: number, 
     requiredLevel: PropertyAccessLevel = 'read_only'
   ): Promise<boolean> {
-    // TODO: Replace with actual prisma call when database is updated
-    /*
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        ownedProperties: { where: { id: propertyId } },
-        managedProperties: { where: { id: propertyId } },
-        propertyAccess: { 
-          where: { 
-            propertyId,
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } }
-            ]
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          ownedProperties: { where: { id: propertyId, isActive: true } },
+          managedProperties: { where: { id: propertyId, isActive: true } },
+          propertyAccess: { 
+            where: { 
+              propertyId,
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } }
+              ]
+            }
           }
         }
+      });
+
+      if (!user || !user.isActive) return false;
+
+      // Super admin has access to all properties
+      if (user.role === 'super_admin') return true;
+
+      // Check if user owns the property
+      if (user.ownedProperties && user.ownedProperties.length > 0) {
+        return this.hasRequiredAccessLevel('owner', requiredLevel);
       }
-    });
 
-    if (!user) return false;
+      // Check if user manages the property
+      if (user.managedProperties && user.managedProperties.length > 0) {
+        return this.hasRequiredAccessLevel('full_control', requiredLevel);
+      }
 
-    // Super admin has access to all properties
-    if (user.role === 'super_admin') return true;
+      // Check PropertyAccess entries
+      if (user.propertyAccess && user.propertyAccess.length > 0) {
+        const access = user.propertyAccess[0];
+        return this.hasRequiredAccessLevel(access.accessLevel, requiredLevel);
+      }
 
-    // Check if user owns the property
-    if (user.ownedProperties && user.ownedProperties.length > 0) {
-      return this.hasRequiredAccessLevel('owner', requiredLevel);
+      return false;
+    } catch (error) {
+      console.error('Error checking property access:', error);
+      return false;
     }
-
-    // Check if user manages the property
-    if (user.managedProperties && user.managedProperties.length > 0) {
-      return this.hasRequiredAccessLevel('full_control', requiredLevel);
-    }
-
-    // Check PropertyAccess entries
-    if (user.propertyAccess && user.propertyAccess.length > 0) {
-      const access = user.propertyAccess[0];
-      return this.hasRequiredAccessLevel(access.accessLevel, requiredLevel);
-    }
-
-    return false;
-    */
-    
-    // Mock implementation for now
-    console.log('PropertyAccessService.canAccessProperty called:', { userId, propertyId, requiredLevel });
-    return true; // Allow access during development
   }
 
   /**
@@ -148,104 +153,112 @@ export class PropertyAccessService {
     userId: number, 
     propertyId: number
   ): Promise<PropertyAccessLevel | null> {
-    // TODO: Replace with actual prisma call when database is updated
-    /*
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        ownedProperties: { where: { id: propertyId } },
-        managedProperties: { where: { id: propertyId } },
-        propertyAccess: { 
-          where: { 
-            propertyId,
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } }
-            ]
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          ownedProperties: { where: { id: propertyId, isActive: true } },
+          managedProperties: { where: { id: propertyId, isActive: true } },
+          propertyAccess: { 
+            where: { 
+              propertyId,
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } }
+              ]
+            }
           }
         }
+      });
+
+      if (!user || !user.isActive) return null;
+
+      // Super admin has owner level access
+      if (user.role === 'super_admin') return 'owner';
+
+      // Check if user owns the property
+      if (user.ownedProperties && user.ownedProperties.length > 0) {
+        return 'owner';
       }
-    });
 
-    if (!user) return null;
+      // Check if user manages the property
+      if (user.managedProperties && user.managedProperties.length > 0) {
+        return 'full_control';
+      }
 
-    // Super admin has owner level access
-    if (user.role === 'super_admin') return 'owner';
+      // Check PropertyAccess entries
+      if (user.propertyAccess && user.propertyAccess.length > 0) {
+        return user.propertyAccess[0].accessLevel;
+      }
 
-    // Check if user owns the property
-    if (user.ownedProperties && user.ownedProperties.length > 0) {
-      return 'owner';
+      return null;
+    } catch (error) {
+      console.error('Error getting user property access level:', error);
+      return null;
     }
-
-    // Check if user manages the property
-    if (user.managedProperties && user.managedProperties.length > 0) {
-      return 'full_control';
-    }
-
-    // Check PropertyAccess entries
-    if (user.propertyAccess && user.propertyAccess.length > 0) {
-      return user.propertyAccess[0].accessLevel;
-    }
-
-    return null;
-    */
-    
-    // Mock implementation for now
-    console.log('PropertyAccessService.getUserPropertyAccessLevel called:', { userId, propertyId });
-    return 'read_only'; // Default access during development
   }
 
   /**
-   * Get all user permissions for a specific property
+   * Get all user permissions for a specific property (with caching)
    */
   static async getUserPropertyPermissions(
     userId: number, 
     propertyId: number
   ): Promise<string[]> {
-    // TODO: Replace with actual prisma call when database is updated
-    /*
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        userPermissions: {
-          include: { permission: true },
-          where: {
-            OR: [
-              { expiresAt: null },
-              { expiresAt: { gt: new Date() } }
-            ]
+    // Use cached version for better performance
+    return await CachedPermissionService.getUserPropertyPermissions(userId, propertyId);
+  }
+
+  /**
+   * Get all user permissions for a specific property (direct database access)
+   * Used by the cache service when cache misses occur
+   */
+  static async getUserPropertyPermissionsDirect(
+    userId: number, 
+    propertyId: number
+  ): Promise<string[]> {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          userPermissions: {
+            include: { permission: true },
+            where: {
+              granted: true,
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } }
+              ]
+            }
           }
         }
-      }
-    });
+      });
 
-    if (!user) return [];
+      if (!user || !user.isActive) return [];
 
-    // Get base permissions from role
-    const rolePermissions = getRolePermissions(user.role);
+      // Get base permissions from role
+      const rolePermissions = getRolePermissions(user.role);
 
-    // Get property-specific access level permissions
-    const accessLevel = await this.getUserPropertyAccessLevel(userId, propertyId);
-    const accessPermissions = accessLevel ? getAccessLevelPermissions(accessLevel) : [];
+      // Get property-specific access level permissions
+      const accessLevel = await this.getUserPropertyAccessLevel(userId, propertyId);
+      const accessPermissions = accessLevel ? getAccessLevelPermissions(accessLevel) : [];
 
-    // Get user-specific permission overrides
-    const userSpecificPermissions = user.userPermissions
-      .filter(up => up.granted)
-      .map(up => `${up.permission.resource}.${up.permission.action}`);
+      // Get user-specific permission overrides
+      const userSpecificPermissions = user.userPermissions
+        .map(up => `${up.permission.resource}.${up.permission.action}`);
 
-    // Combine all permissions and remove duplicates
-    const allPermissions = [
-      ...rolePermissions,
-      ...accessPermissions,
-      ...userSpecificPermissions
-    ];
+      // Combine all permissions and remove duplicates
+      const allPermissions = [
+        ...rolePermissions,
+        ...accessPermissions,
+        ...userSpecificPermissions
+      ];
 
-    return [...new Set(allPermissions)];
-    */
-    
-    // Mock implementation for now
-    console.log('PropertyAccessService.getUserPropertyPermissions called:', { userId, propertyId });
-    return getRolePermissions('user'); // Default permissions during development
+      return [...new Set(allPermissions)];
+    } catch (error) {
+      console.error('Error getting user property permissions:', error);
+      return [];
+    }
   }
 
   /**
@@ -294,8 +307,6 @@ export class PropertyAccessService {
     grantedBy: number,
     expiresAt?: Date
   ): Promise<PropertyAccess | null> {
-    // TODO: Replace with actual prisma call when database is updated
-    /*
     try {
       const propertyAccess = await prisma.propertyAccess.upsert({
         where: {
@@ -333,18 +344,18 @@ export class PropertyAccessService {
         }
       });
 
+      // Invalidate cache for the affected user and property
+      await CacheInvalidationService.invalidate('property_access_granted', {
+        userId,
+        propertyId,
+        reason: 'Property access granted'
+      });
+
       return propertyAccess;
     } catch (error) {
       console.error('Error granting property access:', error);
       return null;
     }
-    */
-    
-    // Mock implementation for now
-    console.log('PropertyAccessService.grantPropertyAccess called:', {
-      userId, propertyId, accessLevel, grantedBy, expiresAt
-    });
-    return null;
   }
 
   /**
@@ -355,8 +366,6 @@ export class PropertyAccessService {
     propertyId: number,
     revokedBy: number
   ): Promise<boolean> {
-    // TODO: Replace with actual prisma call when database is updated
-    /*
     try {
       await prisma.propertyAccess.delete({
         where: {
@@ -378,18 +387,18 @@ export class PropertyAccessService {
         }
       });
 
+      // Invalidate cache for the affected user and property
+      await CacheInvalidationService.invalidate('property_access_revoked', {
+        userId,
+        propertyId,
+        reason: 'Property access revoked'
+      });
+
       return true;
     } catch (error) {
       console.error('Error revoking property access:', error);
       return false;
     }
-    */
-    
-    // Mock implementation for now
-    console.log('PropertyAccessService.revokePropertyAccess called:', {
-      userId, propertyId, revokedBy
-    });
-    return true;
   }
 
   /**
@@ -413,9 +422,65 @@ export class PropertyAccessService {
    * Get properties that a user can manage (has management level access or higher)
    */
   static async getUserManageableProperties(userId: number): Promise<Property[]> {
-    // TODO: Implement with actual database queries
-    console.log('PropertyAccessService.getUserManageableProperties called with userId:', userId);
-    return [];
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          ownedProperties: { where: { isActive: true } },
+          managedProperties: { where: { isActive: true } },
+          propertyAccess: {
+            include: { property: true },
+            where: {
+              accessLevel: { in: ['management', 'full_control', 'owner'] },
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: new Date() } }
+              ]
+            }
+          }
+        }
+      });
+
+      if (!user || !user.isActive) return [];
+
+      // Super admin can manage all properties
+      if (user.role === 'super_admin') {
+        return await prisma.property.findMany({
+          where: { isActive: true }
+        });
+      }
+
+      const manageableProperties: Property[] = [];
+      
+      // Add owned properties
+      if (user.ownedProperties) {
+        manageableProperties.push(...user.ownedProperties);
+      }
+      
+      // Add managed properties
+      if (user.managedProperties) {
+        manageableProperties.push(...user.managedProperties);
+      }
+      
+      // Add properties from PropertyAccess with management level or higher
+      if (user.propertyAccess) {
+        const accessProperties = user.propertyAccess
+          .map(access => access.property)
+          .filter(Boolean) as Property[];
+        manageableProperties.push(...accessProperties);
+      }
+      
+      // Remove duplicates
+      const uniqueProperties = manageableProperties.filter(
+        (property, index, self) => 
+          index === self.findIndex(p => p.id === property.id)
+      );
+      
+      return uniqueProperties;
+    } catch (error) {
+      console.error('Error fetching user manageable properties:', error);
+      return [];
+    }
   }
 
   /**
