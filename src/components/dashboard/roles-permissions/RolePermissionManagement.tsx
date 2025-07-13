@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Shield,
   Users,
@@ -65,6 +65,7 @@ import { Label } from "@/components/ui/label";
 import { showToast } from "@/lib/toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { PermissionRefreshButton } from "@/components/auth/PermissionRefreshButton";
 
 import type { UserRole } from "@/types";
 import { PermissionCategory, PermissionAction } from "@/lib/permissions";
@@ -359,6 +360,18 @@ export default function RolePermissionManagement() {
     setExpandedCategories(newExpanded);
   };
 
+  // Collapse/Expand All Categories
+  const toggleAllCategories = () => {
+    const allCategories = Object.values(PermissionCategory);
+    if (expandedCategories.size === allCategories.length) {
+      // If all are expanded, collapse all
+      setExpandedCategories(new Set());
+    } else {
+      // If not all are expanded, expand all
+      setExpandedCategories(new Set(allCategories));
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -388,9 +401,13 @@ export default function RolePermissionManagement() {
           <p className="text-gray-600">Manage role-based permissions for your system</p>
         </div>
         <div className="flex items-center gap-2">
+          <PermissionRefreshButton 
+            variant="outline" 
+            size="default"
+          />
           <Button variant="outline" onClick={loadData} disabled={loading}>
             <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
-            Refresh
+            Refresh Data
           </Button>
           <Button onClick={() => setShowCopyDialog(true)}>
             <Copy className="h-4 w-4 mr-2" />
@@ -501,6 +518,24 @@ export default function RolePermissionManagement() {
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={toggleAllCategories}
+                      title={expandedCategories.size === Object.values(PermissionCategory).length ? "Collapse All" : "Expand All"}
+                    >
+                      {expandedCategories.size === Object.values(PermissionCategory).length ? (
+                        <>
+                          <ChevronUp className="h-4 w-4 mr-2" />
+                          Collapse All
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-4 w-4 mr-2" />
+                          Expand All
+                        </>
+                      )}
+                    </Button>
                     {selectedPermissions.size > 0 && (
                       <Button
                         variant="outline"
@@ -593,121 +628,144 @@ export default function RolePermissionManagement() {
                   </div>
                 )}
 
-                {/* Permissions List */}
-                <div className="space-y-4">
-                  {Object.entries(groupedPermissions).map(([category, permissions]) => (
-                    <div key={category} className="border rounded-lg">
-                      <div
-                        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-                        onClick={() => toggleCategory(category as PermissionCategory)}
-                      >
-                        <div className="flex items-center gap-3">
-                          {expandedCategories.has(category as PermissionCategory) ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                          <Badge className={CATEGORY_COLORS[category as PermissionCategory]}>
-                            {category.replace(/_/g, " ")}
-                          </Badge>
-                          <span className="text-sm text-gray-600">
-                            {permissions.filter(p => p.assigned).length}/{permissions.length} assigned
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={permissions.every(p => selectedPermissions.has(p.id))}
-                            onCheckedChange={(checked) => {
-                              const newSelected = new Set(selectedPermissions);
-                              if (checked) {
-                                permissions.forEach(p => newSelected.add(p.id));
-                              } else {
-                                permissions.forEach(p => newSelected.delete(p.id));
-                              }
-                              setSelectedPermissions(newSelected);
-                            }}
-                          />
-                        </div>
-                      </div>
-                      
-                      {expandedCategories.has(category as PermissionCategory) && (
-                        <div className="border-t">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-10">Select</TableHead>
-                                <TableHead>Permission</TableHead>
-                                <TableHead>Resource</TableHead>
-                                <TableHead>Action</TableHead>
-                                <TableHead>Description</TableHead>
-                                <TableHead className="text-center">Assigned</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {permissions.map((permission) => (
-                                <TableRow key={permission.id}>
-                                  <TableCell>
-                                    <Checkbox
-                                      checked={selectedPermissions.has(permission.id)}
-                                      onCheckedChange={(checked) => {
-                                        const newSelected = new Set(selectedPermissions);
-                                        if (checked) {
-                                          newSelected.add(permission.id);
-                                        } else {
-                                          newSelected.delete(permission.id);
-                                        }
-                                        setSelectedPermissions(newSelected);
-                                      }}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="font-medium">{permission.name}</TableCell>
-                                  <TableCell>
-                                    <Badge variant="outline">{permission.resource}</Badge>
-                                  </TableCell>
-                                  <TableCell>
-                                    <Badge variant="secondary">{permission.action}</Badge>
-                                  </TableCell>
-                                  <TableCell className="text-sm text-gray-600">
-                                    {permission.description || "-"}
-                                  </TableCell>
-                                  <TableCell className="text-center">
-                                    {permission.assigned ? (
-                                      <Check className="h-4 w-4 text-green-500 mx-auto" />
+                {/* Permissions Table */}
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">Select</TableHead>
+                        <TableHead>Category</TableHead>
+                        <TableHead>Permission</TableHead>
+                        <TableHead>Resource</TableHead>
+                        <TableHead>Action</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead className="text-center">Assigned</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(groupedPermissions).map(([category, permissions]) => {
+                        const allSelected = permissions.every(p => selectedPermissions.has(p.id));
+                        const someSelected = permissions.some(p => selectedPermissions.has(p.id));
+                        const isIndeterminate = someSelected && !allSelected;
+                        
+                        return (
+                          <React.Fragment key={category}>
+                            {/* Category Header Row */}
+                            <TableRow 
+                              className="bg-gray-50 hover:bg-gray-100 cursor-pointer" 
+                              onClick={() => toggleCategory(category as PermissionCategory)}
+                            >
+                              <TableCell>
+                                <Checkbox
+                                  checked={allSelected}
+                                  {...(isIndeterminate ? { 'data-indeterminate': true } : {})}
+                                  onCheckedChange={(checked) => {
+                                    const newSelected = new Set(selectedPermissions);
+                                    if (checked) {
+                                      permissions.forEach(p => newSelected.add(p.id));
+                                    } else {
+                                      permissions.forEach(p => newSelected.delete(p.id));
+                                    }
+                                    setSelectedPermissions(newSelected);
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </TableCell>
+                              <TableCell colSpan={7}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    {expandedCategories.has(category as PermissionCategory) ? (
+                                      <ChevronUp className="h-4 w-4 text-gray-500" />
                                     ) : (
-                                      <X className="h-4 w-4 text-gray-400 mx-auto" />
+                                      <ChevronDown className="h-4 w-4 text-gray-500" />
                                     )}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <Button
-                                      size="sm"
-                                      variant={permission.assigned ? "outline" : "default"}
-                                      onClick={() => handlePermissionToggle(permission.id, permission.assigned)}
-                                      disabled={submitting}
-                                    >
-                                      {submitting ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : permission.assigned ? (
-                                        <>
-                                          <Minus className="h-4 w-4 mr-1" />
-                                          Remove
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Plus className="h-4 w-4 mr-1" />
-                                          Assign
-                                        </>
-                                      )}
-                                    </Button>
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                                    <Badge className={CATEGORY_COLORS[category as PermissionCategory]}>
+                                      {category.replace(/_/g, " ")}
+                                    </Badge>
+                                    <span className="text-sm text-gray-600 font-medium">
+                                      {permissions.filter(p => p.assigned).length} of {permissions.length} permissions assigned
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    {permissions.length} total permissions
+                                  </div>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            
+                            {/* Category Permissions - Only show if expanded */}
+                            {expandedCategories.has(category as PermissionCategory) && permissions.map((permission, index) => (
+                              <TableRow 
+                                key={permission.id}
+                                className={cn(
+                                  "hover:bg-gray-50",
+                                  index === permissions.length - 1 && "border-b-2 border-gray-200"
+                                )}
+                              >
+                                <TableCell>
+                                  <Checkbox
+                                    checked={selectedPermissions.has(permission.id)}
+                                    onCheckedChange={(checked) => {
+                                      const newSelected = new Set(selectedPermissions);
+                                      if (checked) {
+                                        newSelected.add(permission.id);
+                                      } else {
+                                        newSelected.delete(permission.id);
+                                      }
+                                      setSelectedPermissions(newSelected);
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  {/* Empty cell for category column - category is shown in header */}
+                                </TableCell>
+                                <TableCell className="font-medium">{permission.name}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{permission.resource}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">{permission.action}</Badge>
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-600">
+                                  {permission.description || "-"}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {permission.assigned ? (
+                                    <Check className="h-4 w-4 text-green-500 mx-auto" />
+                                  ) : (
+                                    <X className="h-4 w-4 text-gray-400 mx-auto" />
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    size="sm"
+                                    variant={permission.assigned ? "outline" : "default"}
+                                    onClick={() => handlePermissionToggle(permission.id, permission.assigned)}
+                                    disabled={submitting}
+                                  >
+                                    {submitting ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : permission.assigned ? (
+                                      <>
+                                        <Minus className="h-4 w-4 mr-1" />
+                                        Remove
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        Assign
+                                      </>
+                                    )}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 </div>
 
                 {filteredPermissions.length === 0 && (

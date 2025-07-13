@@ -73,6 +73,8 @@ import {
   createCostAlert,
   createBusinessInsight,
 } from "@/contexts/NotificationContext";
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 import {
   ChartConfig,
   ChartContainer,
@@ -1845,24 +1847,26 @@ export default function DashboardClient() {
       </div>
 
       {/* Top Categories Row */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        <TopCategoryList
-          key="food-categories"
-          title="Top Food Categories"
-          icon={Apple}
-          data={dashboardData?.topFoodCategories}
-          isLoading={isLoadingData}
-          itemType="Food"
-        />
-        <TopCategoryList
-          key="beverage-categories"
-          title="Top Beverage Categories"
-          icon={Martini}
-          data={dashboardData?.topBeverageCategories}
-          isLoading={isLoadingData}
-          itemType="Beverage"
-        />
-      </div>
+      <PermissionGate permissions={["dashboard.categories.breakdown"]}>
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+          <TopCategoryList
+            key="food-categories"
+            title="Top Food Categories"
+            icon={Apple}
+            data={dashboardData?.topFoodCategories}
+            isLoading={isLoadingData}
+            itemType="Food"
+          />
+          <TopCategoryList
+            key="beverage-categories"
+            title="Top Beverage Categories"
+            icon={Martini}
+            data={dashboardData?.topBeverageCategories}
+            isLoading={isLoadingData}
+            itemType="Beverage"
+          />
+        </div>
+      </PermissionGate>
 
       {/* Enhanced AI Cost Advisor Section */}
       <EnhancedCostAdvisorSection
@@ -1895,17 +1899,18 @@ export default function DashboardClient() {
       />
 
       {/* Charts Grid */}
-      <div className="grid gap-6 grid-cols-1 sm:grid-cols-1 md:grid-cols-1">
-        {/* Overview Chart Card (Main Bar Chart) */}
-        <Card className="shadow-md bg-card">
-          <CardHeader>
-            <CardTitle className="font-headline text-xl">
-              Costs Overview (Daily Hotel %)
-            </CardTitle>
-            <CardDescription>
-              Hotel Food & Beverage cost percentages over the selected period.
-            </CardDescription>
-          </CardHeader>
+      <PermissionGate permissions={["dashboard.charts.financial"]}>
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-1 md:grid-cols-1">
+          {/* Overview Chart Card (Main Bar Chart) */}
+          <Card className="shadow-md bg-card">
+            <CardHeader>
+              <CardTitle className="font-headline text-xl">
+                Costs Overview (Daily Hotel %)
+              </CardTitle>
+              <CardDescription>
+                Hotel Food & Beverage cost percentages over the selected period.
+              </CardDescription>
+            </CardHeader>
           <CardContent className="p-2 sm:p-4 flex items-center justify-center min-h-[200px] h-[45vw] sm:h-72">
             <div className="w-full h-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
@@ -1966,13 +1971,15 @@ export default function DashboardClient() {
             </div>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </PermissionGate>
 
-      <div className="grid gap-6 grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {/* Cost Trends (Line Chart) */}
-        <Card className="shadow-md bg-card md:col-span-2 lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="font-headline text-xl">Cost Trends</CardTitle>
+      <PermissionGate permissions={["dashboard.trends.view"]}>
+        <div className="grid gap-6 grid-cols-1 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          {/* Cost Trends (Line Chart) */}
+          <Card className="shadow-md bg-card md:col-span-2 lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="font-headline text-xl">Cost Trends</CardTitle>
             <CardDescription>
               {selectedOutletId && selectedOutletId !== "all"
                 ? `Food & Bev cost % trend for ${
@@ -2138,19 +2145,21 @@ export default function DashboardClient() {
             </div>
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </PermissionGate>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Outlet Food Cost Metrics */}
-        <Card className="shadow-md bg-card">
-          <CardHeader>
-            <CardTitle className="font-headline text-xl">
-              Outlet Food Cost Metrics
-            </CardTitle>
-            <CardDescription>
-              Key food cost metrics by outlet for the selected period.
-            </CardDescription>
-          </CardHeader>
+      <PermissionGate permissions={["dashboard.outlets.performance"]}>
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Outlet Food Cost Metrics */}
+          <Card className="shadow-md bg-card">
+            <CardHeader>
+              <CardTitle className="font-headline text-xl">
+                Outlet Food Cost Metrics
+              </CardTitle>
+              <CardDescription>
+                Key food cost metrics by outlet for the selected period.
+              </CardDescription>
+            </CardHeader>
           <CardContent className="h-[350px] overflow-x-auto">
             {isLoadingData ||
             dateRange === undefined ||
@@ -2298,7 +2307,8 @@ export default function DashboardClient() {
             )}
           </CardContent>
         </Card>
-      </div>
+        </div>
+      </PermissionGate>
 
       {/* Add fade-in animation */}
       <style jsx global>{`

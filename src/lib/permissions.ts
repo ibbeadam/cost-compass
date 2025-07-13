@@ -94,6 +94,10 @@ export const PERMISSIONS = {
     VIEW_BASIC_REPORTS: 'reports.basic.read',
     VIEW_FINANCIAL_REPORTS: 'reports.financial.read',
     VIEW_CROSS_PROPERTY_REPORTS: 'reports.cross_property.read',
+    VIEW_COST_VARIANCE_REPORTS: 'reports.cost_variance.read',
+    VIEW_CATEGORY_TRENDS_REPORTS: 'reports.category_trends.read',
+    VIEW_PREDICTIVE_ANALYTICS_REPORTS: 'reports.predictive_analytics.read',
+    VIEW_PROFIT_LOSS_REPORTS: 'reports.profit_loss.read',
     EXPORT_REPORTS: 'reports.export',
   },
   
@@ -103,6 +107,10 @@ export const PERMISSIONS = {
     READ_OUTLETS: 'outlets.read',
     UPDATE_OUTLETS: 'outlets.update',
     DELETE_OUTLETS: 'outlets.delete',
+    CREATE_CATEGORIES: 'categories.create',
+    READ_CATEGORIES: 'categories.read',
+    UPDATE_CATEGORIES: 'categories.update',
+    DELETE_CATEGORIES: 'categories.delete',
   },
   
   // Dashboard Access
@@ -110,6 +118,14 @@ export const PERMISSIONS = {
     VIEW_DASHBOARD: 'dashboard.view',
     VIEW_PROPERTY_DASHBOARD: 'dashboard.property.view',
     VIEW_CROSS_PROPERTY_DASHBOARD: 'dashboard.cross_property.view',
+    VIEW_KPI_WIDGETS: 'dashboard.kpi.view',
+    VIEW_FINANCIAL_CHARTS: 'dashboard.charts.financial',
+    VIEW_COST_ANALYTICS: 'dashboard.analytics.costs',
+    VIEW_PROPERTY_COMPARISON: 'dashboard.property.compare',
+    VIEW_TREND_ANALYSIS: 'dashboard.trends.view',
+    VIEW_CATEGORY_BREAKDOWN: 'dashboard.categories.breakdown',
+    VIEW_OUTLET_PERFORMANCE: 'dashboard.outlets.performance',
+    EXPORT_DASHBOARD: 'dashboard.export',
   },
 } as const;
 
@@ -166,6 +182,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     // Reporting access
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
     PERMISSIONS.REPORTING.VIEW_FINANCIAL_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_COST_VARIANCE_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_CATEGORY_TRENDS_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_PREDICTIVE_ANALYTICS_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_PROFIT_LOSS_REPORTS,
     PERMISSIONS.REPORTING.EXPORT_REPORTS,
     
     // Outlet management
@@ -201,6 +221,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
     PERMISSIONS.REPORTING.VIEW_FINANCIAL_REPORTS,
     PERMISSIONS.REPORTING.VIEW_CROSS_PROPERTY_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_COST_VARIANCE_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_CATEGORY_TRENDS_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_PREDICTIVE_ANALYTICS_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_PROFIT_LOSS_REPORTS,
     PERMISSIONS.REPORTING.EXPORT_REPORTS,
     
     // Outlet management
@@ -236,6 +260,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     // Reporting
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
     PERMISSIONS.REPORTING.VIEW_FINANCIAL_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_COST_VARIANCE_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_CATEGORY_TRENDS_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_PREDICTIVE_ANALYTICS_REPORTS,
+    PERMISSIONS.REPORTING.VIEW_PROFIT_LOSS_REPORTS,
     PERMISSIONS.REPORTING.EXPORT_REPORTS,
     
     // Outlet management
@@ -283,11 +311,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     PERMISSIONS.FINANCIAL_DATA.READ_BEVERAGE_COSTS,
     PERMISSIONS.FINANCIAL_DATA.READ_DAILY_SUMMARY,
     
-    // Allow beverage cost creation for readonly users
-    PERMISSIONS.FINANCIAL_DATA.CREATE_BEVERAGE_COSTS,
-    
     // Basic reporting
     PERMISSIONS.REPORTING.VIEW_BASIC_REPORTS,
+    
+    // Outlet and category access
+    PERMISSIONS.OUTLET_MANAGEMENT.READ_OUTLETS,
+    PERMISSIONS.OUTLET_MANAGEMENT.READ_CATEGORIES,
     
     // Dashboard viewing
     PERMISSIONS.DASHBOARD_ACCESS.VIEW_DASHBOARD,

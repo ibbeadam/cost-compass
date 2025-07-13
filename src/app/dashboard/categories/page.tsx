@@ -1,7 +1,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import CategoryListClient from "@/components/dashboard/categories/CategoryListClient";
-import { SuperAdminOnly } from "@/components/auth/PermissionGate";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -33,7 +33,8 @@ function CategoryListSkeleton() {
 
 export default function ManageCategoriesPage() {
   return (
-    <SuperAdminOnly 
+    <PermissionGate 
+      permissions={["categories.read"]}
       fallback={
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
@@ -60,6 +61,6 @@ export default function ManageCategoriesPage() {
           </CardContent>
         </Card>
       </div>
-    </SuperAdminOnly>
+    </PermissionGate>
   );
 }

@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/server-auth";
+import { PermissionService } from "@/lib/permission-utils";
 import { startOfDay, endOfDay, subDays, addDays, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from "date-fns";
 
 export interface ForecastDataPoint {
@@ -206,6 +207,11 @@ export async function getPredictiveAnalyticsReportAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check permission for predictive analytics reports
+    if (!PermissionService.hasPermission(user, "reports.predictive_analytics.read")) {
+      throw new Error("Access denied. Insufficient permissions to view predictive analytics reports.");
     }
 
     const normalizedHistoricalStart = startOfDay(historicalStartDate);

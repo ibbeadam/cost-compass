@@ -6,6 +6,7 @@
 import type { User, UserRole, PropertyAccessLevel } from "@/types";
 import { ROLE_PERMISSIONS, ACCESS_LEVEL_PERMISSIONS } from "@/lib/permissions";
 import { PropertyAccessService } from "@/lib/property-access";
+import { prisma } from "@/lib/prisma";
 
 /**
  * Basic Permission Service for role-based checks
@@ -13,48 +14,117 @@ import { PropertyAccessService } from "@/lib/property-access";
 export class PermissionService {
   
   /**
-   * Get all permissions for a user based on their role
+   * Get all permissions for a user based on their role (Database-driven)
    */
-  static getUserPermissions(user: User): string[] {
+  static async getUserPermissions(user: User): Promise<string[]> {
     if (!user || !user.role) return [];
     
-    // Get base permissions from role
+    try {
+      // Get base permissions from role (from database)
+      const rolePermissions = await this.getRolePermissionsFromDatabase(user.role);
+      
+      // Get user-specific permissions (if any)
+      const userPermissions = user.permissions || [];
+      
+      // Combine and deduplicate
+      return [...new Set([...rolePermissions, ...userPermissions])];
+    } catch (error) {
+      console.error('Error getting user permissions:', error);
+      
+      // Fallback to hardcoded permissions if database fails
+      const rolePermissions = ROLE_PERMISSIONS[user.role] || [];
+      const userPermissions = user.permissions || [];
+      return [...new Set([...rolePermissions, ...userPermissions])];
+    }
+  }
+
+  /**
+   * Get permissions for a role from database
+   */
+  static async getRolePermissionsFromDatabase(role: UserRole): Promise<string[]> {
+    try {
+      const rolePermissions = await prisma.rolePermission.findMany({
+        where: { role },
+        include: { permission: true }
+      });
+      
+      return rolePermissions.map(rp => rp.permission.name);
+    } catch (error) {
+      console.error('Error fetching role permissions from database:', error);
+      return ROLE_PERMISSIONS[role] || [];
+    }
+  }
+
+  /**
+   * Synchronous version for backward compatibility (uses cache)
+   */
+  static getUserPermissionsSync(user: User): string[] {
+    if (!user || !user.role) return [];
+    
+    // Use hardcoded permissions for sync calls
+    // In production, this should be replaced with cached permissions
     const rolePermissions = ROLE_PERMISSIONS[user.role] || [];
-    
-    // Get user-specific permissions (if any)
     const userPermissions = user.permissions || [];
-    
-    // Combine and deduplicate
     return [...new Set([...rolePermissions, ...userPermissions])];
   }
 
   /**
-   * Check if user has a specific permission
+   * Check if user has a specific permission (Database-driven)
    */
-  static hasPermission(user: User, permission: string): boolean {
+  static async hasPermission(user: User, permission: string): Promise<boolean> {
     if (!user) return false;
     
-    const userPermissions = this.getUserPermissions(user);
+    const userPermissions = await this.getUserPermissions(user);
     return userPermissions.includes(permission);
   }
 
   /**
-   * Check if user has any of the specified permissions
+   * Check if user has any of the specified permissions (Database-driven)
    */
-  static hasAnyPermission(user: User, permissions: string[]): boolean {
+  static async hasAnyPermission(user: User, permissions: string[]): Promise<boolean> {
     if (!user || !permissions.length) return false;
     
-    const userPermissions = this.getUserPermissions(user);
+    const userPermissions = await this.getUserPermissions(user);
     return permissions.some(permission => userPermissions.includes(permission));
   }
 
   /**
-   * Check if user has all of the specified permissions
+   * Synchronous permission check for backward compatibility
    */
-  static hasAllPermissions(user: User, permissions: string[]): boolean {
+  static hasPermissionSync(user: User, permission: string): boolean {
+    if (!user) return false;
+    
+    const userPermissions = this.getUserPermissionsSync(user);
+    return userPermissions.includes(permission);
+  }
+
+  /**
+   * Synchronous permission check for backward compatibility
+   */
+  static hasAnyPermissionSync(user: User, permissions: string[]): boolean {
     if (!user || !permissions.length) return false;
     
-    const userPermissions = this.getUserPermissions(user);
+    const userPermissions = this.getUserPermissionsSync(user);
+    return permissions.some(permission => userPermissions.includes(permission));
+  }
+
+  /**
+   * Check if user has all of the specified permissions (Database-driven)
+   */
+  static async hasAllPermissions(user: User, permissions: string[]): Promise<boolean> {
+    if (!user || !permissions.length) return false;
+    
+    const userPermissions = await this.getUserPermissions(user);
+    return permissions.every(permission => userPermissions.includes(permission));
+  }
+
+  /**
+   * Synchronous version for backward compatibility
+   */
+  static hasAllPermissionsSync(user: User, permissions: string[]): boolean {
+    if (!user || !permissions.length) return false;
+    
+    const userPermissions = this.getUserPermissionsSync(user);
     return permissions.every(permission => userPermissions.includes(permission));
   }
 
@@ -95,10 +165,10 @@ export class PermissionService {
   }
 
   /**
-   * Check if user can manage other users
+   * Check if user can manage other users (Database-driven)
    */
-  static canManageUsers(user: User): boolean {
-    return this.hasAnyPermission(user, [
+  static async canManageUsers(user: User): Promise<boolean> {
+    return await this.hasAnyPermission(user, [
       'users.create',
       'users.update',
       'users.delete',
@@ -107,10 +177,10 @@ export class PermissionService {
   }
 
   /**
-   * Check if user can manage properties
+   * Check if user can manage properties (Database-driven)
    */
-  static canManageProperties(user: User): boolean {
-    return this.hasAnyPermission(user, [
+  static async canManageProperties(user: User): Promise<boolean> {
+    return await this.hasAnyPermission(user, [
       'properties.create',
       'properties.update',
       'properties.delete',
@@ -119,10 +189,10 @@ export class PermissionService {
   }
 
   /**
-   * Check if user can view financial data
+   * Check if user can view financial data (Database-driven)
    */
-  static canViewFinancialData(user: User): boolean {
-    return this.hasAnyPermission(user, [
+  static async canViewFinancialData(user: User): Promise<boolean> {
+    return await this.hasAnyPermission(user, [
       'financial.food_costs.read',
       'financial.beverage_costs.read',
       'financial.daily_summary.read'
@@ -130,10 +200,10 @@ export class PermissionService {
   }
 
   /**
-   * Check if user can create/edit financial data
+   * Check if user can create/edit financial data (Database-driven)
    */
-  static canEditFinancialData(user: User): boolean {
-    return this.hasAnyPermission(user, [
+  static async canEditFinancialData(user: User): Promise<boolean> {
+    return await this.hasAnyPermission(user, [
       'financial.food_costs.create',
       'financial.food_costs.update',
       'financial.beverage_costs.create',
@@ -144,10 +214,10 @@ export class PermissionService {
   }
 
   /**
-   * Check if user can view reports
+   * Check if user can view reports (Database-driven)
    */
-  static canViewReports(user: User): boolean {
-    return this.hasAnyPermission(user, [
+  static async canViewReports(user: User): Promise<boolean> {
+    return await this.hasAnyPermission(user, [
       'reports.basic.read',
       'reports.detailed.read',
       'reports.financial.read'
@@ -155,10 +225,60 @@ export class PermissionService {
   }
 
   /**
-   * Check if user can export reports
+   * Check if user can export reports (Database-driven)
    */
-  static canExportReports(user: User): boolean {
-    return this.hasPermission(user, 'reports.export');
+  static async canExportReports(user: User): Promise<boolean> {
+    return await this.hasPermission(user, 'reports.export');
+  }
+
+  // Synchronous versions for backward compatibility
+  static canManageUsersSync(user: User): boolean {
+    return this.hasAnyPermissionSync(user, [
+      'users.create',
+      'users.update',
+      'users.delete',
+      'users.roles.manage'
+    ]);
+  }
+
+  static canManagePropertiesSync(user: User): boolean {
+    return this.hasAnyPermissionSync(user, [
+      'properties.create',
+      'properties.update',
+      'properties.delete',
+      'properties.access.manage'
+    ]);
+  }
+
+  static canViewFinancialDataSync(user: User): boolean {
+    return this.hasAnyPermissionSync(user, [
+      'financial.food_costs.read',
+      'financial.beverage_costs.read',
+      'financial.daily_summary.read'
+    ]);
+  }
+
+  static canEditFinancialDataSync(user: User): boolean {
+    return this.hasAnyPermissionSync(user, [
+      'financial.food_costs.create',
+      'financial.food_costs.update',
+      'financial.beverage_costs.create',
+      'financial.beverage_costs.update',
+      'financial.daily_summary.create',
+      'financial.daily_summary.update'
+    ]);
+  }
+
+  static canViewReportsSync(user: User): boolean {
+    return this.hasAnyPermissionSync(user, [
+      'reports.basic.read',
+      'reports.detailed.read',
+      'reports.financial.read'
+    ]);
+  }
+
+  static canExportReportsSync(user: User): boolean {
+    return this.hasPermissionSync(user, 'reports.export');
   }
 
   /**
@@ -207,7 +327,7 @@ export class PropertyPermissionService extends PermissionService {
     if (this.isSuperAdmin(user)) return true;
     
     // Check basic role permissions first
-    if (this.hasPermission(user, permission)) {
+    if (await this.hasPermission(user, permission)) {
       // Verify property access
       return await PropertyAccessService.canAccessProperty(user.id, propertyId, 'read_only');
     }
@@ -248,7 +368,7 @@ export class PropertyPermissionService extends PermissionService {
     if (!user) return false;
     
     // Check if user has user management permissions and property access
-    const hasUserPermissions = this.canManageUsers(user);
+    const hasUserPermissions = await this.canManageUsers(user);
     const hasPropertyAccess = await PropertyAccessService.canManagePropertyUsers(user.id, propertyId);
     
     return hasUserPermissions && hasPropertyAccess;
@@ -257,8 +377,8 @@ export class PropertyPermissionService extends PermissionService {
   /**
    * Check if user can view cross-property reports
    */
-  static canViewCrossPropertyReports(user: User): boolean {
-    return this.hasAnyPermission(user, [
+  static async canViewCrossPropertyReports(user: User): Promise<boolean> {
+    return await this.hasAnyPermission(user, [
       'reports.cross_property.read',
       'dashboard.cross_property.view'
     ]);
@@ -385,7 +505,7 @@ export async function canAccessRoute(
   }
   
   // Check permission requirements
-  if (routeConfig.permissions && !PermissionService.hasAnyPermission(user, routeConfig.permissions)) {
+  if (routeConfig.permissions && !(await PermissionService.hasAnyPermission(user, routeConfig.permissions))) {
     return false;
   }
   

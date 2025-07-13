@@ -12,6 +12,8 @@ export default withAuth(
   async function middleware(req) {
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
+    
+    console.log(`🔍 Middleware processing: ${pathname} for user ${token?.sub} (${token?.role})`);
 
     // 1. Apply rate limiting and DDoS protection first
     try {
@@ -46,7 +48,7 @@ export default withAuth(
     const hasAccess = checkBasicAccess(token.role as UserRole, pathname);
     
     if (!hasAccess) {
-      console.log('Access denied for route:', pathname, 'Role:', token.role);
+      console.log('❌ Middleware Access denied for route:', pathname, 'Role:', token.role);
       return NextResponse.redirect(new URL("/dashboard/unauthorized", req.url));
     }
 
@@ -66,7 +68,7 @@ export default withAuth(
 
     // Log access in development
     if (process.env.NODE_ENV === 'development') {
-      console.log('Access granted:', {
+      console.log('🔓 Middleware Access granted:', {
         userId: token.sub,
         role: token.role,
         path: pathname,

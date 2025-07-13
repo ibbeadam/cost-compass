@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, startOfYear, endOfYear } from "date-f
 // @ts-ignore
 import type { BudgetVsActualsReport, DailyRevenueTrendsReport } from "@/types/index";
 import { getCurrentUser } from "@/lib/server-auth";
+import { PermissionService } from "@/lib/permission-utils";
 import { auditReportExport } from "@/lib/audit-middleware";
 
 export async function getMonthlyProfitLossReportAction(
@@ -20,6 +21,11 @@ export async function getMonthlyProfitLossReportAction(
     const currentUser = await getCurrentUser();
     if (!currentUser) {
       throw new Error("Authentication required");
+    }
+
+    // Check permission for profit loss reports
+    if (!PermissionService.hasPermission(currentUser, "reports.profit_loss.read")) {
+      throw new Error("Access denied. Insufficient permissions to view profit loss reports.");
     }
     // Handle property filtering
     const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
@@ -337,6 +343,16 @@ export async function getBudgetVsActualsReportAction(
   propertyId?: number | string
 ): Promise<BudgetVsActualsReport> {
   try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      throw new Error("Authentication required");
+    }
+
+    // Check permission for profit loss reports
+    if (!PermissionService.hasPermission(currentUser, "reports.profit_loss.read")) {
+      throw new Error("Access denied. Insufficient permissions to view profit loss reports.");
+    }
+
     // Handle property filtering
     const numericPropertyId = typeof propertyId === 'string' && propertyId === 'all' 
       ? undefined 

@@ -44,11 +44,12 @@ export const GET = withServerPermissions(
     }
   },
   {
-    permissions: ["system.roles.read"],
+    permissions: ["system.roles.read", "users.roles.manage", "system.admin.full_access"],
+    requireAllPermissions: false, // User needs ANY of these permissions
     auditAction: "READ",
     auditResource: "roles_permissions",
     rateLimiting: {
-      maxRequests: 20,
+      maxRequests: 100,
       windowMs: 60000
     }
   }
@@ -133,11 +134,12 @@ export const POST = withServerPermissions(
   }
 },
 {
-  permissions: ["system.roles.update"],
+  permissions: ["system.roles.update", "users.roles.manage", "system.admin.full_access"],
+  requireAllPermissions: false, // User needs ANY of these permissions
   auditAction: "UPDATE",
   auditResource: "role_permissions",
   rateLimiting: {
-    maxRequests: 10,
+    maxRequests: 50,
     windowMs: 60000
   }
 }
@@ -200,11 +202,12 @@ export const DELETE = withServerPermissions(
   }
 },
 {
-  permissions: ["system.roles.update"],
+  permissions: ["system.roles.update", "users.roles.manage", "system.admin.full_access"],
+  requireAllPermissions: false, // User needs ANY of these permissions
   auditAction: "DELETE",
   auditResource: "role_permissions",
   rateLimiting: {
-    maxRequests: 10,
+    maxRequests: 50,
     windowMs: 60000
   }
 }

@@ -329,6 +329,34 @@ export const PERMISSIONS = [
     resource: 'reports',
     action: 'EXPORT' as PermissionAction,
   },
+  {
+    name: 'reports.cost_variance.read',
+    description: 'View cost variance reports',
+    category: 'REPORTING' as PermissionCategory,
+    resource: 'cost_variance_reports',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'reports.category_trends.read',
+    description: 'View category trends reports',
+    category: 'REPORTING' as PermissionCategory,
+    resource: 'category_trends_reports',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'reports.predictive_analytics.read',
+    description: 'View predictive analytics reports',
+    category: 'REPORTING' as PermissionCategory,
+    resource: 'predictive_analytics_reports',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'reports.profit_loss.read',
+    description: 'View profit loss reports',
+    category: 'REPORTING' as PermissionCategory,
+    resource: 'profit_loss_reports',
+    action: 'READ' as PermissionAction,
+  },
 
   // OUTLET_MANAGEMENT permissions
   {
@@ -419,6 +447,55 @@ export const PERMISSIONS = [
     resource: 'kpi_dashboard',
     action: 'READ' as PermissionAction,
   },
+  {
+    name: 'dashboard.charts.financial',
+    description: 'View financial charts on dashboard',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard_charts',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'dashboard.analytics.costs',
+    description: 'View cost analytics on dashboard',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard_analytics',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'dashboard.property.compare',
+    description: 'View property comparison on dashboard',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard_comparison',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'dashboard.trends.view',
+    description: 'View trend analysis on dashboard',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard_trends',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'dashboard.categories.breakdown',
+    description: 'View category breakdown on dashboard',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard_categories',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'dashboard.outlets.performance',
+    description: 'View outlet performance on dashboard',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard_outlets',
+    action: 'READ' as PermissionAction,
+  },
+  {
+    name: 'dashboard.export',
+    description: 'Export dashboard data',
+    category: 'DASHBOARD_ACCESS' as PermissionCategory,
+    resource: 'dashboard',
+    action: 'EXPORT' as PermissionAction,
+  },
 ];
 
 // Define role-permission mappings based on the 8-tier hierarchy
@@ -475,6 +552,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'reports.advanced.read',
     'reports.financial.read',
     'reports.cross_property.read',
+    'reports.cost_variance.read',
+    'reports.category_trends.read',
+    'reports.predictive_analytics.read',
+    'reports.profit_loss.read',
     'reports.export',
     
     // Full outlet management
@@ -531,6 +612,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'reports.basic.read',
     'reports.advanced.read',
     'reports.financial.read',
+    'reports.cost_variance.read',
+    'reports.category_trends.read',
+    'reports.predictive_analytics.read',
+    'reports.profit_loss.read',
     'reports.export',
     
     // Outlet management
@@ -550,6 +635,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'dashboard.view',
     'dashboard.analytics.view',
     'dashboard.kpi.view',
+    'dashboard.charts.financial',
+    'dashboard.analytics.costs',
+    'dashboard.property.compare',
+    'dashboard.trends.view',
+    'dashboard.categories.breakdown',
+    'dashboard.outlets.performance',
+    'dashboard.export',
   ],
   
   property_admin: [
@@ -582,6 +674,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'reports.basic.read',
     'reports.advanced.read',
     'reports.financial.read',
+    'reports.cost_variance.read',
+    'reports.category_trends.read',
+    'reports.predictive_analytics.read',
+    'reports.profit_loss.read',
     'reports.export',
     
     // Outlet management
@@ -601,6 +697,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'dashboard.view',
     'dashboard.analytics.view',
     'dashboard.kpi.view',
+    'dashboard.charts.financial',
+    'dashboard.analytics.costs',
+    'dashboard.property.compare',
+    'dashboard.trends.view',
+    'dashboard.categories.breakdown',
+    'dashboard.outlets.performance',
+    'dashboard.export',
   ],
   
   regional_manager: [
@@ -622,6 +725,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'reports.advanced.read',
     'reports.financial.read',
     'reports.cross_property.read',
+    'reports.cost_variance.read',
+    'reports.category_trends.read',
+    'reports.predictive_analytics.read',
+    'reports.profit_loss.read',
     'reports.export',
     
     // Outlet viewing
@@ -632,6 +739,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'dashboard.view',
     'dashboard.analytics.view',
     'dashboard.kpi.view',
+    'dashboard.charts.financial',
+    'dashboard.analytics.costs',
+    'dashboard.property.compare',
+    'dashboard.trends.view',
+    'dashboard.categories.breakdown',
+    'dashboard.outlets.performance',
+    'dashboard.export',
   ],
   
   property_manager: [
@@ -658,6 +772,10 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     // Basic and financial reporting
     'reports.basic.read',
     'reports.financial.read',
+    'reports.cost_variance.read',
+    'reports.category_trends.read',
+    'reports.predictive_analytics.read',
+    'reports.profit_loss.read',
     'reports.export',
     
     // Outlet management
@@ -673,6 +791,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'dashboard.view',
     'dashboard.analytics.view',
     'dashboard.kpi.view',
+    'dashboard.charts.financial',
+    'dashboard.analytics.costs',
+    'dashboard.property.compare',
+    'dashboard.trends.view',
+    'dashboard.categories.breakdown',
+    'dashboard.outlets.performance',
+    'dashboard.export',
   ],
   
   supervisor: [
@@ -737,6 +862,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     
     // Dashboard viewing
     'dashboard.view',
+    'dashboard.kpi.view',
+    'dashboard.charts.financial',
+    'dashboard.analytics.costs',
+    'dashboard.trends.view',
+    'dashboard.categories.breakdown',
+    'dashboard.outlets.performance',
   ],
 };
 

@@ -3,6 +3,7 @@ import DailyFinancialSummaryListClient from "@/components/dashboard/financial-su
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 export const metadata = {
   title: "Daily Financial Summaries | Cost Compass",
@@ -38,23 +39,38 @@ function ListSkeleton() {
 
 export default function DailyFinancialSummariesPage() {
   return (
-    <div className="flex flex-col flex-grow w-full">
-        <Card className="shadow-lg bg-card w-full">
-          <CardHeader>
-            <CardTitle className="font-headline text-2xl">Hotel Daily Financial Summaries</CardTitle>
-            <CardDescription>
-              Manage overall daily revenue, budget percentages, and adjustments for the hotel.
-              Actual costs and variances are calculated based on detailed Food & Beverage cost entries.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto p-0">
-            <div className="p-6">
-            <Suspense fallback={<ListSkeleton />}>
-              <DailyFinancialSummaryListClient />
-            </Suspense>
-            </div>
-          </CardContent>
-        </Card>
-    </div>
+    <PermissionGate 
+      permissions={["financial.daily_summary.read", "financial.daily_summary.create"]}
+      requireAll={false}
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-muted-foreground">Access Denied</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              You don't have permission to access daily financial summaries.
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col flex-grow w-full">
+          <Card className="shadow-lg bg-card w-full">
+            <CardHeader>
+              <CardTitle className="font-headline text-2xl">Hotel Daily Financial Summaries</CardTitle>
+              <CardDescription>
+                Manage overall daily revenue, budget percentages, and adjustments for the hotel.
+                Actual costs and variances are calculated based on detailed Food & Beverage cost entries.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-x-auto p-0">
+              <div className="p-6">
+              <Suspense fallback={<ListSkeleton />}>
+                <DailyFinancialSummaryListClient />
+              </Suspense>
+              </div>
+            </CardContent>
+          </Card>
+      </div>
+    </PermissionGate>
   );
 }

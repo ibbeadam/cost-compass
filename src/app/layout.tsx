@@ -14,6 +14,7 @@ import { NextAuthProvider } from "@/contexts/NextAuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import { NotificationToastContainer } from "@/components/notifications/NotificationToast";
+import { SessionRefreshProvider } from "@/components/auth/SessionRefreshProvider";
 import { usePathname } from "next/navigation"; // Added
 import { useEffect, useState } from "react"; // Added for isMounted pattern
 import "@/lib/startup"; // Initialize application systems
@@ -72,24 +73,26 @@ export default function RootLayout({
         <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
           <ThemeProvider>
             <NextAuthProvider>
-              <AuthProvider>
-                <div className="flex min-h-screen w-full items-center justify-center">
-                  {children}
-                </div>
-                <Toaster />
-                <ToastContainer
-                  position="top-right"
-                  autoClose={5000}
-                  hideProgressBar={false}
-                  newestOnTop={false}
-                  closeOnClick
-                  rtl={false}
-                  pauseOnFocusLoss
-                  draggable
-                  pauseOnHover
-                  theme="light"
-                />
-              </AuthProvider>
+              <SessionRefreshProvider>
+                <AuthProvider>
+                  <div className="flex min-h-screen w-full items-center justify-center">
+                    {children}
+                  </div>
+                  <Toaster />
+                  <ToastContainer
+                    position="top-right"
+                    autoClose={5000}
+                    hideProgressBar={false}
+                    newestOnTop={false}
+                    closeOnClick
+                    rtl={false}
+                    pauseOnFocusLoss
+                    draggable
+                    pauseOnHover
+                    theme="light"
+                  />
+                </AuthProvider>
+              </SessionRefreshProvider>
             </NextAuthProvider>
           </ThemeProvider>
         </body>
@@ -131,7 +134,8 @@ export default function RootLayout({
       <body className="font-body antialiased bg-background text-foreground overflow-x-hidden">
         <ThemeProvider>
           <NextAuthProvider>
-            <AuthProvider>
+            <SessionRefreshProvider>
+              <AuthProvider>
             {isAuthPage ? (
               <div className="flex min-h-screen w-full items-center justify-center overflow-x-hidden">
                 {children}
@@ -166,7 +170,8 @@ export default function RootLayout({
               pauseOnHover
               theme="light"
             />
-            </AuthProvider>
+              </AuthProvider>
+            </SessionRefreshProvider>
           </NextAuthProvider>
         </ThemeProvider>
       </body>

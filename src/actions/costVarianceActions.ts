@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/server-auth";
+import { PermissionService } from "@/lib/permission-utils";
 import { startOfDay, endOfDay, subDays, format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from "date-fns";
 
 export interface CategoryVarianceData {
@@ -187,6 +188,11 @@ export async function getCostVarianceAnalysisReportAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check permission for cost variance reports
+    if (!PermissionService.hasPermission(user, "reports.cost_variance.read")) {
+      throw new Error("Access denied. Insufficient permissions to view cost variance reports.");
     }
 
     const normalizedStartDate = startOfDay(startDate);

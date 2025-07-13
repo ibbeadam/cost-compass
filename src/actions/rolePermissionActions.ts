@@ -6,6 +6,44 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import type { UserRole } from "@/types";
 import { PermissionCategory, PermissionAction } from "@/lib/permissions";
+import { triggerSessionRefresh, triggerSessionRefreshForRole } from "@/lib/session-refresh";
+import { broadcastPermissionUpdate } from "@/lib/sse/broadcast-service";
+
+/**
+ * Helper function to trigger both server and client-side permission refresh
+ */
+async function triggerPermissionRefresh(
+  role: UserRole, 
+  permissionName?: string, 
+  action?: 'granted' | 'revoked',
+  adminUserId?: number
+) {
+  // Trigger server-side session refresh
+  await triggerSessionRefreshForRole(role);
+  
+  // Trigger real-time SSE notifications for cross-device/browser updates
+  if (permissionName && action) {
+    console.log(`🔄 Attempting to broadcast permission update: ${permissionName} ${action} for role ${role}`);
+    try {
+      console.log(`📡 Broadcasting permission update via SSE...`);
+      broadcastPermissionUpdate({
+        type: 'role_updated',
+        message: `Permission ${action} for role ${role}`,
+        timestamp: new Date().toISOString(),
+        affectedRole: role,
+        permissionName,
+        action,
+        requiresRefresh: true
+      });
+      console.log(`✅ Permission update broadcast completed`);
+    } catch (error) {
+      console.error('Error broadcasting permission update:', error);
+    }
+  }
+  
+  console.log(`✅ Permission refresh completed for role: ${role}`);
+  console.log('🔄 Users with this role will get updated permissions immediately across all devices');
+}
 
 export interface RolePermissionData {
   id: number;
@@ -44,9 +82,12 @@ export async function getRolesWithPermissions(): Promise<{
 }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
+    // This function assumes the user has already been authorized
 
     // Get all permissions
     const allPermissions = await prisma.permission.findMany({
@@ -113,9 +154,11 @@ export async function assignPermissionToRole(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
 
     // Check if permission exists
     const permission = await prisma.permission.findUnique({
@@ -162,6 +205,9 @@ export async function assignPermissionToRole(
       }
     });
 
+    // Trigger permission refresh for users with this role
+    await triggerPermissionRefresh(role, permission.name, 'granted', parseInt(session.user.id));
+
     revalidatePath("/dashboard/roles-permissions");
     return { success: true };
   } catch (error) {
@@ -182,9 +228,11 @@ export async function removePermissionFromRole(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
 
     // Check if permission exists
     const permission = await prisma.permission.findUnique({
@@ -227,6 +275,9 @@ export async function removePermissionFromRole(
       }
     });
 
+    // Trigger permission refresh for users with this role
+    await triggerPermissionRefresh(role, permission.name, 'revoked', parseInt(session.user.id));
+
     revalidatePath("/dashboard/roles-permissions");
     return { success: true };
   } catch (error) {
@@ -247,9 +298,11 @@ export async function bulkAssignPermissionsToRole(
 ): Promise<{ success: boolean; assigned: number; skipped: number; error?: string }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, assigned: 0, skipped: 0, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, assigned: 0, skipped: 0, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
 
     let assigned = 0;
     let skipped = 0;
@@ -296,6 +349,9 @@ export async function bulkAssignPermissionsToRole(
       });
     }
 
+    // Trigger permission refresh for users with this role
+    await triggerPermissionRefresh(role, `${assigned} permissions`, 'granted', parseInt(session.user.id));
+
     revalidatePath("/dashboard/roles-permissions");
     return { success: true, assigned, skipped };
   } catch (error) {
@@ -318,9 +374,11 @@ export async function bulkRemovePermissionsFromRole(
 ): Promise<{ success: boolean; removed: number; notFound: number; error?: string }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, removed: 0, notFound: 0, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, removed: 0, notFound: 0, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
 
     // Find existing assignments
     const existingAssignments = await prisma.rolePermission.findMany({
@@ -360,6 +418,9 @@ export async function bulkRemovePermissionsFromRole(
       });
     }
 
+    // Trigger permission refresh for users with this role
+    await triggerPermissionRefresh(role, `${foundPermissionIds.length} permissions`, 'revoked', parseInt(session.user.id));
+
     revalidatePath("/dashboard/roles-permissions");
     return { success: true, removed: foundPermissionIds.length, notFound };
   } catch (error) {
@@ -383,9 +444,11 @@ export async function copyRolePermissions(
 ): Promise<{ success: boolean; copied: number; skipped: number; error?: string }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, copied: 0, skipped: 0, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, copied: 0, skipped: 0, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
 
     if (sourceRole === targetRole) {
       return { success: false, copied: 0, skipped: 0, error: "Source and target roles cannot be the same." };
@@ -434,6 +497,9 @@ export async function copyRolePermissions(
         }
       });
 
+      // Trigger permission refresh for users with target role
+      await triggerPermissionRefresh(targetRole);
+
       revalidatePath("/dashboard/roles-permissions");
       return { success: true, copied: sourcePermissionIds.length, skipped: 0 };
     } else {
@@ -476,6 +542,9 @@ export async function copyRolePermissions(
         }
       });
 
+      // Trigger permission refresh for users with target role
+      await triggerPermissionRefresh(targetRole);
+
       revalidatePath("/dashboard/roles-permissions");
       return { success: true, copied: newPermissionIds.length, skipped: existingPermissionIds.length };
     }
@@ -515,9 +584,12 @@ export async function getRolePermissionStats(): Promise<{
 }> {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user || session.user.role !== "super_admin") {
-      return { success: false, error: "Access denied. Super admin privileges required." };
+    if (!session?.user) {
+      return { success: false, error: "Authentication required." };
     }
+
+    // Note: Permission check is handled by the API route middleware
+    // This function assumes the user has already been authorized
 
     // Get total counts
     const totalPermissions = await prisma.permission.count();

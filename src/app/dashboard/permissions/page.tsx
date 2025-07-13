@@ -1,34 +1,36 @@
 import { Suspense } from 'react';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { redirect } from 'next/navigation';
 import PermissionManagementDashboard from '@/components/dashboard/permissions/PermissionManagementDashboard';
 import { Shield } from 'lucide-react';
+import { PermissionGate } from '@/components/auth/PermissionGate';
 
-export default async function PermissionsPage() {
-  const session = await getServerSession(authOptions);
-  
-  if (!session?.user) {
-    redirect('/auth/signin');
-  }
-
-  // Only super admins can access the permission management dashboard
-  if (session.user.role !== 'super_admin') {
-    redirect('/dashboard');
-  }
-
+export default function PermissionsPage() {
   return (
-    <div className="container mx-auto py-6">
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-64">
+    <PermissionGate 
+      permissions={["users.permissions.grant", "users.permissions.revoke", "users.roles.manage"]}
+      requireAll={false}
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
-            <Shield className="w-8 h-8 mx-auto mb-4 animate-spin" />
-            <p>Loading permission management dashboard...</p>
+            <h2 className="text-xl font-semibold text-muted-foreground">Access Denied</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              You don't have permission to access permission management.
+            </p>
           </div>
         </div>
-      }>
-        <PermissionManagementDashboard />
-      </Suspense>
-    </div>
+      }
+    >
+      <div className="container mx-auto py-6">
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <Shield className="w-8 h-8 mx-auto mb-4 animate-spin" />
+              <p>Loading permission management dashboard...</p>
+            </div>
+          </div>
+        }>
+          <PermissionManagementDashboard />
+        </Suspense>
+      </div>
+    </PermissionGate>
   );
 }

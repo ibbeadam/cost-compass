@@ -91,6 +91,12 @@ const navItems: NavItem[] = [
     icon: Building,
     permissions: ["outlets.read"]
   },
+  { 
+    href: "/dashboard/categories", 
+    label: "Manage Categories", 
+    icon: ListChecks,
+    permissions: ["categories.read"]
+  },
   {
     href: "/admin",
     label: "Admin",
@@ -107,19 +113,15 @@ const navItems: NavItem[] = [
         href: "/dashboard/properties", 
         label: "Manage Properties", 
         icon: Home,
-        roles: ["super_admin"]
-      },
-      {
-        href: "/dashboard/categories",
-        label: "Manage Categories",
-        icon: ListChecks,
-        roles: ["super_admin"]
+        permissions: ["properties.read", "properties.view_all", "properties.view_own"],
+        requireAnyPermission: true
       },
       { 
         href: "/dashboard/users", 
         label: "Manage Users", 
         icon: Users,
-        roles: ["super_admin"]
+        permissions: ["users.read", "users.view_all", "users.view_own"],
+        requireAnyPermission: true
       },
       { 
         href: "/dashboard/activity-log", 
@@ -143,13 +145,15 @@ const navItems: NavItem[] = [
         href: "/dashboard/permissions",
         label: "Permission Management",
         icon: Shield,
-        roles: ["super_admin"]
+        permissions: ["users.permissions.grant", "users.permissions.revoke", "users.roles.manage"],
+        requireAnyPermission: true
       },
       {
         href: "/dashboard/roles-permissions",
         label: "Role & Permission Assignment",
         icon: UserCheck,
-        roles: ["super_admin"]
+        permissions: ["users.roles.manage", "system.roles.read", "system.roles.update"],
+        requireAnyPermission: true
       }
     ]
   }

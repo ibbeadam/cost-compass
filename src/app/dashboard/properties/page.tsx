@@ -1,5 +1,5 @@
 import PropertyManagementClient from "@/components/property/PropertyManagementClient";
-import { SuperAdminOnly } from "@/components/auth/PermissionGate";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 export const metadata = {
   title: "Properties | Cost Compass",
@@ -8,13 +8,15 @@ export const metadata = {
 
 export default function PropertiesPage() {
   return (
-    <SuperAdminOnly 
+    <PermissionGate 
+      permissions={["properties.read", "properties.view_all", "properties.view_own"]}
+      requireAll={false}
       fallback={
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <h2 className="text-xl font-semibold text-muted-foreground">Access Denied</h2>
             <p className="text-sm text-muted-foreground mt-2">
-              You don't have permission to access this page.
+              You don't have permission to access property management.
             </p>
           </div>
         </div>
@@ -35,6 +37,6 @@ export default function PropertiesPage() {
         </CardContent>
         </Card>
       </div>
-    </SuperAdminOnly>
+    </PermissionGate>
   );
 }

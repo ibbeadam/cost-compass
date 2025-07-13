@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import FoodCostEntryListClient from "@/components/dashboard/food-cost-input/FoodCostEntryListClient";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 export const metadata = {
   title: "Food Cost Input | Cost Compass",
@@ -45,20 +46,35 @@ function FoodCostInputSkeleton() {
 
 export default function FoodCostInputPage() {
   return (
-    <div className="flex flex-col flex-grow w-full">
-      <Card className="shadow-lg bg-card w-full">
-        <CardHeader>
-          <CardTitle className="font-headline text-2xl">Food Cost Input</CardTitle>
-          <CardDescription>
-            Enter detailed food costs for a specific date and outlet. Add items by category and cost.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<FoodCostInputSkeleton />}>
-            <FoodCostEntryListClient />
-          </Suspense>
-        </CardContent>
-      </Card>
-    </div>
+    <PermissionGate 
+      permissions={["financial.food_costs.read", "financial.food_costs.create"]}
+      requireAll={false}
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-muted-foreground">Access Denied</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              You don't have permission to access food cost input.
+            </p>
+          </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col flex-grow w-full">
+        <Card className="shadow-lg bg-card w-full">
+          <CardHeader>
+            <CardTitle className="font-headline text-2xl">Food Cost Input</CardTitle>
+            <CardDescription>
+              Enter detailed food costs for a specific date and outlet. Add items by category and cost.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<FoodCostInputSkeleton />}>
+              <FoodCostEntryListClient />
+            </Suspense>
+          </CardContent>
+        </Card>
+      </div>
+    </PermissionGate>
   );
 }

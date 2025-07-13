@@ -95,7 +95,7 @@ export const authOptions: NextAuthOptions = {
             console.error("Failed to log login activity:", error);
           }
 
-          // Get user permissions
+          // Get user permissions from database (dynamic)
           const mockUser = {
             id: user.id,
             email: user.email,
@@ -109,7 +109,7 @@ export const authOptions: NextAuthOptions = {
             updatedAt: user.updatedAt,
           };
 
-          const permissions = PermissionService.getUserPermissions(mockUser);
+          const permissions = await PermissionService.getUserPermissions(mockUser);
 
           // TODO: Load accessible properties when schema is updated
           /*

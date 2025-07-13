@@ -2,10 +2,7 @@ import UserManagementClient from "@/components/dashboard/users/UserManagementCli
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import { getUserByEmailAction } from "@/actions/prismaUserActions";
+import { PermissionGate } from "@/components/auth/PermissionGate";
 
 export const metadata = {
   title: "User Management | Cost Compass",
@@ -39,41 +36,39 @@ function UserManagementSkeleton() {
   );
 }
 
-export default async function UserManagementPage() {
-  // Check authentication
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
-    redirect("/login");
-  }
-
-  // Check if user is super admin
-  try {
-    const user = await getUserByEmailAction(session.user.email);
-    if (!user || user.role !== "super_admin") {
-      redirect("/dashboard");
-    }
-  } catch (error) {
-    console.error("Error checking user permissions:", error);
-    redirect("/dashboard");
-  }
-
+export default function UserManagementPage() {
   return (
-    <div className="flex flex-col flex-grow w-full">
-      <Card className="shadow-lg bg-card w-full">
-        <CardHeader>
-          <CardTitle className="font-headline text-2xl">User Management</CardTitle>
-          <CardDescription>
-            Manage system users, roles, and permissions. Create new users, edit existing ones, and control access levels.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="p-6">
-            <Suspense fallback={<UserManagementSkeleton />}>
-              <UserManagementClient />
-            </Suspense>
+    <PermissionGate 
+      permissions={["users.read", "users.view_all", "users.view_own"]}
+      requireAll={false}
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-muted-foreground">Access Denied</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              You don't have permission to access user management.
+            </p>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      }
+    >
+      <div className="flex flex-col flex-grow w-full">
+        <Card className="shadow-lg bg-card w-full">
+          <CardHeader>
+            <CardTitle className="font-headline text-2xl">User Management</CardTitle>
+            <CardDescription>
+              Manage system users, roles, and permissions. Create new users, edit existing ones, and control access levels.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="p-6">
+              <Suspense fallback={<UserManagementSkeleton />}>
+                <UserManagementClient />
+              </Suspense>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </PermissionGate>
   );
 }

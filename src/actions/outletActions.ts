@@ -14,7 +14,7 @@ export async function getAllOutletsAction() {
     }
 
     // Check read permission for outlets
-    if (!PermissionService.hasPermission(user, "outlets.read")) {
+    if (!(await PermissionService.hasPermission(user, "outlets.read"))) {
       throw new Error("Access denied. Insufficient permissions to view outlets.");
     }
 
@@ -66,7 +66,7 @@ export async function addOutletAction(name: string): Promise<any> {
     }
 
     // Check create permission for outlets
-    if (!PermissionService.hasPermission(user, "outlets.create")) {
+    if (!(await PermissionService.hasPermission(user, "outlets.create"))) {
       throw new Error("Access denied. Insufficient permissions to create outlets.");
     }
 

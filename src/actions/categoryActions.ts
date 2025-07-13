@@ -14,9 +14,8 @@ export async function getAllCategoriesAction() {
       throw new Error("Authentication required");
     }
 
-    // Check read permission for cost data (categories are used for cost management)
-    if (!PermissionService.hasPermission(user, "financial.food_costs.read") && 
-        !PermissionService.hasPermission(user, "financial.beverage_costs.read")) {
+    // Check read permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.read"))) {
       throw new Error("Access denied. Insufficient permissions to view categories.");
     }
 
@@ -39,6 +38,11 @@ export async function getCategoriesByTypeAction(type: "Food" | "Beverage") {
       throw new Error("Authentication required");
     }
 
+    // Check read permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.read"))) {
+      throw new Error("Access denied. Insufficient permissions to view categories.");
+    }
+
     const categories = await prisma.category.findMany({
       where: { type },
       orderBy: {
@@ -57,6 +61,11 @@ export async function getCategoryByIdAction(id: string) {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.read"))) {
+      throw new Error("Access denied. Insufficient permissions to view categories.");
     }
 
     const category = await prisma.category.findUnique({
@@ -90,9 +99,9 @@ export async function addCategoryAction(
       throw new Error("Authentication required");
     }
 
-    // Check create permission (only super admin and property admin can create categories)
-    if (user.role !== "super_admin" && user.role !== "property_admin") {
-      throw new Error("Access denied. Only administrators can create categories.");
+    // Check create permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.create"))) {
+      throw new Error("Access denied. Insufficient permissions to create categories.");
     }
 
     const category = await prisma.category.create({
@@ -131,6 +140,11 @@ export async function createCategoryAction(categoryData: {
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.create"))) {
+      throw new Error("Access denied. Insufficient permissions to create categories.");
     }
 
     const category = await prisma.category.create({
@@ -201,6 +215,11 @@ export async function updateCategoryAction(
       throw new Error("Category not found");
     }
 
+    // Check update permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.update"))) {
+      throw new Error("Access denied. Insufficient permissions to update categories.");
+    }
+
     const updatedCategory = await prisma.category.update({
       where: { id },
       data: {
@@ -247,6 +266,11 @@ export async function deleteCategoryAction(id: string): Promise<void> {
       throw new Error("Category not found");
     }
 
+    // Check delete permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.delete"))) {
+      throw new Error("Access denied. Insufficient permissions to delete categories.");
+    }
+
     await prisma.category.delete({
       where: { id },
     });
@@ -278,6 +302,11 @@ export async function getPaginatedCategoriesAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check read permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.read"))) {
+      throw new Error("Access denied. Insufficient permissions to view categories.");
     }
 
     const totalCount = await prisma.category.count();
@@ -326,6 +355,11 @@ export async function initializeDefaultCategoriesAction(): Promise<{ created: nu
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check create permission for categories
+    if (!(await PermissionService.hasPermission(user, "categories.create"))) {
+      throw new Error("Access denied. Insufficient permissions to create categories.");
     }
 
     const foodCategories = [

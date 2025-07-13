@@ -8,7 +8,7 @@
 import { useSession } from "next-auth/react";
 import { useMemo } from "react";
 import type { UserRole, PropertyAccessLevel } from "@/types";
-import { PermissionService, PropertyPermissionService } from "@/lib/permission-utils";
+import { ClientPermissionService } from "@/lib/client-permission-utils";
 
 /**
  * Hook for checking user permissions and access control
@@ -41,44 +41,44 @@ export function usePermissions() {
   // Basic permission checks
   const hasPermission = (permission: string): boolean => {
     if (!user) return false;
-    return PermissionService.hasPermission(user, permission);
+    return ClientPermissionService.hasPermission(user, permission);
   };
 
   const hasAnyPermission = (permissions: string[]): boolean => {
     if (!user) return false;
-    return PermissionService.hasAnyPermission(user, permissions);
+    return ClientPermissionService.hasAnyPermission(user, permissions);
   };
 
   const hasAllPermissions = (permissions: string[]): boolean => {
     if (!user) return false;
-    return PermissionService.hasAllPermissions(user, permissions);
+    return ClientPermissionService.hasAllPermissions(user, permissions);
   };
 
   // Role checks
   const hasRole = (role: UserRole): boolean => {
     if (!user) return false;
-    return PermissionService.hasRole(user, role);
+    return ClientPermissionService.hasRole(user, role);
   };
 
   const hasAnyRole = (roles: UserRole[]): boolean => {
     if (!user) return false;
-    return PermissionService.hasAnyRole(user, roles);
+    return ClientPermissionService.hasAnyRole(user, roles);
   };
 
   // Admin checks
   const isAdmin = (): boolean => {
     if (!user) return false;
-    return PermissionService.isAdmin(user);
+    return ClientPermissionService.isAdmin(user);
   };
 
   const isSuperAdmin = (): boolean => {
     if (!user) return false;
-    return PermissionService.isSuperAdmin(user);
+    return ClientPermissionService.isSuperAdmin(user);
   };
 
   const isPropertyOwner = (): boolean => {
     if (!user) return false;
-    return PermissionService.isPropertyOwner(user);
+    return ClientPermissionService.isPropertyOwner(user);
   };
 
   // Property access checks
@@ -118,37 +118,37 @@ export function usePermissions() {
   // Capability checks
   const canManageUsers = (): boolean => {
     if (!user) return false;
-    return PermissionService.canManageUsers(user);
+    return ClientPermissionService.canManageUsers(user);
   };
 
   const canManageProperties = (): boolean => {
     if (!user) return false;
-    return PermissionService.canManageProperties(user);
+    return ClientPermissionService.canManageProperties(user);
   };
 
   const canViewFinancialData = (): boolean => {
     if (!user) return false;
-    return PermissionService.canViewFinancialData(user);
+    return ClientPermissionService.canViewFinancialData(user);
   };
 
   const canEditFinancialData = (): boolean => {
     if (!user) return false;
-    return PermissionService.canEditFinancialData(user);
+    return ClientPermissionService.canEditFinancialData(user);
   };
 
   const canViewReports = (): boolean => {
     if (!user) return false;
-    return PermissionService.canViewReports(user);
+    return ClientPermissionService.canViewReports(user);
   };
 
   const canExportReports = (): boolean => {
     if (!user) return false;
-    return PermissionService.canExportReports(user);
+    return ClientPermissionService.canExportReports(user);
   };
 
   const canViewCrossPropertyReports = (): boolean => {
     if (!user) return false;
-    return PropertyPermissionService.canViewCrossPropertyReports(user);
+    return ClientPermissionService.canViewCrossPropertyReports(user);
   };
 
   // Property-specific capability checks

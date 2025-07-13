@@ -52,6 +52,8 @@ import { deleteCategoryAction } from "@/actions/prismaCategoryActions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { RecordsPerPageSelector } from "@/components/ui/records-per-page-selector";
+import { PermissionGate } from "@/components/auth/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // No longer needed since Prisma returns Date objects directly
 
@@ -64,6 +66,7 @@ export default function CategoryListClient() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(5);
+  const { hasPermission } = usePermissions();
 
   const fetchAllCategories = useCallback(async () => {
     setIsLoading(true);
@@ -246,28 +249,30 @@ export default function CategoryListClient() {
           </p>
         </div>
         <div className="flex gap-2">
-          {allCategories.length === 0 && (
-            <Button
-              onClick={handleInitializeDefaultCategories}
-              disabled={isInitializing}
-              variant="outline"
-            >
-              {isInitializing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Initializing...
-                </>
-              ) : (
-                <>
-                  <ListChecks className="mr-2 h-4 w-4" />
-                  Initialize Default Categories
-                </>
-              )}
+          <PermissionGate permissions={["categories.create"]}>
+            {allCategories.length === 0 && (
+              <Button
+                onClick={handleInitializeDefaultCategories}
+                disabled={isInitializing}
+                variant="outline"
+              >
+                {isInitializing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Initializing...
+                  </>
+                ) : (
+                  <>
+                    <ListChecks className="mr-2 h-4 w-4" />
+                    Initialize Default Categories
+                  </>
+                )}
+              </Button>
+            )}
+            <Button onClick={handleAddNew}>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
             </Button>
-          )}
-          <Button onClick={handleAddNew}>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
-          </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -319,50 +324,56 @@ export default function CategoryListClient() {
                       {category.description || "-"}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(category)}
-                        className="mr-2 hover:text-primary"
-                      >
-                        <Edit className="h-4 w-4" />
-                        <span className="sr-only">Edit Category</span>
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      <div className="flex justify-end gap-1">
+                        <PermissionGate permissions={["categories.update"]}>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="hover:text-destructive"
+                            onClick={() => handleEdit(category)}
+                            className="hover:text-primary"
                           >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete Category</span>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit Category</span>
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle className="flex items-center">
-                              <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
-                              Are you sure?
-                            </AlertDialogTitle>
-                            <AlertDialogDescription>
-                              This action cannot be undone. This will
-                              permanently delete the category "{category.name}".
-                              It might affect existing cost entries if this
-                              category is in use.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDelete(category.id)}
-                              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        </PermissionGate>
+                        <PermissionGate permissions={["categories.delete"]}>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="hover:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete Category</span>
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center">
+                                  <AlertTriangle className="mr-2 h-5 w-5 text-destructive" />
+                                  Are you sure?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will
+                                  permanently delete the category "{category.name}".
+                                  It might affect existing cost entries if this
+                                  category is in use.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDelete(category.id)}
+                                  className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </PermissionGate>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

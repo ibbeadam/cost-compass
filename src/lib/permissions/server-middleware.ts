@@ -272,8 +272,8 @@ export function withServerPermissions(
           );
         }
 
-        // 2. Enhanced Rate limiting check
-        if (options.rateLimiting) {
+        // 2. Enhanced Rate limiting check (skip for super_admin in development)
+        if (options.rateLimiting && user.role !== 'super_admin') {
           const rateLimitConfig = options.rateLimiting.tier ? 
             rateLimitConfigs[options.rateLimiting.tier] : 
             {
@@ -341,38 +341,43 @@ export function withServerPermissions(
 
         // 4. Permission validation
         if (options.permissions && options.permissions.length > 0) {
-          const userPermissions = await PropertyAccessService.getUserPropertyPermissions(
-            user.id, 
-            0 // Default to global permissions
-          );
-          
-          const hasRequiredPermissions = options.requireAllPermissions
-            ? options.permissions.every(permission => userPermissions.includes(permission))
-            : options.permissions.some(permission => userPermissions.includes(permission));
-          
-          if (!hasRequiredPermissions) {
-            await createAuditLog(
-              user.id,
-              'PERMISSION_ACCESS_DENIED',
-              'api_request',
-              { 
-                userPermissions,
-                requiredPermissions: options.permissions,
-                requireAll: options.requireAllPermissions,
-                endpoint: request.nextUrl.pathname
-              },
-              request
+          // For super_admin, always grant access if they have the role
+          if (user.role === 'super_admin') {
+            // Super admin has all permissions, skip permission check
+          } else {
+            const userPermissions = await PropertyAccessService.getUserPropertyPermissions(
+              user.id, 
+              0 // Default to global permissions
             );
             
-            return NextResponse.json(
-              { 
-                error: "Insufficient permissions", 
-                code: "INSUFFICIENT_PERMISSIONS",
-                required: options.permissions,
-                requireAll: options.requireAllPermissions
-              },
-              { status: 403 }
-            );
+            const hasRequiredPermissions = options.requireAllPermissions
+              ? options.permissions.every(permission => userPermissions.includes(permission))
+              : options.permissions.some(permission => userPermissions.includes(permission));
+            
+            if (!hasRequiredPermissions) {
+              await createAuditLog(
+                user.id,
+                'PERMISSION_ACCESS_DENIED',
+                'api_request',
+                { 
+                  userPermissions,
+                  requiredPermissions: options.permissions,
+                  requireAll: options.requireAllPermissions,
+                  endpoint: request.nextUrl.pathname
+                },
+                request
+              );
+              
+              return NextResponse.json(
+                { 
+                  error: "Insufficient permissions", 
+                  code: "INSUFFICIENT_PERMISSIONS",
+                  required: options.permissions,
+                  requireAll: options.requireAllPermissions
+                },
+                { status: 403 }
+              );
+            }
           }
         }
 
@@ -432,9 +437,17 @@ export function withServerPermissions(
         const accessibleProperties = await getUserAccessiblePropertyIds(user.id);
         
         // 7. Get all user permissions for this property
-        const permissions = propertyId 
-          ? await PropertyAccessService.getUserPropertyPermissions(user.id, propertyId)
-          : await PropertyAccessService.getUserPropertyPermissions(user.id, 0);
+        let permissions: string[];
+        if (user.role === 'super_admin') {
+          // Super admin gets all permissions - ensure they have the required ones
+          const allPermissions = await PropertyAccessService.getUserPropertyPermissions(user.id, 0);
+          const requiredPermissions = ['system.admin.full_access', 'system.roles.read', 'system.roles.update', 'users.roles.manage'];
+          permissions = [...new Set([...allPermissions, ...requiredPermissions])];
+        } else {
+          permissions = propertyId 
+            ? await PropertyAccessService.getUserPropertyPermissions(user.id, propertyId)
+            : await PropertyAccessService.getUserPropertyPermissions(user.id, 0);
+        }
 
         // 8. Create secure API context
         const context: SecureApiContext = {

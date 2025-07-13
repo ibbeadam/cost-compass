@@ -22,6 +22,7 @@ import { createCategoryAction, updateCategoryAction } from "@/actions/prismaCate
 import { showToast } from "@/lib/toast";
 import { useState, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { usePermissions } from "@/hooks/usePermissions";
 
 const categoryFormSchema = z.object({
   name: z.string().min(2, {
@@ -47,6 +48,24 @@ interface CategoryFormProps {
 
 export function CategoryForm({ category, onSuccess, onCancel }: CategoryFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { hasPermission } = usePermissions();
+  
+  // Check if user has permission to create or update categories
+  const canCreate = hasPermission("categories.create");
+  const canUpdate = hasPermission("categories.update");
+  const hasRequiredPermission = category ? canUpdate : canCreate;
+  
+  // If user doesn't have permission, show access denied
+  if (!hasRequiredPermission) {
+    return (
+      <div className="text-center p-6">
+        <p className="text-muted-foreground">You don't have permission to {category ? 'edit' : 'create'} categories.</p>
+        <Button type="button" variant="outline" onClick={onCancel} className="mt-4">
+          Close
+        </Button>
+      </div>
+    );
+  }
 
   const defaultValues: Partial<CategoryFormValues> = {
     name: category?.name || "",
@@ -178,7 +197,7 @@ export function CategoryForm({ category, onSuccess, onCancel }: CategoryFormProp
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || !hasRequiredPermission}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {category ? "Save Changes" : "Add Category"}
           </Button>

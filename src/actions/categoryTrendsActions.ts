@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/server-auth";
+import { PermissionService } from "@/lib/permission-utils";
 import { startOfDay, endOfDay, subDays, format, eachWeekOfInterval, eachMonthOfInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { formatCurrency, DEFAULT_CURRENCY } from "@/lib/currency";
 
@@ -178,6 +179,11 @@ export async function getCategoryPerformanceTrendsReportAction(
     const user = await getCurrentUser();
     if (!user) {
       throw new Error("Authentication required");
+    }
+
+    // Check permission for category trends reports
+    if (!PermissionService.hasPermission(user, "reports.category_trends.read")) {
+      throw new Error("Access denied. Insufficient permissions to view category trends reports.");
     }
 
     const normalizedStartDate = startOfDay(startDate);

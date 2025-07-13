@@ -236,12 +236,15 @@ export class PropertyAccessService {
 
       if (!user || !user.isActive) return [];
 
-      // Get base permissions from role
-      const rolePermissions = getRolePermissions(user.role);
+      // Get base permissions from role (from database)
+      const rolePermissions = await this.getRolePermissionsFromDatabase(user.role);
 
-      // Get property-specific access level permissions
-      const accessLevel = await this.getUserPropertyAccessLevel(userId, propertyId);
-      const accessPermissions = accessLevel ? getAccessLevelPermissions(accessLevel) : [];
+      // Get property-specific access level permissions (if propertyId > 0)
+      let accessPermissions: string[] = [];
+      if (propertyId > 0) {
+        const accessLevel = await this.getUserPropertyAccessLevel(userId, propertyId);
+        accessPermissions = accessLevel ? getAccessLevelPermissions(accessLevel) : [];
+      }
 
       // Get user-specific permission overrides
       const userSpecificPermissions = user.userPermissions
@@ -258,6 +261,24 @@ export class PropertyAccessService {
     } catch (error) {
       console.error('Error getting user property permissions:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get role permissions from database instead of static configuration
+   */
+  static async getRolePermissionsFromDatabase(role: UserRole): Promise<string[]> {
+    try {
+      const rolePermissions = await prisma.rolePermission.findMany({
+        where: { role },
+        include: { permission: true }
+      });
+
+      return rolePermissions.map(rp => `${rp.permission.resource}.${rp.permission.action}`);
+    } catch (error) {
+      console.error('Error getting role permissions from database:', error);
+      // Fallback to static configuration
+      return getRolePermissions(role);
     }
   }
 
